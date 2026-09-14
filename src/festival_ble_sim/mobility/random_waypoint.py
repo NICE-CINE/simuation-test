@@ -43,8 +43,14 @@ class RandomWaypointMobility(MobilityModel):
         self._elapsed_s += dt
         if self._target is None:
             self._pick_new_target(area)
+            return current
 
         if self._elapsed_s < self._pause_until:
+            return current
+
+        if self._pause_until > 0.0:
+            self._pause_until = 0.0
+            self._pick_new_target(area)
             return current
 
         if current.distance_to(self._target) < 1.0:

@@ -28,7 +28,7 @@ def test_build_report_computes_delivery_ratio_and_latency():
     assert report.messages_delivered == 2
     assert report.delivery_ratio == pytest.approx(2 / 3)
     assert report.avg_latency_s == pytest.approx((10.0 + 20.0) / 2)
-    assert report.p95_latency_s == pytest.approx(10.0)
+    assert report.p95_latency_s == pytest.approx(20.0)
     assert report.avg_hops == pytest.approx((1 + 2) / 2)
     assert report.overhead == pytest.approx(3 / 2)
     assert report.total_transmissions == 3

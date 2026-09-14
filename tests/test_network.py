@@ -111,3 +111,26 @@ def test_network_engine_delivers_after_one_interval():
     assert dest.has_message(1) is False
     env.run(until=6.0)
     assert dest.has_message(1) is True
+
+
+def test_network_engine_two_hop_relay_takes_two_intervals():
+    env = simpy.Environment()
+    a = _node(1, 0.0, 0.0)
+    b = _node(2, 15.0, 0.0)
+    c = _node(3, 30.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(a)
+    grid.insert(b)
+    grid.insert(c)
+    msg = Message(msg_id=1, src_id=1, dst_id=3, size_bytes=10, creation_time=0.0, ttl_s=1000.0)
+    a.store_message(msg)
+    nodes = {1: a, 2: b, 3: c}
+    metrics = MetricsCollector()
+    env.process(network_engine(env, nodes, grid, EpidemicRouting(), _energy_model(), metrics, contact_check_interval_s=5.0))
+    env.run(until=7.0)
+    assert c.has_message(1) is False
+    env.run(until=11.0)
+    assert c.has_message(1) is True
+    report = metrics.build_report([], 0)
+    assert report.messages_delivered == 1
+    assert report.avg_hops == pytest.approx(2.0)

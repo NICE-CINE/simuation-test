@@ -30,3 +30,14 @@ algorithmes :
 - `src/festival_ble_sim/mobility/` — nouveaux modeles de mobilite
   (implemente `MobilityModel`).
 - `src/festival_ble_sim/beacons.py` — placement strategique des bornes.
+
+Exemple d'injection d'un algorithme ou d'un modèle de mobilité personnalisé :
+
+    from festival_ble_sim.config import SimulationConfig
+    from festival_ble_sim.simulation import run_simulation
+
+    report = run_simulation(
+        SimulationConfig(),
+        routing_algorithm=MyRoutingAlgorithm(),
+        mobility_factory=lambda rng: MyMobilityModel(rng),
+    )

@@ -13,6 +13,8 @@ class AreaConfig:
 class BleConfig:
     phone_range_m: float = 30.0
     beacon_range_m: float = 60.0
+    # Declared per spec but not yet consumed: BLE transfers are currently
+    # modeled as instantaneous regardless of payload size or this rate.
     transfer_rate_bytes_per_s: float = 10_000.0
     contact_check_interval_s: float = 1.0
 

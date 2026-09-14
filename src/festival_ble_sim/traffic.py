@@ -1,6 +1,6 @@
 from __future__ import annotations
 import random
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator
 from .config import TrafficConfig
 from .metrics import MetricsCollector
 from .models import Message
@@ -39,10 +39,12 @@ def traffic_generator(
     id_generator: Iterator[int],
     rng: random.Random,
 ):
-    mobile_ids: List[int] = list(nodes.keys())
     while True:
         yield env.timeout(sample_interval_s(config, rng))
-        src_id, dst_id = rng.sample(mobile_ids, 2)
+        active_ids = [node_id for node_id, node in nodes.items() if node.is_active]
+        if len(active_ids) < 2:
+            continue
+        src_id, dst_id = rng.sample(active_ids, 2)
         message = generate_message(next(id_generator), env.now, src_id, dst_id, config, rng)
         nodes[src_id].store_message(message)
         metrics.record_creation(message)

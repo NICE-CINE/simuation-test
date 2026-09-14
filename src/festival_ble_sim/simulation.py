@@ -2,12 +2,13 @@ from __future__ import annotations
 import itertools
 import math
 import random
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 import simpy
 from .beacons import place_beacons
 from .config import SimulationConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector, SimulationReport
+from .mobility.base import MobilityModel
 from .mobility.random_waypoint import RandomWaypointMobility
 from .network import network_engine
 from .nodes import BaseNode, BeaconNode, MobileNode
@@ -28,9 +29,12 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
 def run_simulation(
     config: SimulationConfig,
     routing_algorithm: Optional[RoutingAlgorithm] = None,
+    mobility_factory: Optional[Callable[[random.Random], MobilityModel]] = None,
 ) -> SimulationReport:
     rng = random.Random(config.random_seed)
-    routing_algorithm = routing_algorithm or EpidemicRouting()
+    routing_algorithm = routing_algorithm if routing_algorithm is not None else EpidemicRouting()
+    if mobility_factory is None:
+        mobility_factory = lambda node_rng: RandomWaypointMobility(config.mobility, rng=node_rng)
     energy_model = EnergyModel(config.energy)
     metrics = MetricsCollector()
     env = simpy.Environment()
@@ -57,7 +61,8 @@ def run_simulation(
     mobile_nodes: Dict[int, MobileNode] = {}
     for _ in range(config.num_festivaliers):
         node_id = next(id_counter)
-        mobility = RandomWaypointMobility(config.mobility, rng=random.Random(rng.randrange(1 << 30)))
+        node_rng = random.Random(rng.randrange(1 << 30))
+        mobility = mobility_factory(node_rng)
         mobile = MobileNode(
             node_id=node_id,
             mobility=mobility,

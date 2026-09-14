@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 from dataclasses import dataclass
 from typing import List, Set
 from .models import Message
@@ -49,7 +50,7 @@ class MetricsCollector:
         delivery_ratio = delivered / self._messages_created if self._messages_created else 0.0
         latencies = sorted(d.latency_s for d in self._deliveries)
         avg_latency = sum(latencies) / delivered if delivered else 0.0
-        p95_latency = latencies[int(0.95 * (delivered - 1))] if delivered else 0.0
+        p95_latency = latencies[math.ceil(0.95 * delivered) - 1] if delivered else 0.0
         avg_hops = sum(d.hops for d in self._deliveries) / delivered if delivered else 0.0
         overhead = self._total_transmissions / delivered if delivered else 0.0
         total_energy = sum(node_energy_consumed_mah)

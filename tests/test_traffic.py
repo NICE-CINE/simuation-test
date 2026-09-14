@@ -28,6 +28,7 @@ def test_sample_interval_s_average_matches_configured_mean():
 class _FakeNode:
     def __init__(self, node_id):
         self.id = node_id
+        self.is_active = True
         self.buffer = {}
 
     def store_message(self, message):
