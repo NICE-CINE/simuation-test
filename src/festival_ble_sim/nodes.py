@@ -24,6 +24,8 @@ class BaseNode:
         self.is_active = True
         self.buffer: Dict[int, Message] = {}
         self.delivered_ids: Set[int] = set()
+        self.buffer_evictions = 0
+        self.is_beacon = False
 
     def has_message(self, msg_id: int) -> bool:
         return msg_id in self.buffer or msg_id in self.delivered_ids
@@ -34,6 +36,7 @@ class BaseNode:
         if len(self.buffer) >= self.buffer_capacity:
             oldest_id = next(iter(self.buffer))
             del self.buffer[oldest_id]
+            self.buffer_evictions += 1
         self.buffer[message.msg_id] = message
 
     def mark_delivered(self, msg_id: int) -> None:
@@ -84,3 +87,4 @@ class BeaconNode(BaseNode):
     ) -> None:
         initial_battery = math.inf if unlimited_power else battery_mah
         super().__init__(node_id, position, radio_range_m, buffer_capacity, initial_battery)
+        self.is_beacon = True

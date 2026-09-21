@@ -18,6 +18,9 @@ class SimulationReport:
     total_energy_consumed_mah: float
     avg_energy_consumed_mah: float
     dead_node_count: int
+    buffer_eviction_count: int = 0
+    packet_loss_count: int = 0
+    backhaul_transmissions: int = 0
 
 
 @dataclass
@@ -32,6 +35,8 @@ class MetricsCollector:
         self._deliveries: List[_DeliveryRecord] = []
         self._delivered_msg_ids: Set[int] = set()
         self._total_transmissions = 0
+        self._packet_loss_count = 0
+        self._backhaul_transmissions = 0
 
     def record_creation(self, message: Message) -> None:
         self._messages_created += 1
@@ -39,13 +44,24 @@ class MetricsCollector:
     def record_transmission(self) -> None:
         self._total_transmissions += 1
 
+    def record_packet_loss(self) -> None:
+        self._packet_loss_count += 1
+
+    def record_backhaul_transmission(self) -> None:
+        self._backhaul_transmissions += 1
+
     def record_delivery(self, message: Message, delivered_at: float) -> None:
         if message.msg_id in self._delivered_msg_ids:
             return
         self._delivered_msg_ids.add(message.msg_id)
         self._deliveries.append(_DeliveryRecord(latency_s=delivered_at - message.creation_time, hops=message.hops))
 
-    def build_report(self, node_energy_consumed_mah: List[float], dead_node_count: int) -> SimulationReport:
+    def build_report(
+        self,
+        node_energy_consumed_mah: List[float],
+        dead_node_count: int,
+        buffer_eviction_count: int = 0,
+    ) -> SimulationReport:
         delivered = len(self._deliveries)
         delivery_ratio = delivered / self._messages_created if self._messages_created else 0.0
         latencies = sorted(d.latency_s for d in self._deliveries)
@@ -67,6 +83,9 @@ class MetricsCollector:
             total_energy_consumed_mah=total_energy,
             avg_energy_consumed_mah=avg_energy,
             dead_node_count=dead_node_count,
+            buffer_eviction_count=buffer_eviction_count,
+            packet_loss_count=self._packet_loss_count,
+            backhaul_transmissions=self._backhaul_transmissions,
         )
 
 
@@ -86,5 +105,8 @@ def format_report(report: SimulationReport) -> str:
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
+        f"Messages perdus (buffer)  : {report.buffer_eviction_count}\n"
+        f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
+        f"Transmissions backhaul    : {report.backhaul_transmissions}\n"
         "===================================================================\n"
     )

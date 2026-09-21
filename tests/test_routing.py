@@ -19,17 +19,24 @@ def test_epidemic_forwards_when_contact_missing_message():
     algo = EpidemicRouting()
     holder = _FakeNode(has_msg=False)
     contact = _FakeNode(has_msg=False)
-    assert algo.decide(_msg(), holder, contact) is RoutingDecision.FORWARD
+    assert algo.decide(_msg(), holder, contact, now=0.0) is RoutingDecision.FORWARD
 
 
 def test_epidemic_ignores_when_contact_already_has_message():
     algo = EpidemicRouting()
     holder = _FakeNode(has_msg=False)
     contact = _FakeNode(has_msg=True)
-    assert algo.decide(_msg(), holder, contact) is RoutingDecision.IGNORE
+    assert algo.decide(_msg(), holder, contact, now=0.0) is RoutingDecision.IGNORE
 
 
 def test_on_delivered_default_hook_is_noop():
     algo = EpidemicRouting()
     holder = _FakeNode(has_msg=True)
     algo.on_delivered(_msg(), holder)
+
+
+def test_on_forward_default_hook_is_noop():
+    algo = EpidemicRouting()
+    holder = _FakeNode(has_msg=True)
+    contact = _FakeNode(has_msg=False)
+    algo.on_forward(_msg(), holder, contact, _msg())

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class EpidemicRouting(RoutingAlgorithm):
-    def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode") -> RoutingDecision:
+    def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
         return RoutingDecision.FORWARD

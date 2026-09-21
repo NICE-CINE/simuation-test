@@ -15,10 +15,17 @@ class RoutingDecision(Enum):
 
 class RoutingAlgorithm(ABC):
     @abstractmethod
-    def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode") -> RoutingDecision:
+    def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         # >>> POINT D'INJECTION : tes propres algos de routage
         # (Spray & Wait, PRoPHET, scoring base sur les bornes...)
         ...
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
+        pass
+
+    def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
+        # Called right after `forwarded_copy` has been created (independent
+        # routing_state dict) and stored in `contact`'s buffer. Lets an
+        # algorithm split per-copy state asymmetrically between the holder's
+        # remaining copy and the newly forwarded one (e.g. Spray & Wait).
         pass

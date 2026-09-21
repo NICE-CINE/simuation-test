@@ -5,18 +5,26 @@ from typing import List, Optional, Tuple
 
 @dataclass(frozen=True)
 class AreaConfig:
-    width_m: float = 500.0
-    height_m: float = 500.0
+    width_m: float = 1500.0
+    height_m: float = 1500.0
 
 
 @dataclass(frozen=True)
 class BleConfig:
     phone_range_m: float = 30.0
     beacon_range_m: float = 60.0
-    # Declared per spec but not yet consumed: BLE transfers are currently
-    # modeled as instantaneous regardless of payload size or this rate.
+    # Bytes exchangeable per tick per link (sender<->contact): real effective
+    # GATT throughput in a dense opportunistic-mesh deployment, well below
+    # BLE's raw PHY rate once ATT/connection overhead and 2.4GHz contention
+    # from thousands of nearby devices are accounted for.
     transfer_rate_bytes_per_s: float = 10_000.0
     contact_check_interval_s: float = 1.0
+    # Simultaneous GATT-central connections a phone can realistically hold
+    # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
+    max_concurrent_links: Optional[int] = 6
+    packet_loss_base_probability: float = 0.01
+    packet_loss_congestion_coefficient: float = 0.02
+    packet_loss_max_probability: float = 0.30
 
 
 @dataclass(frozen=True)
@@ -55,7 +63,7 @@ class BeaconConfig:
 @dataclass
 class SimulationConfig:
     duration_s: float = 3600.0
-    num_festivaliers: int = 200
+    num_festivaliers: int = 10000
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
     area: AreaConfig = field(default_factory=AreaConfig)
@@ -75,3 +83,18 @@ class SimulationConfig:
         lo, hi = self.traffic.payload_size_range_bytes
         if lo <= 0 or hi < lo:
             raise ValueError("payload_size_range_bytes must satisfy 0 < lo <= hi")
+        if self.ble.transfer_rate_bytes_per_s <= 0:
+            raise ValueError("transfer_rate_bytes_per_s must be positive")
+        if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:
+            raise ValueError("max_concurrent_links must be None or >= 1")
+        for prob in (
+            self.ble.packet_loss_base_probability,
+            self.ble.packet_loss_congestion_coefficient,
+            self.ble.packet_loss_max_probability,
+        ):
+            if prob < 0:
+                raise ValueError("packet loss probabilities/coefficients must be >= 0")
+        if self.ble.packet_loss_base_probability > 1 or self.ble.packet_loss_max_probability > 1:
+            raise ValueError("packet loss probabilities must be <= 1")
+        if self.ble.packet_loss_base_probability > self.ble.packet_loss_max_probability:
+            raise ValueError("packet_loss_base_probability must be <= packet_loss_max_probability")

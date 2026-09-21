@@ -77,13 +77,20 @@ def run_simulation(
         env.process(_mobile_process(env, mobile, config, grid))
 
     msg_id_counter = itertools.count(1)
+    network_rng = random.Random(rng.randrange(1 << 30))
     env.process(traffic_generator(env, mobile_nodes, config.traffic, metrics, msg_id_counter, rng))
     env.process(
-        network_engine(env, nodes, grid, routing_algorithm, energy_model, metrics, config.ble.contact_check_interval_s)
+        network_engine(
+            env, nodes, grid, routing_algorithm, energy_model, metrics,
+            config.ble.contact_check_interval_s,
+            ble_config=config.ble,
+            rng=network_rng,
+        )
     )
 
     env.run(until=config.duration_s)
 
     energy_samples = [n.energy_consumed_mah for n in nodes.values() if n.initial_battery_mah != math.inf]
     dead_count = sum(1 for n in nodes.values() if not n.is_active)
-    return metrics.build_report(energy_samples, dead_count)
+    buffer_evictions = sum(n.buffer_evictions for n in nodes.values())
+    return metrics.build_report(energy_samples, dead_count, buffer_evictions)
