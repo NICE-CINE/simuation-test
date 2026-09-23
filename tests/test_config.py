@@ -2,6 +2,20 @@ import pytest
 from festival_ble_sim.config import BleConfig, RadioParams, SimulationConfig, AreaConfig, TrafficConfig
 
 
+def test_default_message_ttl_hops_is_eight():
+    assert TrafficConfig().message_ttl_hops == 8
+
+
+def test_rejects_non_positive_message_ttl_hops():
+    with pytest.raises(ValueError):
+        SimulationConfig(traffic=TrafficConfig(message_ttl_hops=0))
+
+
+def test_accepts_none_message_ttl_hops_as_unlimited():
+    config = SimulationConfig(traffic=TrafficConfig(message_ttl_hops=None))
+    assert config.traffic.message_ttl_hops is None
+
+
 def test_default_config_is_valid():
     config = SimulationConfig()
     assert config.num_festivaliers > 0

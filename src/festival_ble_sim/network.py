@@ -168,6 +168,14 @@ def process_node_contacts(
                     routing_algorithm.on_delivered(delivered_msg, sender)
                 continue
 
+            # Network-layer hop TTL only caps relaying, not direct delivery
+            # (handled above): a holder still carries and can hand off a
+            # hop-exhausted message straight to its destination, it just
+            # stops spreading it to other relays — the same "wait phase"
+            # semantics Spray & Wait already uses for its last copy.
+            if message.hop_limit_reached():
+                continue
+
             decision = routing_algorithm.decide(message, sender, contact, now)
             if decision is RoutingDecision.FORWARD:
                 forwarded = replace(
@@ -190,10 +198,13 @@ def beacon_backhaul_relay(
     metrics: MetricsCollector,
 ) -> None:
     # Simulates a reliable WiFi/wired backhaul between fixed beacons: no
-    # radio-range check, no BLE bandwidth/contention/loss. Reads only the
-    # pre-tick snapshot and writes into other beacons' live buffers, so a
-    # message relayed here only becomes visible for further relay (BLE or
-    # backhaul) starting next tick — preserving the tick-snapshot invariant.
+    # radio-range check, no BLE bandwidth/contention/loss, and (like the
+    # hop count it deliberately never increments) no BLE mesh network-layer
+    # hop TTL either — it's a separate wired backbone, not a mesh relay.
+    # Reads only the pre-tick snapshot and writes into other beacons' live
+    # buffers, so a message relayed here only becomes visible for further
+    # relay (BLE or backhaul) starting next tick — preserving the
+    # tick-snapshot invariant.
     if len(beacon_ids) < 2:
         return
     for src_id in beacon_ids:

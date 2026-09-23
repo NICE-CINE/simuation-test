@@ -109,6 +109,11 @@ class TrafficConfig:
     mean_interval_s: float = 5.0
     payload_size_range_bytes: Tuple[int, int] = (20, 512)
     message_ttl_s: float = 1800.0
+    # Bluetooth Mesh network-layer TTL, in hops rather than seconds: caps
+    # how many times a message can be relayed regardless of how long it's
+    # been alive, bounding flood radius the way real mesh deployments do
+    # (typical default TTL values are single digits). None = unlimited.
+    message_ttl_hops: Optional[int] = 8
 
 
 @dataclass(frozen=True)
@@ -151,6 +156,8 @@ class SimulationConfig:
         lo, hi = self.traffic.payload_size_range_bytes
         if lo <= 0 or hi < lo:
             raise ValueError("payload_size_range_bytes must satisfy 0 < lo <= hi")
+        if self.traffic.message_ttl_hops is not None and self.traffic.message_ttl_hops < 1:
+            raise ValueError("message_ttl_hops must be None or >= 1")
         if self.ble.transfer_rate_bytes_per_s <= 0:
             raise ValueError("transfer_rate_bytes_per_s must be positive")
         if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:
