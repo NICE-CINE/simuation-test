@@ -118,21 +118,35 @@ def process_node_contacts(
         loss_prob = 0.0
         if ble_config is not None:
             distance_m = sender.position.distance_to(contact.position)
-            margin_db = link_margin_db(distance_m, radio)
-            weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
+            # Shadowing (see radio.RadioParams.shadowing_std_db) makes this
+            # a stochastic per-tick sample, not a fixed function of
+            # distance: an unlucky fade can push the actual received power
+            # below the sensitivity floor even inside the deterministic
+            # max range used to shortlist `neighbors` above, in which case
+            # reception is treated as guaranteed lost this tick — same
+            # loss/energy accounting path as any other packet loss below.
+            margin_db = link_margin_db(distance_m, radio, rng)
+            if margin_db < 0.0:
+                # A true outage isn't a "soft" loss source: it bypasses
+                # packet_loss_max_probability entirely, since a signal
+                # below the noise floor can't be received no matter how
+                # that cap is configured.
+                loss_prob = 1.0
+            else:
+                weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
 
-            collision_loss_prob = 0.0
-            if contention_counts is not None:
-                other_transmitters = max(0, contention_counts.get(contact.id, 0) - 1)
-                collision_loss_prob = min(
-                    ble_config.collision_loss_max_probability,
-                    ble_config.collision_loss_coefficient * other_transmitters,
+                collision_loss_prob = 0.0
+                if contention_counts is not None:
+                    other_transmitters = max(0, contention_counts.get(contact.id, 0) - 1)
+                    collision_loss_prob = min(
+                        ble_config.collision_loss_max_probability,
+                        ble_config.collision_loss_coefficient * other_transmitters,
+                    )
+
+                loss_prob = min(
+                    ble_config.packet_loss_max_probability,
+                    congestion_loss_prob + weak_signal_loss_prob + collision_loss_prob,
                 )
-
-            loss_prob = min(
-                ble_config.packet_loss_max_probability,
-                congestion_loss_prob + weak_signal_loss_prob + collision_loss_prob,
-            )
 
         remaining_budget = link_budget_bytes
 

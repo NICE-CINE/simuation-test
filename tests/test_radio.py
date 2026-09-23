@@ -1,3 +1,4 @@
+import random
 import pytest
 from festival_ble_sim.config import RadioParams
 from festival_ble_sim.radio import link_margin_db, max_range_m, received_power_dbm
@@ -54,3 +55,34 @@ def test_link_margin_is_positive_close_and_negative_beyond_range():
     range_m = max_range_m(radio)
     assert link_margin_db(range_m / 2, radio) > 0.0
     assert link_margin_db(range_m * 2, radio) < 0.0
+
+
+def test_zero_shadowing_is_deterministic_regardless_of_rng():
+    radio = _radio(shadowing_std_db=0.0)
+    rng = random.Random(1)
+    samples = {received_power_dbm(20.0, radio, rng) for _ in range(20)}
+    assert len(samples) == 1
+
+
+def test_no_rng_never_applies_shadowing_even_when_configured():
+    radio = _radio(shadowing_std_db=10.0)
+    assert received_power_dbm(20.0, radio) == pytest.approx(received_power_dbm(20.0, radio))
+
+
+def test_shadowing_scatters_received_power_around_the_deterministic_mean():
+    radio = _radio(shadowing_std_db=6.0)
+    mean = received_power_dbm(20.0, radio)
+    rng = random.Random(2)
+    samples = [received_power_dbm(20.0, radio, rng) for _ in range(500)]
+    assert len(set(samples)) > 1
+    sampled_mean = sum(samples) / len(samples)
+    assert sampled_mean == pytest.approx(mean, abs=1.0)
+
+
+def test_shadowing_can_push_margin_negative_inside_the_deterministic_range():
+    radio = _radio(shadowing_std_db=8.0)
+    range_m = max_range_m(radio)
+    rng = random.Random(3)
+    margins = [link_margin_db(range_m * 0.9, radio, rng) for _ in range(500)]
+    assert any(m < 0.0 for m in margins)
+    assert any(m > 0.0 for m in margins)

@@ -20,12 +20,20 @@ class RadioParams:
     reference_distance_m: float
     reference_loss_db: float
     receiver_sensitivity_dbm: float
+    # Log-normal shadow fading: standard deviation (dB) of a zero-mean
+    # Gaussian added on top of the deterministic path loss, representing
+    # bodies/obstacles randomly blocking the link — without it, received
+    # power is a pure function of distance and "in range" collapses to a
+    # fixed circle. 0.0 = no shadowing (deterministic, prior behavior).
+    shadowing_std_db: float = 0.0
 
 
 # Defaults: -90 dBm sensitivity and exponent=2.7 (crowded/obstructed
 # festival ground, denser than free space's 2.0) are typical BLE figures;
 # tx_power is picked per node type below so the resulting max range lines
 # up with this simulator's previous fixed-radius defaults (~30m / ~60m).
+# shadowing_std_db=4.0 is a middle-of-the-road figure for short-range
+# obstructed/crowd shadowing reported in BLE/indoor propagation literature.
 def _default_phone_radio() -> RadioParams:
     return RadioParams(
         tx_power_dbm=-10.0,
@@ -33,6 +41,7 @@ def _default_phone_radio() -> RadioParams:
         reference_distance_m=1.0,
         reference_loss_db=40.0,
         receiver_sensitivity_dbm=-90.0,
+        shadowing_std_db=4.0,
     )
 
 
@@ -43,6 +52,7 @@ def _default_beacon_radio() -> RadioParams:
         reference_distance_m=1.0,
         reference_loss_db=40.0,
         receiver_sensitivity_dbm=-90.0,
+        shadowing_std_db=4.0,
     )
 
 
@@ -190,3 +200,5 @@ class SimulationConfig:
                 raise ValueError("path_loss_exponent must be positive")
             if radio.reference_distance_m <= 0:
                 raise ValueError("reference_distance_m must be positive")
+            if radio.shadowing_std_db < 0:
+                raise ValueError("shadowing_std_db must be >= 0")
