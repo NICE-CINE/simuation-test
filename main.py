@@ -1,8 +1,12 @@
 from __future__ import annotations
 import argparse
+import random
 from typing import Callable, Dict, List, Optional
-from festival_ble_sim.config import BeaconConfig, SimulationConfig
+from festival_ble_sim.config import AreaConfig, BeaconConfig, MobilityConfig, PointOfInterest, SimulationConfig
 from festival_ble_sim.metrics import format_report
+from festival_ble_sim.mobility.base import MobilityModel
+from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
@@ -17,10 +21,25 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "beacon_priority": lambda args: BeaconPriorityRouting(),
 }
 
+# "poi" has no CLI knobs of its own: build_config() points it at a single
+# default point of interest (a "main stage" at the center of the area) since
+# the mobility_factory signature only takes an RNG, not a config.
+MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Random], MobilityModel]]] = {
+    "random_waypoint": lambda config: (lambda rng: RandomWaypointMobility(config.mobility, rng=rng)),
+    "poi": lambda config: (lambda rng: PoiMobility(config.mobility, rng=rng)),
+}
+
+
+def _default_main_stage_poi(area: AreaConfig) -> PointOfInterest:
+    return PointOfInterest(
+        x=area.width_m / 2, y=area.height_m / 2, radius_m=min(area.width_m, area.height_m) / 4, weight=1.0
+    )
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulateur de messagerie BLE mesh en festival")
     parser.add_argument("--routing", choices=sorted(ROUTING_FACTORIES), default="epidemic")
+    parser.add_argument("--mobility", choices=sorted(MOBILITY_FACTORIES), default="random_waypoint")
     parser.add_argument("--beacons", type=int, default=0, help="Nombre de bornes (0 = desactivees)")
     parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
@@ -32,10 +51,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def build_config(args: argparse.Namespace) -> SimulationConfig:
+    area = AreaConfig()
+    mobility = MobilityConfig()
+    if args.mobility == "poi":
+        mobility = MobilityConfig(points_of_interest=(_default_main_stage_poi(area),))
     return SimulationConfig(
         duration_s=args.duration,
         num_festivaliers=args.num_festivaliers,
         random_seed=args.seed,
+        area=area,
+        mobility=mobility,
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
     )
 
@@ -44,7 +69,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = build_arg_parser().parse_args(argv)
     config = build_config(args)
     routing_algorithm = ROUTING_FACTORIES[args.routing](args)
-    report = run_simulation(config, routing_algorithm=routing_algorithm)
+    mobility_factory = MOBILITY_FACTORIES[args.mobility](config)
+    report = run_simulation(config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory)
     text = format_report(report)
     print(text)
     with open(args.output, "w", encoding="utf-8") as f:

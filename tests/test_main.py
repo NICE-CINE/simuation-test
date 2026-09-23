@@ -1,5 +1,8 @@
+import random
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import main as main_module  # noqa: E402
@@ -8,6 +11,7 @@ import main as main_module  # noqa: E402
 def test_build_arg_parser_defaults():
     args = main_module.build_arg_parser().parse_args([])
     assert args.routing == "epidemic"
+    assert args.mobility == "random_waypoint"
     assert args.beacons == 0
     assert args.beacon_placement == "grid"
     assert args.duration == 3600.0
@@ -23,6 +27,24 @@ def test_routing_factories_cover_every_cli_choice():
         args.routing = name
         algo = main_module.ROUTING_FACTORIES[name](args)
         assert algo is not None
+
+
+def test_mobility_factories_cover_every_cli_choice():
+    for name in ["random_waypoint", "poi"]:
+        args = main_module.build_arg_parser().parse_args(["--mobility", name])
+        config = main_module.build_config(args)
+        factory = main_module.MOBILITY_FACTORIES[name](config)
+        mobility = factory(random.Random(0))
+        assert mobility is not None
+
+
+def test_build_config_defaults_poi_mobility_to_a_center_main_stage():
+    args = main_module.build_arg_parser().parse_args(["--mobility", "poi"])
+    config = main_module.build_config(args)
+    assert len(config.mobility.points_of_interest) == 1
+    poi = config.mobility.points_of_interest[0]
+    assert poi.x == pytest.approx(config.area.width_m / 2)
+    assert poi.y == pytest.approx(config.area.height_m / 2)
 
 
 def test_build_config_applies_overrides():

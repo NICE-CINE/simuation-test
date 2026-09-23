@@ -12,6 +12,7 @@ from .mobility.base import MobilityModel
 from .mobility.random_waypoint import RandomWaypointMobility
 from .network import network_engine
 from .nodes import BaseNode, BeaconNode, MobileNode
+from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
 from .spatial import SpatialGrid
@@ -39,8 +40,9 @@ def run_simulation(
     metrics = MetricsCollector()
     env = simpy.Environment()
 
-    max_range = max(config.ble.phone_range_m, config.ble.beacon_range_m)
-    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=max_range)
+    phone_range_m = max_range_m(config.ble.phone_radio)
+    beacon_range_m = max_range_m(config.ble.beacon_radio)
+    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=max(phone_range_m, beacon_range_m))
 
     nodes: Dict[int, BaseNode] = {}
     id_counter = itertools.count(1)
@@ -50,7 +52,7 @@ def run_simulation(
         beacon = BeaconNode(
             node_id=node_id,
             position=position,
-            radio_range_m=config.ble.beacon_range_m,
+            radio_range_m=beacon_range_m,
             buffer_capacity=config.node_buffer_capacity,
             unlimited_power=config.beacons.unlimited_power,
             battery_mah=config.energy.initial_battery_mah,
@@ -66,7 +68,7 @@ def run_simulation(
         mobile = MobileNode(
             node_id=node_id,
             mobility=mobility,
-            radio_range_m=config.ble.phone_range_m,
+            radio_range_m=phone_range_m,
             buffer_capacity=config.node_buffer_capacity,
             battery_mah=config.energy.initial_battery_mah,
             area=config.area,

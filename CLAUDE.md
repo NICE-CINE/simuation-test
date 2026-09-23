@@ -30,7 +30,7 @@ A discrete-event SimPy simulation of opportunistic BLE mesh messaging (`src/fest
 ```
 models.py, config.py          — leaf modules, no internal deps
   ↓
-spatial.py, energy.py         — depend only on models/config
+spatial.py, energy.py, radio.py — depend only on models/config
   ↓
 mobility/, routing/           — pluggable Strategy interfaces (ABCs).
                                  Both only reference `nodes.BaseNode` under
@@ -48,12 +48,14 @@ simulation.py                 — run_simulation(config, routing_algorithm=None,
                                  one SimPy env.run() and returns a SimulationReport
 ```
 
+`radio.py` holds the log-distance path-loss model (`max_range_m`, `received_power_dbm`, `link_margin_db`) that both `simulation.py` (to size `SpatialGrid` and each node's `radio_range_m` from `BleConfig.phone_radio`/`beacon_radio`) and `network.py` (to derive the weak-signal component of packet loss from each sender/contact pair's link margin) build on.
+
 `main.py` is a thin CLI: build a `SimulationConfig`, call `run_simulation`, `format_report`, print + write to `rapport_simulation.txt`.
 
 ### Extension points (Strategy pattern)
 
 - **Routing:** subclass `routing.base.RoutingAlgorithm`, implement `decide(message, holder, contact) -> RoutingDecision`. Reference impl: `routing/epidemic.py` (naive flooding). Pass a custom instance via `run_simulation(config, routing_algorithm=MyRouting())`.
-- **Mobility:** subclass `mobility.base.MobilityModel`, implement `initial_position(area)` and `step(current, dt, area)`. Reference impl: `mobility/random_waypoint.py`. Each `MobileNode` owns its own instance; inject a custom one via `run_simulation(config, mobility_factory=lambda rng: MyMobility(rng))` — a *factory*, not an instance, because each node needs its own stateful model seeded from its own RNG.
+- **Mobility:** subclass `mobility.base.MobilityModel`, implement `initial_position(area)` and `step(current, dt, area)`. Reference impls: `mobility/random_waypoint.py` (uniform target) and `mobility/poi.py` (`PoiMobility`, targets weighted `MobilityConfig.points_of_interest`, requires at least one with positive weight). Each `MobileNode` owns its own instance; inject a custom one via `run_simulation(config, mobility_factory=lambda rng: MyMobility(rng))` — a *factory*, not an instance, because each node needs its own stateful model seeded from its own RNG.
 - **Beacon placement:** `beacons.place_beacons(area, beacons)` — `"grid"` (regular grid, default) or `"manual"` (explicit coordinates). Not a Strategy class, just a two-branch function.
 
 ### Correctness invariants that are easy to break

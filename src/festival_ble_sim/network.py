@@ -7,6 +7,7 @@ from .energy import EnergyModel
 from .metrics import MetricsCollector
 from .models import Message
 from .nodes import BaseNode, BeaconNode
+from .radio import link_margin_db
 from .routing.base import RoutingAlgorithm, RoutingDecision
 from .spatial import SpatialGrid
 
@@ -15,6 +16,19 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
     expired_ids = [mid for mid, m in node.buffer.items() if m.is_expired(now)]
     for mid in expired_ids:
         del node.buffer[mid]
+
+
+def _weak_signal_loss_probability(margin_db: float, ble_config: BleConfig) -> float:
+    # Fades from 0 loss at/above the cutoff margin to weak_signal_max_probability
+    # right at the receiver sensitivity floor (0 dB margin): a link near the
+    # edge of range drops more packets than one deep inside it, on top of
+    # (not instead of) congestion-driven loss.
+    cutoff = ble_config.signal_margin_cutoff_db
+    if margin_db >= cutoff:
+        return 0.0
+    if margin_db <= 0.0:
+        return ble_config.weak_signal_max_probability
+    return ble_config.weak_signal_max_probability * (1.0 - margin_db / cutoff)
 
 
 def process_node_contacts(
@@ -48,13 +62,16 @@ def process_node_contacts(
         neighbors = sorted(neighbors, key=lambda n: sender.position.distance_to(n.position))
         neighbors = neighbors[: ble_config.max_concurrent_links]
 
-    loss_prob = 0.0
+    congestion_loss_prob = 0.0
     if ble_config is not None and neighbors:
-        loss_prob = min(
-            ble_config.packet_loss_max_probability,
+        congestion_loss_prob = (
             ble_config.packet_loss_base_probability
-            + ble_config.packet_loss_congestion_coefficient * max(0, len(neighbors) - 1),
+            + ble_config.packet_loss_congestion_coefficient * max(0, len(neighbors) - 1)
         )
+
+    radio = None
+    if ble_config is not None:
+        radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
 
     link_budget_bytes = None
     if ble_config is not None:
@@ -63,6 +80,13 @@ def process_node_contacts(
     for contact in neighbors:
         if not contact.is_active:
             continue
+
+        loss_prob = 0.0
+        if ble_config is not None:
+            distance_m = sender.position.distance_to(contact.position)
+            margin_db = link_margin_db(distance_m, radio)
+            weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
+            loss_prob = min(ble_config.packet_loss_max_probability, congestion_loss_prob + weak_signal_loss_prob)
 
         remaining_budget = link_budget_bytes
 

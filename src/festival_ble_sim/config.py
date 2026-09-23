@@ -10,9 +10,46 @@ class AreaConfig:
 
 
 @dataclass(frozen=True)
+class RadioParams:
+    # Log-distance path-loss model (same shape as the classic BLE/Wi-Fi
+    # indoor propagation model): received power decays by
+    # `10 * path_loss_exponent` dB per decade of distance beyond
+    # `reference_distance_m`, where it's calibrated to `reference_loss_db`.
+    tx_power_dbm: float
+    path_loss_exponent: float
+    reference_distance_m: float
+    reference_loss_db: float
+    receiver_sensitivity_dbm: float
+
+
+# Defaults: -90 dBm sensitivity and exponent=2.7 (crowded/obstructed
+# festival ground, denser than free space's 2.0) are typical BLE figures;
+# tx_power is picked per node type below so the resulting max range lines
+# up with this simulator's previous fixed-radius defaults (~30m / ~60m).
+def _default_phone_radio() -> RadioParams:
+    return RadioParams(
+        tx_power_dbm=-10.0,
+        path_loss_exponent=2.7,
+        reference_distance_m=1.0,
+        reference_loss_db=40.0,
+        receiver_sensitivity_dbm=-90.0,
+    )
+
+
+def _default_beacon_radio() -> RadioParams:
+    return RadioParams(
+        tx_power_dbm=-2.0,
+        path_loss_exponent=2.7,
+        reference_distance_m=1.0,
+        reference_loss_db=40.0,
+        receiver_sensitivity_dbm=-90.0,
+    )
+
+
+@dataclass(frozen=True)
 class BleConfig:
-    phone_range_m: float = 30.0
-    beacon_range_m: float = 60.0
+    phone_radio: RadioParams = field(default_factory=_default_phone_radio)
+    beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
     # Bytes exchangeable per tick per link (sender<->contact): real effective
     # GATT throughput in a dense opportunistic-mesh deployment, well below
     # BLE's raw PHY rate once ATT/connection overhead and 2.4GHz contention
@@ -24,7 +61,21 @@ class BleConfig:
     max_concurrent_links: Optional[int] = 6
     packet_loss_base_probability: float = 0.01
     packet_loss_congestion_coefficient: float = 0.02
+    # Extra loss probability for links near the edge of radio range: fades
+    # linearly from 0 at signal_margin_cutoff_db (or above) to
+    # weak_signal_max_probability at a 0 dB margin (received power at the
+    # receiver sensitivity floor), on top of the congestion-based loss above.
+    signal_margin_cutoff_db: float = 6.0
+    weak_signal_max_probability: float = 0.30
     packet_loss_max_probability: float = 0.30
+
+
+@dataclass(frozen=True)
+class PointOfInterest:
+    x: float
+    y: float
+    radius_m: float
+    weight: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +85,9 @@ class MobilityConfig:
     pause_probability: float = 0.3
     pause_duration_range_s: Tuple[float, float] = (10.0, 60.0)
     tick_interval_s: float = 1.0
+    # Only consumed by mobility.poi.PoiMobility (opt-in via mobility_factory);
+    # RandomWaypointMobility ignores this field entirely.
+    points_of_interest: Tuple[PointOfInterest, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,3 +152,12 @@ class SimulationConfig:
             raise ValueError("packet loss probabilities must be <= 1")
         if self.ble.packet_loss_base_probability > self.ble.packet_loss_max_probability:
             raise ValueError("packet_loss_base_probability must be <= packet_loss_max_probability")
+        if self.ble.signal_margin_cutoff_db <= 0:
+            raise ValueError("signal_margin_cutoff_db must be positive")
+        if not (0.0 <= self.ble.weak_signal_max_probability <= 1.0):
+            raise ValueError("weak_signal_max_probability must be within [0, 1]")
+        for radio in (self.ble.phone_radio, self.ble.beacon_radio):
+            if radio.path_loss_exponent <= 0:
+                raise ValueError("path_loss_exponent must be positive")
+            if radio.reference_distance_m <= 0:
+                raise ValueError("reference_distance_m must be positive")

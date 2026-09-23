@@ -24,6 +24,8 @@ Le rapport est affiche dans le terminal et ecrit dans
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet` ou
   `beacon_priority` (un seul choix a la fois, pas de `|`)
+- `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
+  convergent vers une scene principale au centre de la zone, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
 - `--beacon-placement` : `grid` (defaut) ou `manual`
 - `--duration`, `--num-festivaliers`, `--seed`, `--output`
@@ -45,6 +47,14 @@ beacon_priority} x {avec/sans bornes} avec le meme seed pour chaque run
 
 ## Realisme du transfert BLE et surcharge reseau
 
+La portee radio (`src/festival_ble_sim/radio.py`) est derivee d'un modele
+de **path-loss log-distance** (memes unites qu'un vrai lien BLE : puissance
+d'emission en dBm, exposant d'attenuation, sensibilite du recepteur en
+dBm) plutot que d'un rayon fixe arbitraire — `RadioParams` dans
+`BleConfig.phone_radio` / `beacon_radio`. La portee effective
+(`radio.max_range_m`) est le point ou la puissance recue tombe au niveau
+de la sensibilite du recepteur.
+
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
 - un **debit limite par lien et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
@@ -53,14 +63,32 @@ la portee radio :
 - une **limite de connexions BLE simultanees** (`max_concurrent_links`,
   defaut 6, realiste pour un smartphone) — au-dela, les contacts les plus
   proches sont prioritaires ;
-- une **perte de paquets probabiliste**, dont la probabilite croit avec le
-  nombre de contacts simultanes (surcharge en foule dense) ;
+- une **perte de paquets probabiliste**, combinant deux composantes : une
+  qui croit avec le nombre de contacts simultanes (surcharge en foule
+  dense, `packet_loss_congestion_coefficient`) et une qui croit quand la
+  marge de lien (puissance recue au-dessus de la sensibilite) s'approche
+  de zero (`signal_margin_cutoff_db`, `weak_signal_max_probability`) — un
+  lien en bord de portee perd plus de paquets qu'un lien proche ;
 - un **backhaul borne-a-borne quasi instantane** (WiFi/filaire simule),
   actif automatiquement des que 2 bornes ou plus sont presentes, hors
   contraintes de portee/debit/perte du lien BLE.
 
 Ces effets sont visibles dans le rapport via `Messages perdus (buffer)`,
 `Paquets perdus (radio)` et `Transmissions backhaul`.
+
+## Modeles de mobilite disponibles
+
+- `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
+  uniforme sur toute la zone.
+- `poi` (`mobility/poi.py`) — les noeuds alternent pause/deplacement vers
+  des points d'interet ponderes (`MobilityConfig.points_of_interest`,
+  liste de `PointOfInterest(x, y, radius_m, weight)`), pour representer
+  une foule qui converge vers des scenes/stands plutot qu'un mouvement
+  brownien uniforme. Le CLI (`--mobility poi`) l'utilise avec un unique
+  point d'interet par defaut (une "scene principale" au centre de la
+  zone) ; pour plusieurs points d'interet ponderes, construis directement
+  un `MobilityConfig(points_of_interest=(...))` et passe-le a
+  `SimulationConfig(mobility=...)`.
 
 ## Algorithmes de routage disponibles
 
