@@ -13,6 +13,8 @@ from festival_ble_sim.routing.epidemic import EpidemicRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.simulation import run_simulation
+from festival_ble_sim.viz.history import SimulationHistory
+from festival_ble_sim.viz.replay import render_replay_html
 
 ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] = {
     "epidemic": lambda args: EpidemicRouting(),
@@ -47,6 +49,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default="rapport_simulation.txt")
     parser.add_argument("--spray-initial-copies", type=int, default=8, help="Nombre de copies initiales (Spray & Wait)")
+    parser.add_argument(
+        "--replay-html", default=None,
+        help="Ecrit un replay HTML autonome (positions + evenements) vers ce chemin. "
+        "Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+    )
     return parser
 
 
@@ -70,11 +77,23 @@ def main(argv: Optional[List[str]] = None) -> None:
     config = build_config(args)
     routing_algorithm = ROUTING_FACTORIES[args.routing](args)
     mobility_factory = MOBILITY_FACTORIES[args.mobility](config)
-    report = run_simulation(config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory)
+    history = None
+    if args.replay_html is not None:
+        history = SimulationHistory(
+            area_width_m=config.area.width_m,
+            area_height_m=config.area.height_m,
+            tick_interval_s=config.mobility.tick_interval_s,
+        )
+    report = run_simulation(
+        config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history
+    )
     text = format_report(report)
     print(text)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(text)
+    if history is not None:
+        render_replay_html(history, args.replay_html, title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
+        print(f"Replay HTML ecrit dans {args.replay_html}")
 
 
 if __name__ == "__main__":

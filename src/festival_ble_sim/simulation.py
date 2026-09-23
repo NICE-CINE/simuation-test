@@ -17,6 +17,7 @@ from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
 from .spatial import SpatialGrid
 from .traffic import traffic_generator
+from .viz.history import SimulationHistory
 
 
 def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: SpatialGrid):
@@ -27,10 +28,23 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
         grid.update(node, old_x, old_y)
 
 
+def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, MobileNode], tick_interval_s: float):
+    # A dedicated process rather than hooking _mobile_process, so one
+    # snapshot captures every node's post-move position for a given tick
+    # instead of N per-node partial writes. Registered after every
+    # _mobile_process below so SimPy's same-time event ordering guarantees
+    # this fires after that tick's moves, not before.
+    while True:
+        yield env.timeout(tick_interval_s)
+        snapshot = {node_id: (node.position.x, node.position.y) for node_id, node in mobile_nodes.items() if node.is_active}
+        history.position_snapshots.append((env.now, snapshot))
+
+
 def run_simulation(
     config: SimulationConfig,
     routing_algorithm: Optional[RoutingAlgorithm] = None,
     mobility_factory: Optional[Callable[[random.Random], MobilityModel]] = None,
+    history: Optional[SimulationHistory] = None,
 ) -> SimulationReport:
     rng = random.Random(config.random_seed)
     routing_algorithm = routing_algorithm if routing_algorithm is not None else EpidemicRouting()
@@ -59,6 +73,8 @@ def run_simulation(
         )
         nodes[node_id] = beacon
         grid.insert(beacon)
+        if history is not None:
+            history.beacon_positions[node_id] = (position.x, position.y)
 
     mobile_nodes: Dict[int, MobileNode] = {}
     for _ in range(config.num_festivaliers):
@@ -78,6 +94,9 @@ def run_simulation(
         grid.insert(mobile)
         env.process(_mobile_process(env, mobile, config, grid))
 
+    if history is not None:
+        env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
+
     msg_id_counter = itertools.count(1)
     network_rng = random.Random(rng.randrange(1 << 30))
     env.process(traffic_generator(env, mobile_nodes, config.traffic, metrics, msg_id_counter, rng))
@@ -88,6 +107,7 @@ def run_simulation(
             ble_config=config.ble,
             beacon_config=config.beacons,
             rng=network_rng,
+            event_log=history.events if history is not None else None,
         )
     )
 

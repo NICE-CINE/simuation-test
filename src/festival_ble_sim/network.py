@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from dataclasses import replace
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -60,6 +60,7 @@ def process_node_contacts(
     ble_config: Optional[BleConfig] = None,
     rng: Optional[random.Random] = None,
     contention_counts: Optional[Dict[int, int]] = None,
+    event_log: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -180,6 +181,8 @@ def process_node_contacts(
                     metrics.record_transmission()
                     metrics.record_delivery(delivered_msg, now)
                     routing_algorithm.on_delivered(delivered_msg, sender)
+                    if event_log is not None:
+                        event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": True})
                 continue
 
             # Network-layer hop TTL only caps relaying, not direct delivery
@@ -202,6 +205,8 @@ def process_node_contacts(
                 contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
                 metrics.record_transmission()
                 routing_algorithm.on_forward(message, sender, contact, forwarded)
+                if event_log is not None:
+                    event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": False})
 
 
 def beacon_backhaul_relay(
@@ -269,6 +274,7 @@ def network_engine(
     ble_config: Optional[BleConfig] = None,
     beacon_config: Optional[BeaconConfig] = None,
     rng: Optional[random.Random] = None,
+    event_log: Optional[List[Dict[str, Any]]] = None,
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
     while True:
@@ -289,4 +295,5 @@ def network_engine(
                 ble_config=ble_config,
                 rng=rng,
                 contention_counts=contention_counts,
+                event_log=event_log,
             )

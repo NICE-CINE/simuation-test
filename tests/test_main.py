@@ -73,3 +73,29 @@ def test_main_runs_end_to_end_and_writes_report(tmp_path, capsys):
     assert output_path.exists()
     captured = capsys.readouterr()
     assert "RAPPORT DE SIMULATION" in captured.out
+
+
+def test_main_writes_replay_html_when_requested(tmp_path, capsys):
+    output_path = tmp_path / "report.txt"
+    replay_path = tmp_path / "replay.html"
+    main_module.main(
+        [
+            "--routing", "epidemic",
+            "--duration", "30",
+            "--num-festivaliers", "10",
+            "--seed", "1",
+            "--output", str(output_path),
+            "--replay-html", str(replay_path),
+        ]
+    )
+    assert replay_path.exists()
+    assert "<canvas" in replay_path.read_text(encoding="utf-8")
+    assert "Replay HTML ecrit" in capsys.readouterr().out
+
+
+def test_main_does_not_write_replay_html_by_default(tmp_path):
+    output_path = tmp_path / "report.txt"
+    main_module.main(
+        ["--duration", "30", "--num-festivaliers", "10", "--seed", "1", "--output", str(output_path)]
+    )
+    assert list(tmp_path.glob("*.html")) == []
