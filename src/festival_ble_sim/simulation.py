@@ -23,9 +23,25 @@ from .viz.history import SimulationHistory
 def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: SpatialGrid):
     while True:
         yield env.timeout(config.mobility.tick_interval_s)
+        if not node.is_active:
+            # Not yet arrived / already departed (see _churn_process) or
+            # battery-dead: frozen in place rather than wandering while it
+            # can't participate in BLE anyway.
+            continue
         old_x, old_y = node.position.x, node.position.y
         node.move(config.mobility.tick_interval_s, config.area)
         grid.update(node, old_x, old_y)
+
+
+def _churn_process(env, node: MobileNode, arrival_time_s: float, departure_time_s: float):
+    if arrival_time_s > 0:
+        node.is_active = False
+        yield env.timeout(arrival_time_s)
+        node.is_active = True
+    remaining_s = departure_time_s - max(arrival_time_s, 0.0)
+    if remaining_s > 0:
+        yield env.timeout(remaining_s)
+        node.is_active = False
 
 
 def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, MobileNode], tick_interval_s: float):
@@ -94,6 +110,12 @@ def run_simulation(
         grid.insert(mobile)
         env.process(_mobile_process(env, mobile, config, grid))
 
+        if config.churn.enabled:
+            arrival_time_s = rng.uniform(*config.churn.arrival_window_s)
+            departure_time_s = arrival_time_s + rng.uniform(*config.churn.session_duration_range_s)
+            if arrival_time_s > 0 or departure_time_s < config.duration_s:
+                env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
+
     if history is not None:
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
 
@@ -114,6 +136,6 @@ def run_simulation(
     env.run(until=config.duration_s)
 
     energy_samples = [n.energy_consumed_mah for n in nodes.values() if n.initial_battery_mah != math.inf]
-    dead_count = sum(1 for n in nodes.values() if not n.is_active)
+    dead_count = sum(1 for n in nodes.values() if n.battery_depleted)
     buffer_evictions = sum(n.buffer_evictions for n in nodes.values())
     return metrics.build_report(energy_samples, dead_count, buffer_evictions)

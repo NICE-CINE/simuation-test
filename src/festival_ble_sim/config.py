@@ -152,6 +152,20 @@ class BeaconConfig:
     backhaul_loss_probability: float = 0.0
 
 
+@dataclass(frozen=True)
+class ChurnConfig:
+    # Off by default: every mobile node is active for the full run, as
+    # before. When enabled, each mobile node samples an arrival time
+    # uniformly from arrival_window_s and a session length uniformly from
+    # session_duration_range_s, and is only is_active (participates in BLE,
+    # eligible as traffic src/dst) between arrival and arrival+session —
+    # modeling a crowd that trickles in/out over the event rather than
+    # being fully present for the whole simulated duration.
+    enabled: bool = False
+    arrival_window_s: Tuple[float, float] = (0.0, 0.0)
+    session_duration_range_s: Tuple[float, float] = (600.0, 3600.0)
+
+
 @dataclass
 class SimulationConfig:
     duration_s: float = 3600.0
@@ -164,6 +178,7 @@ class SimulationConfig:
     traffic: TrafficConfig = field(default_factory=TrafficConfig)
     energy: EnergyConfig = field(default_factory=EnergyConfig)
     beacons: BeaconConfig = field(default_factory=BeaconConfig)
+    churn: ChurnConfig = field(default_factory=ChurnConfig)
 
     def __post_init__(self) -> None:
         if self.area.width_m <= 0 or self.area.height_m <= 0:
@@ -208,6 +223,12 @@ class SimulationConfig:
             raise ValueError("backhaul_latency_s must be positive")
         if not (0.0 <= self.beacons.backhaul_loss_probability <= 1.0):
             raise ValueError("backhaul_loss_probability must be within [0, 1]")
+        arrival_lo, arrival_hi = self.churn.arrival_window_s
+        if arrival_lo < 0 or arrival_hi < arrival_lo:
+            raise ValueError("arrival_window_s must satisfy 0 <= lo <= hi")
+        session_lo, session_hi = self.churn.session_duration_range_s
+        if session_lo <= 0 or session_hi < session_lo:
+            raise ValueError("session_duration_range_s must satisfy 0 < lo <= hi")
         for radio in (self.ble.phone_radio, self.ble.beacon_radio):
             if radio.path_loss_exponent <= 0:
                 raise ValueError("path_loss_exponent must be positive")

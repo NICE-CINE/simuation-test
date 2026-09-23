@@ -2,7 +2,14 @@ from __future__ import annotations
 import argparse
 import random
 from typing import Callable, Dict, List, Optional
-from festival_ble_sim.config import AreaConfig, BeaconConfig, MobilityConfig, PointOfInterest, SimulationConfig
+from festival_ble_sim.config import (
+    AreaConfig,
+    BeaconConfig,
+    ChurnConfig,
+    MobilityConfig,
+    PointOfInterest,
+    SimulationConfig,
+)
 from festival_ble_sim.metrics import format_report
 from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
@@ -54,6 +61,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ecrit un replay HTML autonome (positions + evenements) vers ce chemin. "
         "Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
+    parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
+    parser.add_argument(
+        "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 0.0), metavar=("LO", "HI"),
+        help="Fenetre (secondes) dans laquelle chaque festivalier arrive, si --churn",
+    )
+    parser.add_argument(
+        "--churn-session-duration-s", type=float, nargs=2, default=(600.0, 3600.0), metavar=("LO", "HI"),
+        help="Duree de presence (secondes) de chaque festivalier apres son arrivee, si --churn",
+    )
     return parser
 
 
@@ -62,6 +78,11 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     mobility = MobilityConfig()
     if args.mobility == "poi":
         mobility = MobilityConfig(points_of_interest=(_default_main_stage_poi(area),))
+    churn = ChurnConfig(
+        enabled=args.churn,
+        arrival_window_s=tuple(args.churn_arrival_window_s),
+        session_duration_range_s=tuple(args.churn_session_duration_s),
+    )
     return SimulationConfig(
         duration_s=args.duration,
         num_festivaliers=args.num_festivaliers,
@@ -69,6 +90,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         area=area,
         mobility=mobility,
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
+        churn=churn,
     )
 
 

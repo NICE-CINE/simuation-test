@@ -19,6 +19,25 @@ def test_build_arg_parser_defaults():
     assert args.seed == 42
     assert args.output == "rapport_simulation.txt"
     assert args.spray_initial_copies == 8
+    assert args.churn is False
+    assert tuple(args.churn_arrival_window_s) == (0.0, 0.0)
+    assert tuple(args.churn_session_duration_s) == (600.0, 3600.0)
+
+
+def test_build_config_wires_churn_flags():
+    args = main_module.build_arg_parser().parse_args(
+        ["--churn", "--churn-arrival-window-s", "0", "50", "--churn-session-duration-s", "10", "20"]
+    )
+    config = main_module.build_config(args)
+    assert config.churn.enabled is True
+    assert config.churn.arrival_window_s == (0.0, 50.0)
+    assert config.churn.session_duration_range_s == (10.0, 20.0)
+
+
+def test_build_config_churn_disabled_by_default():
+    args = main_module.build_arg_parser().parse_args([])
+    config = main_module.build_config(args)
+    assert config.churn.enabled is False
 
 
 def test_routing_factories_cover_every_cli_choice():
