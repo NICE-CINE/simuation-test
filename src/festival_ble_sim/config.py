@@ -68,6 +68,20 @@ class BleConfig:
     signal_margin_cutoff_db: float = 6.0
     weak_signal_max_probability: float = 0.30
     packet_loss_max_probability: float = 0.30
+    # CSMA-style channel sensing: before transmitting, a node estimates
+    # how many other nodes within its own radio range also have something
+    # to send this tick, and backs off (skips this tick, retries next one,
+    # no energy spent, no loss counted) with a probability that grows with
+    # that count — this is what keeps a real BLE mesh from having every
+    # node blast a relay at once.
+    relay_backoff_coefficient: float = 0.05
+    relay_backoff_max_probability: float = 0.5
+    # Even after backoff, a receiver can still be hit by two senders that
+    # can't hear each other (hidden-terminal collision): extra loss
+    # probability per other transmitter within the RECEIVER's own range,
+    # on top of (not instead of) congestion/weak-signal loss.
+    collision_loss_coefficient: float = 0.03
+    collision_loss_max_probability: float = 0.4
 
 
 @dataclass(frozen=True)
@@ -156,6 +170,14 @@ class SimulationConfig:
             raise ValueError("signal_margin_cutoff_db must be positive")
         if not (0.0 <= self.ble.weak_signal_max_probability <= 1.0):
             raise ValueError("weak_signal_max_probability must be within [0, 1]")
+        if self.ble.relay_backoff_coefficient < 0:
+            raise ValueError("relay_backoff_coefficient must be >= 0")
+        if not (0.0 <= self.ble.relay_backoff_max_probability <= 1.0):
+            raise ValueError("relay_backoff_max_probability must be within [0, 1]")
+        if self.ble.collision_loss_coefficient < 0:
+            raise ValueError("collision_loss_coefficient must be >= 0")
+        if not (0.0 <= self.ble.collision_loss_max_probability <= 1.0):
+            raise ValueError("collision_loss_max_probability must be within [0, 1]")
         for radio in (self.ble.phone_radio, self.ble.beacon_radio):
             if radio.path_loss_exponent <= 0:
                 raise ValueError("path_loss_exponent must be positive")

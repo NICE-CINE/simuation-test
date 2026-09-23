@@ -18,6 +18,24 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
         del node.buffer[mid]
 
 
+def _compute_contention_counts(
+    nodes: Dict[int, BaseNode], grid: SpatialGrid, snapshot: Dict[int, List[Message]]
+) -> Dict[int, int]:
+    # For each active node, how many other nodes within ITS OWN radio range
+    # have something to send this tick — a proxy for the local shared-medium
+    # activity a real BLE radio would sense. Used both for the sender's own
+    # channel-sense backoff and for the receiver's hidden-terminal collision
+    # risk (see process_node_contacts).
+    counts: Dict[int, int] = {}
+    for node_id, node in nodes.items():
+        if not node.is_active:
+            counts[node_id] = 0
+            continue
+        neighbors = grid.get_nearby(node, node.radio_range_m)
+        counts[node_id] = sum(1 for n in neighbors if n.is_active and snapshot.get(n.id))
+    return counts
+
+
 def _weak_signal_loss_probability(margin_db: float, ble_config: BleConfig) -> float:
     # Fades from 0 loss at/above the cutoff margin to weak_signal_max_probability
     # right at the receiver sensitivity floor (0 dB margin): a link near the
@@ -41,6 +59,7 @@ def process_node_contacts(
     messages: Optional[List[Message]] = None,
     ble_config: Optional[BleConfig] = None,
     rng: Optional[random.Random] = None,
+    contention_counts: Optional[Dict[int, int]] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -53,6 +72,21 @@ def process_node_contacts(
     # — otherwise propagation speed depends on node iteration order.
     if messages is None:
         messages = list(sender.buffer.values())
+
+    # CSMA-style channel sensing: back off (skip this whole tick, retry
+    # next one) before spending any energy or attempting a transmission,
+    # with a probability that grows with how many other nodes the sender
+    # can itself hear trying to send this tick.
+    if ble_config is not None and rng is not None and contention_counts is not None:
+        other_transmitters = contention_counts.get(sender.id, 0)
+        if other_transmitters > 0:
+            backoff_prob = min(
+                ble_config.relay_backoff_max_probability,
+                ble_config.relay_backoff_coefficient * other_transmitters,
+            )
+            if rng.random() < backoff_prob:
+                metrics.record_backoff()
+                return
 
     neighbors = grid.get_nearby(sender, sender.radio_range_m)
 
@@ -86,7 +120,19 @@ def process_node_contacts(
             distance_m = sender.position.distance_to(contact.position)
             margin_db = link_margin_db(distance_m, radio)
             weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
-            loss_prob = min(ble_config.packet_loss_max_probability, congestion_loss_prob + weak_signal_loss_prob)
+
+            collision_loss_prob = 0.0
+            if contention_counts is not None:
+                other_transmitters = max(0, contention_counts.get(contact.id, 0) - 1)
+                collision_loss_prob = min(
+                    ble_config.collision_loss_max_probability,
+                    ble_config.collision_loss_coefficient * other_transmitters,
+                )
+
+            loss_prob = min(
+                ble_config.packet_loss_max_probability,
+                congestion_loss_prob + weak_signal_loss_prob + collision_loss_prob,
+            )
 
         remaining_budget = link_budget_bytes
 
@@ -185,10 +231,12 @@ def network_engine(
         now = env.now
         snapshot = {node_id: list(node.buffer.values()) for node_id, node in nodes.items()}
         beacon_backhaul_relay(now, beacon_ids, nodes, snapshot, metrics)
+        contention_counts = _compute_contention_counts(nodes, grid, snapshot) if ble_config is not None else None
         for node_id, sender in list(nodes.items()):
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
                 ble_config=ble_config,
                 rng=rng,
+                contention_counts=contention_counts,
             )
