@@ -1,5 +1,5 @@
 import pytest
-from festival_ble_sim.config import BleConfig, RadioParams, SimulationConfig, AreaConfig, TrafficConfig
+from festival_ble_sim.config import BeaconConfig, BleConfig, RadioParams, SimulationConfig, AreaConfig, TrafficConfig
 
 
 def test_default_message_ttl_hops_is_eight():
@@ -14,6 +14,16 @@ def test_rejects_non_positive_message_ttl_hops():
 def test_accepts_none_message_ttl_hops_as_unlimited():
     config = SimulationConfig(traffic=TrafficConfig(message_ttl_hops=None))
     assert config.traffic.message_ttl_hops is None
+
+
+def test_rejects_non_positive_backhaul_latency():
+    with pytest.raises(ValueError):
+        SimulationConfig(beacons=BeaconConfig(backhaul_latency_s=0.0))
+
+
+def test_rejects_backhaul_loss_probability_outside_unit_range():
+    with pytest.raises(ValueError):
+        SimulationConfig(beacons=BeaconConfig(backhaul_loss_probability=1.5))
 
 
 def test_default_config_is_valid():

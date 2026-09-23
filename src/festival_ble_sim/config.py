@@ -141,6 +141,15 @@ class BeaconConfig:
     placement: str = "grid"
     manual_positions: Optional[List[Tuple[float, float]]] = None
     unlimited_power: bool = True
+    # The WiFi/wired backhaul between beacons is a separate backbone, not a
+    # BLE link, but it isn't literally instant or lossless either. Each tick
+    # a message is still pending backhaul delivery, it's attempted with
+    # probability contact_check_interval_s/backhaul_latency_s (so latencies
+    # well below one tick round up to "always attempt", preserving the
+    # previous quasi-instant behavior by default) and, if attempted, still
+    # subject to backhaul_loss_probability before the source retries next tick.
+    backhaul_latency_s: float = 0.05
+    backhaul_loss_probability: float = 0.0
 
 
 @dataclass
@@ -195,6 +204,10 @@ class SimulationConfig:
             raise ValueError("collision_loss_coefficient must be >= 0")
         if not (0.0 <= self.ble.collision_loss_max_probability <= 1.0):
             raise ValueError("collision_loss_max_probability must be within [0, 1]")
+        if self.beacons.backhaul_latency_s <= 0:
+            raise ValueError("backhaul_latency_s must be positive")
+        if not (0.0 <= self.beacons.backhaul_loss_probability <= 1.0):
+            raise ValueError("backhaul_loss_probability must be within [0, 1]")
         for radio in (self.ble.phone_radio, self.ble.beacon_radio):
             if radio.path_loss_exponent <= 0:
                 raise ValueError("path_loss_exponent must be positive")

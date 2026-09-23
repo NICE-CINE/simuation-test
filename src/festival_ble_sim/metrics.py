@@ -22,6 +22,7 @@ class SimulationReport:
     packet_loss_count: int = 0
     backhaul_transmissions: int = 0
     backoff_count: int = 0
+    backhaul_loss_count: int = 0
 
 
 @dataclass
@@ -39,6 +40,7 @@ class MetricsCollector:
         self._packet_loss_count = 0
         self._backhaul_transmissions = 0
         self._backoff_count = 0
+        self._backhaul_loss_count = 0
 
     def record_creation(self, message: Message) -> None:
         self._messages_created += 1
@@ -54,6 +56,9 @@ class MetricsCollector:
 
     def record_backoff(self) -> None:
         self._backoff_count += 1
+
+    def record_backhaul_loss(self) -> None:
+        self._backhaul_loss_count += 1
 
     def record_delivery(self, message: Message, delivered_at: float) -> None:
         if message.msg_id in self._delivered_msg_ids:
@@ -92,6 +97,7 @@ class MetricsCollector:
             packet_loss_count=self._packet_loss_count,
             backhaul_transmissions=self._backhaul_transmissions,
             backoff_count=self._backoff_count,
+            backhaul_loss_count=self._backhaul_loss_count,
         )
 
 
@@ -115,5 +121,6 @@ def format_report(report: SimulationReport) -> str:
         f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
         f"Transmissions backhaul    : {report.backhaul_transmissions}\n"
         f"Backoffs (contention)     : {report.backoff_count}\n"
+        f"Paquets perdus (backhaul) : {report.backhaul_loss_count}\n"
         "===================================================================\n"
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 import random
 from dataclasses import replace
 from typing import Dict, List, Optional
-from .config import BleConfig
+from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
 from .models import Message
@@ -210,17 +210,31 @@ def beacon_backhaul_relay(
     nodes: Dict[int, BaseNode],
     snapshot: Dict[int, List[Message]],
     metrics: MetricsCollector,
+    contact_check_interval_s: float = 1.0,
+    beacon_config: Optional[BeaconConfig] = None,
+    rng: Optional[random.Random] = None,
 ) -> None:
-    # Simulates a reliable WiFi/wired backhaul between fixed beacons: no
-    # radio-range check, no BLE bandwidth/contention/loss, and (like the
-    # hop count it deliberately never increments) no BLE mesh network-layer
-    # hop TTL either — it's a separate wired backbone, not a mesh relay.
-    # Reads only the pre-tick snapshot and writes into other beacons' live
-    # buffers, so a message relayed here only becomes visible for further
-    # relay (BLE or backhaul) starting next tick — preserving the
-    # tick-snapshot invariant.
+    # Simulates a WiFi/wired backhaul between fixed beacons: no radio-range
+    # check, no BLE bandwidth/contention, and (like the hop count it
+    # deliberately never increments) no BLE mesh network-layer hop TTL
+    # either — it's a separate wired backbone, not a mesh relay. It isn't
+    # perfectly instant or lossless though: see BeaconConfig.backhaul_latency_s
+    # / backhaul_loss_probability. Reads only the pre-tick snapshot and
+    # writes into other beacons' live buffers, so a message relayed here
+    # only becomes visible for further relay (BLE or backhaul) starting
+    # next tick — preserving the tick-snapshot invariant. A message not yet
+    # attempted (still "in flight") or lost this tick is retried
+    # automatically next tick, since the source still holds it and the
+    # target still doesn't.
     if len(beacon_ids) < 2:
         return
+
+    attempt_prob = 1.0
+    loss_prob = 0.0
+    if beacon_config is not None:
+        attempt_prob = min(1.0, contact_check_interval_s / beacon_config.backhaul_latency_s)
+        loss_prob = beacon_config.backhaul_loss_probability
+
     for src_id in beacon_ids:
         source = nodes[src_id]
         if not source.is_active:
@@ -233,6 +247,11 @@ def beacon_backhaul_relay(
                     continue
                 target = nodes[dst_id]
                 if not target.is_active or target.has_message(message.msg_id):
+                    continue
+                if rng is not None and attempt_prob < 1.0 and rng.random() >= attempt_prob:
+                    continue
+                if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
+                    metrics.record_backhaul_loss()
                     continue
                 relayed = replace(message, routing_state=dict(message.routing_state))
                 target.store_message(relayed)
@@ -248,6 +267,7 @@ def network_engine(
     metrics: MetricsCollector,
     contact_check_interval_s: float,
     ble_config: Optional[BleConfig] = None,
+    beacon_config: Optional[BeaconConfig] = None,
     rng: Optional[random.Random] = None,
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
@@ -255,7 +275,12 @@ def network_engine(
         yield env.timeout(contact_check_interval_s)
         now = env.now
         snapshot = {node_id: list(node.buffer.values()) for node_id, node in nodes.items()}
-        beacon_backhaul_relay(now, beacon_ids, nodes, snapshot, metrics)
+        beacon_backhaul_relay(
+            now, beacon_ids, nodes, snapshot, metrics,
+            contact_check_interval_s=contact_check_interval_s,
+            beacon_config=beacon_config,
+            rng=rng,
+        )
         contention_counts = _compute_contention_counts(nodes, grid, snapshot) if ble_config is not None else None
         for node_id, sender in list(nodes.items()):
             process_node_contacts(

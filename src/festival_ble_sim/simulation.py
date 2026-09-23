@@ -86,6 +86,7 @@ def run_simulation(
             env, nodes, grid, routing_algorithm, energy_model, metrics,
             config.ble.contact_check_interval_s,
             ble_config=config.ble,
+            beacon_config=config.beacons,
             rng=network_rng,
         )
     )
