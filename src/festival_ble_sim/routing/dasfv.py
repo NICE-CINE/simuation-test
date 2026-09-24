@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Dict, Set, TYPE_CHECKING
+from typing import Dict, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingAlgorithm, RoutingDecision
 
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 _TOKENS = "tokens"
 _MULE_REPLICATED = "mule_replicated"
 _FORWARD_REASON = "_forward_reason"
+_PROPHET_AGING_UNIT_S = 30.0
 
 
 class DasfVRouting(RoutingAlgorithm):
@@ -36,6 +37,8 @@ class DasfVRouting(RoutingAlgorithm):
         two_hop_freshness_s: float = 5.0,
         window_rotation_s: float = 5.0,
         mule_turnover_threshold: float = 0.6,
+        mule_min_contacts: int = 3,
+        mule_min_speed_mps: float = 0.3,
         mule_min_battery_pct: float = 0.40,
         battery_low_pct: float = 0.15,
         battery_evac_pct: float = 0.30,
@@ -44,6 +47,8 @@ class DasfVRouting(RoutingAlgorithm):
             raise ValueError("k_min must be >= 1")
         if l_max < k_min:
             raise ValueError("l_max must be >= k_min")
+        if window_rotation_s <= 0:
+            raise ValueError("window_rotation_s must be > 0")
         self._l_base = l_base
         self._k_min = k_min
         self._l_max = l_max
@@ -58,76 +63,103 @@ class DasfVRouting(RoutingAlgorithm):
         self._two_hop_freshness_s = two_hop_freshness_s
         self._window_rotation_s = window_rotation_s
         self._mule_turnover_threshold = mule_turnover_threshold
+        self._mule_min_contacts = mule_min_contacts
+        self._mule_min_speed_mps = mule_min_speed_mps
         self._mule_min_battery_pct = mule_min_battery_pct
         self._battery_low_pct = battery_low_pct
         self._battery_evac_pct = battery_evac_pct
 
-        # PRoPHET-style delivery predictability, nested by holder id so a
-        # single node's row can be read/updated without scanning every pair
-        # in the run -- matters at the 10000-node scale this simulator targets.
+        # Nested by node id so one node's row is read without scanning every
+        # pair in the run -- matters at the 10000-node scale this targets.
         self._predictability: Dict[int, Dict[int, float]] = {}
-        # a's last-seen timestamp for b. Doubles as: the PRoPHET aging clock,
-        # the local-density window (count of recent entries for a node) and
-        # the 2-hop freshness check (has b recently seen the destination).
+        # PRoPHET aging clock. Kept apart from _last_seen because a
+        # transitive update refreshes it without any physical encounter.
+        self._util_clock: Dict[int, Dict[int, float]] = {}
+        # Physical sightings only: feeds local density and the 2-hop check.
         self._last_seen: Dict[int, Dict[int, float]] = {}
-        # Rolling contact-set generations per node, for the mule turnover
-        # heuristic (Jaccard dissimilarity between consecutive windows).
+        # Turnover compares the two last *completed* windows: the window in
+        # progress is nearly empty right after each rotation, and comparing
+        # against it would flag almost every node as a mule every rotation.
         self._window_contacts: Dict[int, Set[int]] = {}
         self._prev_window_contacts: Dict[int, Set[int]] = {}
-        self._window_id = None
-        # Network-wide ACK purge: once any node delivers a msg_id, every
-        # other holder's next decide() call for it purges the stale copy.
-        # Models ACK propagation as instant/reliable (the spec's own ACK
-        # gossip is cheap/epidemic) rather than simulating bloom-filter
-        # dissemination over BLE.
+        self._prev2_window_contacts: Dict[int, Set[int]] = {}
+        self._window_id: Optional[int] = None
+        # Pedometer stand-in: without it a static node next to a passing
+        # crowd (or a beacon) has high turnover and reads as a mule.
+        self._motion_anchor: Dict[int, Tuple[float, float, float]] = {}
+        self._speed: Dict[int, float] = {}
+        # Network-wide ACK purge, modelled as instant/reliable propagation
+        # (the spec's own ACK gossip is cheap/epidemic) rather than
+        # simulating bloom-filter dissemination over BLE.
         self._delivered_ids: Set[int] = set()
 
     def _decayed(self, a: int, b: int, now: float) -> float:
         p = self._predictability.get(a, {}).get(b, 0.0)
         if p == 0.0:
             return 0.0
-        last = self._last_seen.get(a, {}).get(b, now)
-        return p * (self._gamma ** (max(0.0, now - last) / 30.0))
+        last = self._util_clock[a][b]
+        return p * (self._gamma ** (max(0.0, now - last) / _PROPHET_AGING_UNIT_S))
+
+    def _set_utility(self, a: int, b: int, p: float, now: float) -> None:
+        self._predictability.setdefault(a, {})[b] = p
+        self._util_clock.setdefault(a, {})[b] = now
 
     def _maybe_rotate_window(self, now: float) -> None:
         window_id = int(now // self._window_rotation_s)
         if self._window_id is None:
             self._window_id = window_id
             return
-        if window_id != self._window_id:
+        elapsed = window_id - self._window_id
+        if elapsed <= 0:
+            return
+        if elapsed == 1:
+            self._prev2_window_contacts = self._prev_window_contacts
             self._prev_window_contacts = self._window_contacts
-            self._window_contacts = {}
-            self._window_id = window_id
+        elif elapsed == 2:
+            self._prev2_window_contacts = self._window_contacts
+            self._prev_window_contacts = {}
+        else:
+            self._prev2_window_contacts = {}
+            self._prev_window_contacts = {}
+        self._window_contacts = {}
+        self._window_id = window_id
 
-    def _touch_encounter(self, a: int, b: int, now: float) -> None:
+    def _touch_encounter(self, a: int, b: int, now: float) -> bool:
         if self._last_seen.get(a, {}).get(b) == now:
-            return  # already updated for this ordered pair this tick
+            return False  # this pair was already recorded this tick
         for x, y in ((a, b), (b, a)):
             p_old = self._decayed(x, y, now)
-            self._predictability.setdefault(x, {})[y] = p_old + (1 - p_old) * self._p_encounter_init
+            self._set_utility(x, y, p_old + (1 - p_old) * self._p_encounter_init, now)
             self._last_seen.setdefault(x, {})[y] = now
         if self._enable_transitivity:
             self._apply_transitivity(a, b, now)
         self._maybe_rotate_window(now)
         for x, y in ((a, b), (b, a)):
             self._window_contacts.setdefault(x, set()).add(y)
+        return True
 
     def _apply_transitivity(self, a: int, b: int, now: float) -> None:
         p_ab = self._decayed(a, b, now)
-        for dst in list(self._predictability.get(b, {}).keys()):
-            if dst in (a, b):
-                continue
-            p_bc = self._decayed(b, dst, now)
-            p_old = self._decayed(a, dst, now)
-            self._predictability.setdefault(a, {})[dst] = p_old + (1 - p_old) * p_ab * p_bc * self._beta
-            self._last_seen.setdefault(a, {})[dst] = now
-        for dst in list(self._predictability.get(a, {}).keys()):
-            if dst in (a, b):
-                continue
-            p_ac = self._decayed(a, dst, now)
-            p_old = self._decayed(b, dst, now)
-            self._predictability.setdefault(b, {})[dst] = p_old + (1 - p_old) * p_ab * p_ac * self._beta
-            self._last_seen.setdefault(b, {})[dst] = now
+        for src, via in ((a, b), (b, a)):
+            for dst in list(self._predictability.get(via, {})):
+                if dst in (a, b):
+                    continue
+                p_via_dst = self._decayed(via, dst, now)
+                p_old = self._decayed(src, dst, now)
+                self._set_utility(src, dst, p_old + (1 - p_old) * p_ab * p_via_dst * self._beta, now)
+
+    def _observe_motion(self, node: "BaseNode", now: float) -> None:
+        position = node.position
+        anchor = self._motion_anchor.get(node.id)
+        if anchor is None:
+            self._motion_anchor[node.id] = (now, position.x, position.y)
+            return
+        t0, x0, y0 = anchor
+        dt = now - t0
+        if dt < self._window_rotation_s:
+            return
+        self._speed[node.id] = math.hypot(position.x - x0, position.y - y0) / dt
+        self._motion_anchor[node.id] = (now, position.x, position.y)
 
     def _density(self, node_id: int, now: float) -> int:
         contacts = self._last_seen.get(node_id, {})
@@ -141,27 +173,30 @@ class DasfVRouting(RoutingAlgorithm):
         raw = self._l_base * math.sqrt(self._d_ref / max(density, 1))
         return int(min(self._l_max, max(self._k_min, round(raw))))
 
-    def _battery_pct(self, node: "BaseNode") -> float:
-        initial = getattr(node, "initial_battery_mah", math.inf)
+    @staticmethod
+    def _battery_pct(node: "BaseNode") -> float:
+        initial = node.initial_battery_mah
         if initial == math.inf or initial <= 0:
             return 1.0
         return node.battery_mah / initial
 
     def _turnover(self, node_id: int) -> float:
-        current = self._window_contacts.get(node_id, set())
-        previous = self._prev_window_contacts.get(node_id, set())
-        if not previous:
+        current = self._prev_window_contacts.get(node_id)
+        previous = self._prev2_window_contacts.get(node_id)
+        if not current or not previous:
             return 0.0
         union = current | previous
-        if not union:
+        if len(union) < self._mule_min_contacts:
             return 0.0
-        jaccard = len(current & previous) / len(union)
-        return 1.0 - jaccard
+        return 1.0 - len(current & previous) / len(union)
 
-    def _is_mule(self, node: "BaseNode", now: float) -> bool:
+    def _is_mule(self, node: "BaseNode") -> bool:
+        if getattr(node, "is_beacon", False):
+            return False
         return (
-            self._turnover(node.id) >= self._mule_turnover_threshold
+            self._speed.get(node.id, 0.0) >= self._mule_min_speed_mps
             and self._battery_pct(node) >= self._mule_min_battery_pct
+            and self._turnover(node.id) >= self._mule_turnover_threshold
         )
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
@@ -169,17 +204,23 @@ class DasfVRouting(RoutingAlgorithm):
             holder.buffer.pop(message.msg_id, None)
             return RoutingDecision.IGNORE
 
+        # Recorded before the has_message check so that neighbours already
+        # holding this message still count toward density and utility.
+        if self._touch_encounter(holder.id, contact.id, now):
+            self._observe_motion(holder, now)
+            self._observe_motion(contact, now)
+
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
-
-        self._touch_encounter(holder.id, contact.id, now)
 
         tokens = message.routing_state.get(_TOKENS)
         if tokens is None:
             tokens = self._initial_tokens(self._density(holder.id, now))
             message.routing_state[_TOKENS] = tokens
 
-        if self._battery_pct(contact) < self._battery_low_pct and contact.id != message.dst_id:
+        # The engine delivers to the destination itself before ever calling
+        # decide(), so this never blocks a final-hop delivery.
+        if self._battery_pct(contact) < self._battery_low_pct:
             return RoutingDecision.IGNORE
 
         dst = message.dst_id
@@ -188,9 +229,7 @@ class DasfVRouting(RoutingAlgorithm):
             return RoutingDecision.FORWARD
 
         if tokens > 1:
-            message.routing_state[_FORWARD_REASON] = (
-                "spray_mule" if self._is_mule(contact, now) else "spray"
-            )
+            message.routing_state[_FORWARD_REASON] = "spray_mule" if self._is_mule(contact) else "spray"
             return RoutingDecision.FORWARD
 
         u_holder = self._decayed(holder.id, dst, now)
@@ -203,7 +242,7 @@ class DasfVRouting(RoutingAlgorithm):
         if (
             u_holder < self._eps
             and not message.routing_state.get(_MULE_REPLICATED, False)
-            and self._is_mule(contact, now)
+            and self._is_mule(contact)
         ):
             message.routing_state[_FORWARD_REASON] = "mule_replicate"
             return RoutingDecision.FORWARD
@@ -219,9 +258,8 @@ class DasfVRouting(RoutingAlgorithm):
         tokens = message.routing_state.get(_TOKENS, self._k_min)
 
         if reason == "mule_replicate":
-            # Holder keeps its own copy and its full token budget; the mule
-            # gets exactly one token, flagged so it can't be replicated again
-            # downstream and so the last copy is never the one moved to it.
+            # Holder keeps its copy and its tokens, so the last copy is never
+            # the one moved onto a (self-declared, unverifiable) mule.
             forwarded_copy.routing_state[_TOKENS] = 1
             forwarded_copy.routing_state[_MULE_REPLICATED] = True
             message.routing_state[_MULE_REPLICATED] = True
@@ -229,27 +267,19 @@ class DasfVRouting(RoutingAlgorithm):
 
         if reason == "two_hop":
             if tokens <= 1:
-                # Last copy handed off to a carrier known to be near the
-                # destination right now: a move, not a spray.
                 forwarded_copy.routing_state[_TOKENS] = tokens
-                del holder.buffer[message.msg_id]
+                holder.buffer.pop(message.msg_id, None)
             else:
                 forwarded_copy.routing_state[_TOKENS] = 1
                 message.routing_state[_TOKENS] = tokens - 1
             return
 
         if reason == "focus":
-            # Single remaining copy moves to a materially better carrier.
             forwarded_copy.routing_state[_TOKENS] = tokens
-            del holder.buffer[message.msg_id]
+            holder.buffer.pop(message.msg_id, None)
             return
 
-        # Spray: split the token budget. A mule gets a smaller share so a
-        # single mule contact can't drain the whole budget in one contact.
-        if reason == "spray_mule":
-            contact_share = max(1, tokens // 3)
-        else:
-            contact_share = tokens // 2
-        holder_share = tokens - contact_share
-        message.routing_state[_TOKENS] = holder_share
+        # A mule gets a smaller share so one mule contact can't drain the budget.
+        contact_share = max(1, tokens // 3) if reason == "spray_mule" else tokens // 2
+        message.routing_state[_TOKENS] = tokens - contact_share
         forwarded_copy.routing_state[_TOKENS] = contact_share
