@@ -9,6 +9,7 @@ from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
 from festival_ble_sim.routing.dasfv import DasfVRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
+from festival_ble_sim.routing.gossip_a import GossipARouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.simulation import run_simulation
@@ -19,6 +20,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "prophet": ProphetRouting,
     "beacon_priority": BeaconPriorityRouting,
     "dasfv": DasfVRouting,
+    "gossip_a": GossipARouting,
     "bubble_f": BubbleFRouting,
 }
 

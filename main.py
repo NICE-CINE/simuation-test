@@ -19,6 +19,7 @@ from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
 from festival_ble_sim.routing.dasfv import DasfVRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
+from festival_ble_sim.routing.gossip_a import GossipARouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.simulation import run_simulation
@@ -31,6 +32,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "prophet": lambda args: ProphetRouting(),
     "beacon_priority": lambda args: BeaconPriorityRouting(),
     "dasfv": lambda args: DasfVRouting(),
+    "gossip_a": lambda args: GossipARouting(seed=args.seed),
     "bubble_f": lambda args: BubbleFRouting(seed=args.seed),
 }
 
