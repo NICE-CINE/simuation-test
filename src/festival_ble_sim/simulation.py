@@ -72,7 +72,14 @@ def run_simulation(
 
     phone_range_m = max_range_m(config.ble.phone_radio)
     beacon_range_m = max_range_m(config.ble.beacon_radio)
-    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=max(phone_range_m, beacon_range_m))
+    # Sized to the phone range, not max(phone, beacon): phones vastly
+    # outnumber beacons in any realistic scenario, and SpatialGrid.get_nearby's
+    # cost is driven by (candidates per cell) x (cells swept). Sizing cells to
+    # the rarer, usually-larger beacon range would inflate candidates-per-cell
+    # for every phone-originated query (the vast majority) just so beacon
+    # queries (few, and cheaply covered by a larger cell_radius instead) stay
+    # single-cell-radius too.
+    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=phone_range_m)
 
     nodes: Dict[int, BaseNode] = {}
     id_counter = itertools.count(1)

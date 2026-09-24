@@ -18,8 +18,21 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
         del node.buffer[mid]
 
 
+def _compute_neighbors(nodes: Dict[int, BaseNode], grid: SpatialGrid) -> Dict[int, List[BaseNode]]:
+    # One grid query per active node per tick, shared by _compute_contention_counts
+    # below and by process_node_contacts's own neighbor list (passed in via its
+    # `neighbors` param) — computing this twice per node per tick (as an earlier
+    # version of this file did) roughly doubled SpatialGrid query cost network-wide.
+    neighbors: Dict[int, List[BaseNode]] = {}
+    for node_id, node in nodes.items():
+        if not node.is_active:
+            continue
+        neighbors[node_id] = grid.get_nearby(node, node.radio_range_m)
+    return neighbors
+
+
 def _compute_contention_counts(
-    nodes: Dict[int, BaseNode], grid: SpatialGrid, snapshot: Dict[int, List[Message]]
+    nodes: Dict[int, BaseNode], neighbors_by_node: Dict[int, List[BaseNode]], snapshot: Dict[int, List[Message]]
 ) -> Dict[int, int]:
     # For each active node, how many other nodes within ITS OWN radio range
     # have something to send this tick — a proxy for the local shared-medium
@@ -31,8 +44,7 @@ def _compute_contention_counts(
         if not node.is_active:
             counts[node_id] = 0
             continue
-        neighbors = grid.get_nearby(node, node.radio_range_m)
-        counts[node_id] = sum(1 for n in neighbors if n.is_active and snapshot.get(n.id))
+        counts[node_id] = sum(1 for n in neighbors_by_node.get(node_id, ()) if n.is_active and snapshot.get(n.id))
     return counts
 
 
@@ -61,6 +73,7 @@ def process_node_contacts(
     rng: Optional[random.Random] = None,
     contention_counts: Optional[Dict[int, int]] = None,
     event_log: Optional[List[Dict[str, Any]]] = None,
+    neighbors: Optional[List[BaseNode]] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -89,12 +102,15 @@ def process_node_contacts(
                 metrics.record_backoff()
                 return
 
-    neighbors = grid.get_nearby(sender, sender.radio_range_m)
+    if neighbors is None:
+        neighbors = grid.get_nearby(sender, sender.radio_range_m)
 
     # Real BLE stacks only sustain a handful of simultaneous GATT
     # connections; closer contacts (stronger link/RSSI proxy) win the slots.
     if ble_config is not None and ble_config.max_concurrent_links is not None:
-        neighbors = sorted(neighbors, key=lambda n: sender.position.distance_to(n.position))
+        # Squared distance sorts identically to real distance (sqrt is
+        # monotonic) without paying for the sqrt on every candidate.
+        neighbors = sorted(neighbors, key=lambda n: sender.position.distance_squared_to(n.position))
         neighbors = neighbors[: ble_config.max_concurrent_links]
 
     congestion_loss_prob = 0.0
@@ -287,7 +303,10 @@ def network_engine(
             beacon_config=beacon_config,
             rng=rng,
         )
-        contention_counts = _compute_contention_counts(nodes, grid, snapshot) if ble_config is not None else None
+        neighbors_by_node = _compute_neighbors(nodes, grid) if ble_config is not None else None
+        contention_counts = (
+            _compute_contention_counts(nodes, neighbors_by_node, snapshot) if ble_config is not None else None
+        )
         for node_id, sender in list(nodes.items()):
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
@@ -296,4 +315,5 @@ def network_engine(
                 rng=rng,
                 contention_counts=contention_counts,
                 event_log=event_log,
+                neighbors=neighbors_by_node.get(node_id) if neighbors_by_node is not None else None,
             )
