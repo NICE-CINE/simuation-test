@@ -116,7 +116,12 @@ class MobilityConfig:
 
 @dataclass(frozen=True)
 class TrafficConfig:
-    mean_interval_s: float = 5.0
+    # Each festivalier is assigned their own fixed rate, drawn uniformly
+    # from this range once at simulation start: total network traffic
+    # emerges from num_festivaliers x (each person's own rate) rather than
+    # a single network-wide average, so it scales realistically with
+    # population size without needing to be tuned per run.
+    messages_per_hour_range: Tuple[float, float] = (0.0, 2.0)
     payload_size_range_bytes: Tuple[int, int] = (20, 512)
     message_ttl_s: float = 1800.0
     # Bluetooth Mesh network-layer TTL, in hops rather than seconds: caps
@@ -190,6 +195,9 @@ class SimulationConfig:
         lo, hi = self.traffic.payload_size_range_bytes
         if lo <= 0 or hi < lo:
             raise ValueError("payload_size_range_bytes must satisfy 0 < lo <= hi")
+        rate_lo, rate_hi = self.traffic.messages_per_hour_range
+        if rate_lo < 0 or rate_hi < rate_lo:
+            raise ValueError("messages_per_hour_range must satisfy 0 <= lo <= hi")
         if self.traffic.message_ttl_hops is not None and self.traffic.message_ttl_hops < 1:
             raise ValueError("message_ttl_hops must be None or >= 1")
         if self.ble.transfer_rate_bytes_per_s <= 0:

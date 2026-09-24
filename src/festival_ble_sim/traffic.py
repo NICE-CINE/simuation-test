@@ -7,8 +7,12 @@ from .models import Message
 from .nodes import MobileNode
 
 
-def sample_interval_s(config: TrafficConfig, rng: random.Random) -> float:
-    return rng.expovariate(1.0 / config.mean_interval_s)
+def sample_message_rate_per_hour(config: TrafficConfig, rng: random.Random) -> float:
+    return rng.uniform(*config.messages_per_hour_range)
+
+
+def sample_interval_s(rate_per_hour: float, rng: random.Random) -> float:
+    return rng.expovariate(rate_per_hour / 3600.0)
 
 
 def generate_message(
@@ -32,20 +36,26 @@ def generate_message(
     )
 
 
-def traffic_generator(
+def traffic_process(
     env,
+    node: MobileNode,
     nodes: Dict[int, MobileNode],
     config: TrafficConfig,
     metrics: MetricsCollector,
     id_generator: Iterator[int],
     rng: random.Random,
 ):
+    rate_per_hour = sample_message_rate_per_hour(config, rng)
+    if rate_per_hour <= 0:
+        return
     while True:
-        yield env.timeout(sample_interval_s(config, rng))
-        active_ids = [node_id for node_id, node in nodes.items() if node.is_active]
-        if len(active_ids) < 2:
+        yield env.timeout(sample_interval_s(rate_per_hour, rng))
+        if not node.is_active:
             continue
-        src_id, dst_id = rng.sample(active_ids, 2)
-        message = generate_message(next(id_generator), env.now, src_id, dst_id, config, rng)
-        nodes[src_id].store_message(message)
+        candidate_ids = [dst_id for dst_id, other in nodes.items() if dst_id != node.id and other.is_active]
+        if not candidate_ids:
+            continue
+        dst_id = rng.choice(candidate_ids)
+        message = generate_message(next(id_generator), env.now, node.id, dst_id, config, rng)
+        node.store_message(message)
         metrics.record_creation(message)

@@ -16,7 +16,7 @@ from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
 from .spatial import SpatialGrid
-from .traffic import traffic_generator
+from .traffic import traffic_process
 from .viz.history import SimulationHistory
 
 
@@ -100,6 +100,7 @@ def run_simulation(
             history.beacon_positions[node_id] = (position.x, position.y)
 
     mobile_nodes: Dict[int, MobileNode] = {}
+    msg_id_counter = itertools.count(1)
     for _ in range(config.num_festivaliers):
         node_id = next(id_counter)
         node_rng = random.Random(rng.randrange(1 << 30))
@@ -123,12 +124,13 @@ def run_simulation(
             if arrival_time_s > 0 or departure_time_s < config.duration_s:
                 env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
 
+        traffic_rng = random.Random(rng.randrange(1 << 30))
+        env.process(traffic_process(env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng))
+
     if history is not None:
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
 
-    msg_id_counter = itertools.count(1)
     network_rng = random.Random(rng.randrange(1 << 30))
-    env.process(traffic_generator(env, mobile_nodes, config.traffic, metrics, msg_id_counter, rng))
     env.process(
         network_engine(
             env, nodes, grid, routing_algorithm, energy_model, metrics,

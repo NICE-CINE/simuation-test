@@ -50,7 +50,9 @@ def _churn_config(**overrides):
         num_festivaliers=30,
         random_seed=11,
         area=AreaConfig(width_m=60.0, height_m=60.0),
-        traffic=TrafficConfig(mean_interval_s=2.0, payload_size_range_bytes=(20, 100), message_ttl_s=600.0),
+        traffic=TrafficConfig(
+            messages_per_hour_range=(1800.0, 3600.0), payload_size_range_bytes=(20, 100), message_ttl_s=600.0
+        ),
         churn=ChurnConfig(
             enabled=True, arrival_window_s=(0.0, 100.0), session_duration_range_s=(20.0, 40.0)
         ),
