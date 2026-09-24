@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Dict, Set
+from typing import Callable, Dict, Optional, Set
 from .config import AreaConfig
 from .mobility.base import MobilityModel
 from .models import Message, Position
@@ -35,12 +35,16 @@ class BaseNode:
     def has_message(self, msg_id: int) -> bool:
         return msg_id in self.buffer or msg_id in self.delivered_ids
 
-    def store_message(self, message: Message) -> None:
+    def store_message(
+        self, message: Message, choose_victim: Optional[Callable[["BaseNode"], Optional[int]]] = None
+    ) -> None:
         if message.msg_id in self.buffer:
             return
         if len(self.buffer) >= self.buffer_capacity:
-            oldest_id = next(iter(self.buffer))
-            del self.buffer[oldest_id]
+            victim_id = choose_victim(self) if choose_victim is not None else None
+            if victim_id is None or victim_id not in self.buffer:
+                victim_id = next(iter(self.buffer))
+            del self.buffer[victim_id]
             self.buffer_evictions += 1
         self.buffer[message.msg_id] = message
 

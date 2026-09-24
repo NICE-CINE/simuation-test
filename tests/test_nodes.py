@@ -16,6 +16,23 @@ def test_store_message_evicts_oldest_when_full():
     assert set(node.buffer.keys()) == {2, 3}
 
 
+def test_store_message_evicts_the_victim_chosen_by_the_caller():
+    node = BaseNode(node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=2, battery_mah=100.0)
+    node.store_message(_make_message(1))
+    node.store_message(_make_message(2))
+    node.store_message(_make_message(3), choose_victim=lambda n: 2)
+    assert set(node.buffer.keys()) == {1, 3}
+    assert node.buffer_evictions == 1
+
+
+def test_store_message_falls_back_to_fifo_when_victim_is_unknown():
+    node = BaseNode(node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=2, battery_mah=100.0)
+    node.store_message(_make_message(1))
+    node.store_message(_make_message(2))
+    node.store_message(_make_message(3), choose_victim=lambda n: None)
+    assert set(node.buffer.keys()) == {2, 3}
+
+
 def test_has_message_true_after_store_and_after_delivery():
     node = BaseNode(node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=5, battery_mah=100.0)
     node.store_message(_make_message(1))
