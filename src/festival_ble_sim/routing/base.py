@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 from ..models import Message
 
 if TYPE_CHECKING:
@@ -19,6 +19,15 @@ class RoutingAlgorithm(ABC):
         # >>> POINT D'INJECTION : tes propres algos de routage
         # (Spray & Wait, PRoPHET, scoring base sur les bornes...)
         ...
+
+    def on_simulation_start(self, nodes: Dict[int, "BaseNode"]) -> None:
+        pass
+
+    def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        # Every in-range pair this tick, whether or not anything is sent:
+        # decide() alone only sees contacts where the holder has a message,
+        # which undersamples contact-history-driven algorithms.
+        pass
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
         pass

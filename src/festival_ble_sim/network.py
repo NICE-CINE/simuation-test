@@ -306,6 +306,8 @@ def network_engine(
             rng=rng,
         )
         neighbors_by_node = _compute_neighbors(nodes, grid) if ble_config is not None else None
+        if neighbors_by_node is not None:
+            routing_algorithm.on_tick(now, neighbors_by_node)
         contention_counts = (
             _compute_contention_counts(nodes, neighbors_by_node, snapshot) if ble_config is not None else None
         )

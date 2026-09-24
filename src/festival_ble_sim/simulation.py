@@ -130,6 +130,7 @@ def run_simulation(
     if history is not None:
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
 
+    routing_algorithm.on_simulation_start(nodes)
     network_rng = random.Random(rng.randrange(1 << 30))
     env.process(
         network_engine(
