@@ -42,7 +42,7 @@ def test_build_config_churn_disabled_by_default():
 
 def test_routing_factories_cover_every_cli_choice():
     args = main_module.build_arg_parser().parse_args([])
-    for name in ["epidemic", "spray_wait", "prophet", "beacon_priority"]:
+    for name in ["epidemic", "spray_wait", "prophet", "beacon_priority", "dasfv"]:
         args.routing = name
         algo = main_module.ROUTING_FACTORIES[name](args)
         assert algo is not None
