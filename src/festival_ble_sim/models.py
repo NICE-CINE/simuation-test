@@ -12,6 +12,14 @@ class Position:
     def distance_to(self, other: "Position") -> float:
         return math.hypot(self.x - other.x, self.y - other.y)
 
+    def distance_squared_to(self, other: "Position") -> float:
+        # For threshold comparisons only (e.g. SpatialGrid.get_nearby):
+        # skips the sqrt in distance_to, which matters at scale since it's
+        # called for every candidate node in every neighbor query.
+        dx = self.x - other.x
+        dy = self.y - other.y
+        return dx * dx + dy * dy
+
 
 @dataclass
 class Message:

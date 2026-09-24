@@ -1,3 +1,4 @@
+import pytest
 from festival_ble_sim.models import Position, Message
 
 
@@ -5,6 +6,18 @@ def test_position_distance_to():
     a = Position(0.0, 0.0)
     b = Position(3.0, 4.0)
     assert a.distance_to(b) == 5.0
+
+
+def test_position_distance_squared_to():
+    a = Position(0.0, 0.0)
+    b = Position(3.0, 4.0)
+    assert a.distance_squared_to(b) == 25.0
+
+
+def test_position_distance_squared_to_matches_distance_to_squared():
+    a = Position(1.5, -2.0)
+    b = Position(-7.25, 10.0)
+    assert a.distance_squared_to(b) == pytest.approx(a.distance_to(b) ** 2)
 
 
 def test_message_is_expired_true_after_ttl():

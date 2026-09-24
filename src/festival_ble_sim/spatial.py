@@ -36,6 +36,7 @@ class SpatialGrid:
     def get_nearby(self, node: "BaseNode", radius_m: float) -> List["BaseNode"]:
         cx, cy = self._cell_of(node.position.x, node.position.y)
         cell_radius = max(1, math.ceil(radius_m / self.cell_size_m))
+        radius_squared = radius_m * radius_m
         found: List["BaseNode"] = []
         for dc in range(-cell_radius, cell_radius + 1):
             for dr in range(-cell_radius, cell_radius + 1):
@@ -43,6 +44,6 @@ class SpatialGrid:
                 for other in self._cells.get(cell, ()):
                     if other is node:
                         continue
-                    if node.position.distance_to(other.position) <= radius_m:
+                    if node.position.distance_squared_to(other.position) <= radius_squared:
                         found.append(other)
         return found
