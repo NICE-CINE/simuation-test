@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from ..models import Message
 
 if TYPE_CHECKING:
@@ -29,3 +29,8 @@ class RoutingAlgorithm(ABC):
         # algorithm split per-copy state asymmetrically between the holder's
         # remaining copy and the newly forwarded one (e.g. Spray & Wait).
         pass
+
+    def choose_eviction(self, node: "BaseNode", now: float) -> Optional[int]:
+        # Called when a forwarded copy lands in a full buffer. None (or an id
+        # not in the buffer) keeps BaseNode's default FIFO eviction.
+        return None

@@ -216,7 +216,9 @@ def process_node_contacts(
                     hops=message.hops + 1,
                     routing_state=dict(message.routing_state),
                 )
-                contact.store_message(forwarded)
+                contact.store_message(
+                    forwarded, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now)
+                )
                 sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
                 contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
                 metrics.record_transmission()
