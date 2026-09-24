@@ -23,7 +23,7 @@ Le rapport est affiche dans le terminal et ecrit dans
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority` ou `dasfv` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv` ou `bubble_f` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   convergent vers une scene principale au centre de la zone, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -41,7 +41,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, bubble_f} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -184,6 +184,19 @@ a 10 000 festivaliers. Programmatiquement :
   l'instance partagee, politique batterie (refus des pairs a batterie
   critique, evacuation acceleree du porteur a batterie faible), et purge
   reseau-large des copies une fois le message livre.
+- `bubble_f` (`routing/bubble_f.py`) — BUBBLE-F, routage social inspire de
+  BUBBLE Rap : communautes amorcees par un graphe d'amis (QR) genere au
+  lancement (groupes de 2 a 8, 20 % d'utilisateurs sans ami par defaut),
+  enrichies par SIMPLE (familiers apres 20 min de contact cumule, ajout par
+  recouvrement, fusion), rangs global/local C-Window (4 fenetres de 30 min),
+  budget de 8 jetons en division binaire : entrer dans la bulle du
+  destinataire, sinon monter en rang global, puis en rang local a
+  l'interieur. Relais a 2 sauts, replication anti-blocage apres 30 min sans
+  progres, admission restreinte des buffers pleins a 80 %, epoques
+  optionnelles (`epoch_s`). Les Bloom, `rankCap`, SOS et RSSI ne sont pas
+  modelises (instance partagee = vues exactes, pas d'attaquant). Avec
+  `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
+  apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
 
 ## Ajouter un nouvel algorithme de routage
 
