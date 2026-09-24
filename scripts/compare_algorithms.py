@@ -6,6 +6,7 @@ from festival_ble_sim.config import BeaconConfig, SimulationConfig
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
+from festival_ble_sim.routing.dasfv import DasfVRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
@@ -16,6 +17,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "spray_wait": SprayAndWaitRouting,
     "prophet": ProphetRouting,
     "beacon_priority": BeaconPriorityRouting,
+    "dasfv": DasfVRouting,
 }
 
 REPORT_FIELDS = [

@@ -22,8 +22,8 @@ Le rapport est affiche dans le terminal et ecrit dans
         --num-festivaliers 200 --seed 42 --output rapport_simulation.txt
 
 Options disponibles :
-- `--routing` : `epidemic` (defaut), `spray_wait`, `prophet` ou
-  `beacon_priority` (un seul choix a la fois, pas de `|`)
+- `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
+  `beacon_priority` ou `dasfv` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   convergent vers une scene principale au centre de la zone, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -41,7 +41,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -175,6 +175,15 @@ a 10 000 festivaliers. Programmatiquement :
   vers une borne des qu'elle est en contact (exploite le backhaul) puis
   arrete de flooder les autres telephones ; degenere en `epidemic` sans
   borne.
+- `dasfv` (`routing/dasfv.py`) — DASF-V v2 (Density-Aware Spray-and-Focus
+  with Verifiable ACK/purge), reduit au sous-ensemble pertinent pour ce
+  simulateur reseau (pas de crypto/GATT/SOS/epoques, voir le commentaire
+  d'en-tete du fichier) : budget de copies initial adapte a la densite
+  locale, spray puis focus par gradient d'utilite PRoPHET, relais a 2 sauts
+  et heuristique de mule approximes a partir des contacts observes par
+  l'instance partagee, politique batterie (refus des pairs a batterie
+  critique, evacuation acceleree du porteur a batterie faible), et purge
+  reseau-large des copies une fois le message livre.
 
 ## Ajouter un nouvel algorithme de routage
 
