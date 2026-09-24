@@ -22,6 +22,11 @@ class BaseNode:
         self.initial_battery_mah = battery_mah
         self.battery_mah = battery_mah
         self.is_active = True
+        # Distinct from is_active=False, which also covers a churned-out/
+        # not-yet-arrived node (see simulation._churn_process): only this
+        # flag means "died from battery depletion", so the final report's
+        # dead_node_count isn't inflated by ordinary churn departures.
+        self.battery_depleted = False
         self.buffer: Dict[int, Message] = {}
         self.delivered_ids: Set[int] = set()
         self.buffer_evictions = 0
@@ -49,6 +54,7 @@ class BaseNode:
         self.battery_mah = max(0.0, self.battery_mah - mah)
         if self.battery_mah <= 0.0:
             self.is_active = False
+            self.battery_depleted = True
 
     @property
     def energy_consumed_mah(self) -> float:

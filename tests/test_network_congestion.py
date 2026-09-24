@@ -120,6 +120,37 @@ def test_packet_loss_prevents_forward_but_consumes_tx_energy_only():
     assert contact.battery_mah == pytest.approx(100.0)
 
 
+def test_weak_signal_near_edge_of_range_loses_more_than_close_contact():
+    ble_config = BleConfig(packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0)
+
+    def _loss_rate(contact_x: float, trials: int) -> float:
+        losses = 0
+        for seed in range(trials):
+            sender = _node(1, 0.0, 0.0, buffer_capacity=10)
+            sender.radio_range_m = 1000.0
+            contact = _node(2, contact_x, 0.0, buffer_capacity=10)
+            grid = SpatialGrid(2000.0, 2000.0, cell_size_m=1000.0)
+            grid.insert(sender)
+            grid.insert(contact)
+            msg = Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0)
+            sender.store_message(msg)
+            process_node_contacts(
+                now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),
+                energy_model=_energy_model(), metrics=MetricsCollector(), ble_config=ble_config,
+                rng=random.Random(seed),
+            )
+            if not contact.has_message(1):
+                losses += 1
+        return losses / trials
+
+    near_loss_rate = _loss_rate(contact_x=1.0, trials=200)
+    far_loss_rate = _loss_rate(contact_x=29.5, trials=200)
+
+    assert near_loss_rate < 0.05
+    assert far_loss_rate > 0.15
+    assert far_loss_rate > near_loss_rate
+
+
 def test_zero_packet_loss_probability_never_drops_with_rng():
     sender = _node(1, 0.0, 0.0)
     contact = _node(2, 5.0, 0.0)
@@ -129,7 +160,9 @@ def test_zero_packet_loss_probability_never_drops_with_rng():
     msg = Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0)
     sender.store_message(msg)
     metrics = MetricsCollector()
-    ble_config = BleConfig(packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0)
+    ble_config = BleConfig(
+        packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0, weak_signal_max_probability=0.0
+    )
     rng = random.Random(0)
     process_node_contacts(
         now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),

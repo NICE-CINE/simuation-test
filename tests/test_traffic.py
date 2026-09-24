@@ -17,6 +17,18 @@ def test_generate_message_payload_within_range():
     assert msg.hops == 0
 
 
+def test_generate_message_carries_configured_ttl_hops():
+    config = TrafficConfig(payload_size_range_bytes=(20, 30), message_ttl_hops=6)
+    msg = generate_message(msg_id=1, now=5.0, src_id=1, dst_id=2, config=config, rng=random.Random(1))
+    assert msg.ttl_hops == 6
+
+
+def test_generate_message_ttl_hops_none_means_unlimited():
+    config = TrafficConfig(payload_size_range_bytes=(20, 30), message_ttl_hops=None)
+    msg = generate_message(msg_id=1, now=5.0, src_id=1, dst_id=2, config=config, rng=random.Random(1))
+    assert msg.ttl_hops is None
+
+
 def test_sample_interval_s_average_matches_configured_mean():
     config = TrafficConfig(mean_interval_s=4.0)
     rng = random.Random(42)

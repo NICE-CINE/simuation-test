@@ -28,6 +28,7 @@ def generate_message(
         size_bytes=size_bytes,
         creation_time=now,
         ttl_s=config.message_ttl_s,
+        ttl_hops=config.message_ttl_hops,
     )
 
 

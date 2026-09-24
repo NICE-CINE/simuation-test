@@ -24,10 +24,16 @@ Le rapport est affiche dans le terminal et ecrit dans
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet` ou
   `beacon_priority` (un seul choix a la fois, pas de `|`)
+- `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
+  convergent vers une scene principale au centre de la zone, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
 - `--beacon-placement` : `grid` (defaut) ou `manual`
 - `--duration`, `--num-festivaliers`, `--seed`, `--output`
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
+- `--replay-html CHEMIN` : ecrit un replay HTML autonome de la simulation
+  (voir "Visualisation / replay" plus bas)
+- `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
+  arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
 ## Comparer les algorithmes
 
@@ -45,6 +51,22 @@ beacon_priority} x {avec/sans bornes} avec le meme seed pour chaque run
 
 ## Realisme du transfert BLE et surcharge reseau
 
+La portee radio (`src/festival_ble_sim/radio.py`) est derivee d'un modele
+de **path-loss log-distance** (memes unites qu'un vrai lien BLE : puissance
+d'emission en dBm, exposant d'attenuation, sensibilite du recepteur en
+dBm) plutot que d'un rayon fixe arbitraire — `RadioParams` dans
+`BleConfig.phone_radio` / `beacon_radio`. La portee effective
+(`radio.max_range_m`) est le point ou la puissance recue tombe au niveau
+de la sensibilite du recepteur.
+
+**Fading log-normal** (`RadioParams.shadowing_std_db`, 4 dB par defaut) :
+la puissance recue n'est pas qu'une fonction deterministe de la distance,
+un echantillon gaussien (obstruction par les corps dans la foule) est
+ajoute a chaque tick. Un lien peut donc tomber en dessous de la
+sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
+"moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
+retrouve le modele deterministe (equivalent a un cercle fixe).
+
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
 - un **debit limite par lien et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
@@ -53,14 +75,92 @@ la portee radio :
 - une **limite de connexions BLE simultanees** (`max_concurrent_links`,
   defaut 6, realiste pour un smartphone) — au-dela, les contacts les plus
   proches sont prioritaires ;
-- une **perte de paquets probabiliste**, dont la probabilite croit avec le
-  nombre de contacts simultanes (surcharge en foule dense) ;
-- un **backhaul borne-a-borne quasi instantane** (WiFi/filaire simule),
-  actif automatiquement des que 2 bornes ou plus sont presentes, hors
-  contraintes de portee/debit/perte du lien BLE.
+- un **backoff a la CSMA** (`relay_backoff_coefficient` /
+  `relay_backoff_max_probability`) : avant d'emettre, un noeud estime
+  combien d'autres noeuds a sa portee ont aussi quelque chose a envoyer ce
+  tick, et renonce (retente au tick suivant, sans energie ni perte
+  comptabilisee) avec une probabilite qui croit avec ce nombre — c'est ce
+  qui evite que tous les noeuds emettent en meme temps ;
+- une **collision "hidden-terminal"** (`collision_loss_coefficient` /
+  `collision_loss_max_probability`) : meme apres backoff, un recepteur
+  entoure de plusieurs emetteurs qui ne s'entendent pas entre eux peut
+  perdre le paquet — un cout distinct de la congestion normale ;
+- une **perte de paquets probabiliste**, combinant plusieurs composantes :
+  congestion (`packet_loss_congestion_coefficient`), marge de signal
+  faible pres du bord de portee (`signal_margin_cutoff_db` /
+  `weak_signal_max_probability`) et collision ci-dessus, plafonnees par
+  `packet_loss_max_probability` — sauf une vraie panne radio (fading
+  negatif, cf. ci-dessus), qui est une perte garantie et ignore ce plafond ;
+- un **TTL reseau en nombre de sauts** (`TrafficConfig.message_ttl_hops`,
+  defaut 8, a la Bluetooth Mesh) en plus du TTL temporel `message_ttl_s` :
+  un message qui a deja consomme son budget de sauts n'est plus relaye a
+  de nouveaux noeuds mais reste livrable directement a sa destination si
+  elle est a portee (meme semantique que la "phase wait" de Spray & Wait) ;
+- un **backhaul borne-a-borne pas tout a fait instantane ni fiable**
+  (`BeaconConfig.backhaul_latency_s` / `backhaul_loss_probability`) :
+  actif des que 2 bornes ou plus sont presentes, hors contraintes de
+  portee/debit/perte du lien BLE, mais avec une probabilite d'essai par
+  tick (`contact_check_interval_s / backhaul_latency_s`, plafonnee a 1)
+  et une perte possible — par defaut proche de l'instantane/fiable
+  d'origine, a durcir via la config pour un backbone plus realiste.
 
 Ces effets sont visibles dans le rapport via `Messages perdus (buffer)`,
-`Paquets perdus (radio)` et `Transmissions backhaul`.
+`Paquets perdus (radio)`, `Transmissions backhaul`,
+`Backoffs (contention)` et `Paquets perdus (backhaul)`.
+
+## Churn (arrivees/departs des festivaliers)
+
+Par defaut, tous les noeuds mobiles sont presents et actifs pendant toute
+la duree de la simulation. `ChurnConfig` (`SimulationConfig.churn`, ou
+`--churn` en CLI) permet de simuler une foule qui arrive et repart en
+continu plutot qu'un evenement figé : chaque noeud tire un instant
+d'arrivee dans `arrival_window_s` et une duree de presence dans
+`session_duration_range_s`, et n'est `is_active` (participe au BLE,
+eligible comme source/destination de trafic) qu'entre les deux — le meme
+mecanisme deja utilise pour les noeuds a court de batterie. Un noeud non
+encore arrive ou deja parti ne bouge plus (`_mobile_process` le laisse en
+pause) et disparait des replays HTML. `SimulationReport.dead_node_count`
+ne compte que les morts par batterie (`BaseNode.battery_depleted`), pas
+les departs de churn.
+
+## Visualisation / replay
+
+`--replay-html CHEMIN` enregistre les positions (un instantane par tick
+de mobilite) et les evenements de relais/livraison pendant le run, puis
+ecrit un fichier HTML autonome (Canvas + JS, aucune dependance externe)
+avec lecture/pause et curseur temporel — telephones et bornes en points,
+liens de relais/livraison du tick courant en traits. Cout memoire
+proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
+modestes (quelques dizaines/centaines de noeuds), pas au run par defaut
+a 10 000 festivaliers. Programmatiquement :
+
+    from festival_ble_sim.config import SimulationConfig
+    from festival_ble_sim.simulation import run_simulation
+    from festival_ble_sim.viz.history import SimulationHistory
+    from festival_ble_sim.viz.replay import render_replay_html
+
+    config = SimulationConfig(duration_s=300, num_festivaliers=50)
+    history = SimulationHistory(
+        area_width_m=config.area.width_m,
+        area_height_m=config.area.height_m,
+        tick_interval_s=config.mobility.tick_interval_s,
+    )
+    run_simulation(config, history=history)
+    render_replay_html(history, "replay.html")
+
+## Modeles de mobilite disponibles
+
+- `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
+  uniforme sur toute la zone.
+- `poi` (`mobility/poi.py`) — les noeuds alternent pause/deplacement vers
+  des points d'interet ponderes (`MobilityConfig.points_of_interest`,
+  liste de `PointOfInterest(x, y, radius_m, weight)`), pour representer
+  une foule qui converge vers des scenes/stands plutot qu'un mouvement
+  brownien uniforme. Le CLI (`--mobility poi`) l'utilise avec un unique
+  point d'interet par defaut (une "scene principale" au centre de la
+  zone) ; pour plusieurs points d'interet ponderes, construis directement
+  un `MobilityConfig(points_of_interest=(...))` et passe-le a
+  `SimulationConfig(mobility=...)`.
 
 ## Algorithmes de routage disponibles
 
