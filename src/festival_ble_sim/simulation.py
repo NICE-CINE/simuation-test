@@ -56,11 +56,19 @@ def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, M
         history.position_snapshots.append((env.now, snapshot))
 
 
+def _progress_reporter(env, callback: Callable[[float], None], interval_s: float):
+    while True:
+        yield env.timeout(interval_s)
+        callback(env.now)
+
+
 def run_simulation(
     config: SimulationConfig,
     routing_algorithm: Optional[RoutingAlgorithm] = None,
     mobility_factory: Optional[Callable[[random.Random], MobilityModel]] = None,
     history: Optional[SimulationHistory] = None,
+    progress_callback: Optional[Callable[[float], None]] = None,
+    progress_interval_s: float = 10.0,
 ) -> SimulationReport:
     rng = random.Random(config.random_seed)
     routing_algorithm = routing_algorithm if routing_algorithm is not None else EpidemicRouting()
@@ -143,7 +151,12 @@ def run_simulation(
         )
     )
 
+    if progress_callback is not None:
+        env.process(_progress_reporter(env, progress_callback, progress_interval_s))
+
     env.run(until=config.duration_s)
+    if progress_callback is not None:
+        progress_callback(config.duration_s)
 
     energy_samples = [n.energy_consumed_mah for n in nodes.values() if n.initial_battery_mah != math.inf]
     dead_count = sum(1 for n in nodes.values() if n.battery_depleted)
