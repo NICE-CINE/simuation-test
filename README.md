@@ -23,7 +23,7 @@ Le rapport est affiche dans le terminal et ecrit dans
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a` ou `bubble_f` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f` ou `managed_flood` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   convergent vers une scene principale au centre de la zone, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -41,7 +41,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -208,6 +208,19 @@ a 10 000 festivaliers. Programmatiquement :
   modelises (instance partagee = vues exactes, pas d'attaquant). Avec
   `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
   apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
+- `managed_flood` (`routing/managed_flood.py`) — inondation geree du
+  Bluetooth Mesh (couche reseau), sans stockage-transport : un noeud ne
+  relaie un PDU que pendant `relay_window_s` apres l'avoir recu, puis
+  l'oublie. Boucles et tempetes bornees par le TTL (`ttl`, en sauts), un
+  cache de messages par noeud de taille fixe (`cache_size`, FIFO, cle
+  `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
+  Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
+  ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
+  les copies ; sans ACK apres `ack_timeout_s`, la source reemet avec un
+  nouveau SEQ, au plus `max_source_retransmissions` fois. Les ACK ne
+  coutent ni energie ni bande passante (jetons, comme les purges de
+  `gossip_a`). Pense pour une topologie connexe : en festival clairseme,
+  la livraison chute par rapport aux algos DTN, c'est attendu.
 
 ## Ajouter un nouvel algorithme de routage
 

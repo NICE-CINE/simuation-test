@@ -62,7 +62,7 @@ viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
 
 ### Extension points (Strategy pattern)
 
-- **Routing:** subclass `routing.base.RoutingAlgorithm`, implement `decide(message, holder, contact) -> RoutingDecision`. Reference impl: `routing/epidemic.py` (naive flooding). Pass a custom instance via `run_simulation(config, routing_algorithm=MyRouting())`.
+- **Routing:** subclass `routing.base.RoutingAlgorithm`, implement `decide(message, holder, contact) -> RoutingDecision`. Reference impl: `routing/epidemic.py` (naive flooding); `routing/managed_flood.py` is the Bluetooth Mesh managed-flooding variant (TTL + per-node message cache + relay window, no store-carry-forward — it drops PDUs from `node.buffer` itself, including in `on_tick`, which needs `on_simulation_start`'s node dict). Pass a custom instance via `run_simulation(config, routing_algorithm=MyRouting())`.
 - **Mobility:** subclass `mobility.base.MobilityModel`, implement `initial_position(area)` and `step(current, dt, area)`. Reference impls: `mobility/random_waypoint.py` (uniform target) and `mobility/poi.py` (`PoiMobility`, targets weighted `MobilityConfig.points_of_interest`, requires at least one with positive weight). Each `MobileNode` owns its own instance; inject a custom one via `run_simulation(config, mobility_factory=lambda rng: MyMobility(rng))` — a *factory*, not an instance, because each node needs its own stateful model seeded from its own RNG.
 - **Beacon placement:** `beacons.place_beacons(area, beacons)` — `"grid"` (regular grid, default) or `"manual"` (explicit coordinates). Not a Strategy class, just a two-branch function.
 
