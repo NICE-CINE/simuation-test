@@ -1,4 +1,5 @@
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -40,3 +41,18 @@ def test_write_csv_produces_a_valid_file(tmp_path):
         reader = list(csv.DictReader(f))
     assert len(reader) == len(rows)
     assert set(reader[0].keys()) == {"algorithm", "beacons", *compare_algorithms.REPORT_FIELDS}
+
+
+def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
+    archive_dir = tmp_path / "archives"
+    compare_algorithms.main(
+        ["--seed", "1", "--duration", "30", "--num-festivaliers", "10", "--beacon-count", "2",
+         "--workers", "1", "--archive-dir", str(archive_dir)]
+    )
+    csvs = list(archive_dir.glob("*_comparaison.csv"))
+    assert len(csvs) == 1
+    with open(csvs[0], newline="", encoding="utf-8") as f:
+        assert len(list(csv.DictReader(f))) == 2 * len(compare_algorithms.ALGORITHMS)
+    params = json.loads(csvs[0].with_suffix(".json").read_text(encoding="utf-8"))
+    assert params["cli"]["num_festivaliers"] == 10
+    assert params["config"]["duration_s"] == 30.0

@@ -13,22 +13,26 @@ Low Energy entre les participants d'un festival.
 
     python main.py
 
-Le rapport est affiche dans le terminal et ecrit dans
-`rapport_simulation.txt`.
+Le rapport est affiche dans le terminal et archive dans `archives/` :
+`<date>_<heure>_<algo>.txt` (rapport) + `.json` du meme nom (arguments
+CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
+`archives/2026-09-29_15-03-26_spray_wait.txt`.
 
 ### Options CLI
 
     python main.py --routing epidemic --beacons 6 --duration 3600 \
-        --num-festivaliers 200 --seed 42 --output rapport_simulation.txt
+        --num-festivaliers 200 --seed 42
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
   `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f` ou `managed_flood` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
-  convergent vers une scene principale au centre de la zone, voir plus bas)
+  se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
 - `--beacon-placement` : `grid` (defaut) ou `manual`
-- `--duration`, `--num-festivaliers`, `--seed`, `--output`
+- `--duration`, `--num-festivaliers`, `--seed`
+- `--archive-dir DOSSIER` : dossier d'archive (defaut `archives`)
+- `--output CHEMIN` : copie optionnelle du rapport, en plus de l'archive
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
 - `--replay-html CHEMIN` : ecrit un replay HTML autonome de la simulation
   (voir "Visualisation / replay" plus bas)
@@ -38,12 +42,43 @@ Options disponibles :
 ## Comparer les algorithmes
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
-        --num-festivaliers 200 --beacon-count 6 [--csv comparaison.csv]
+        --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
+
+`--workers N` (defaut 2) lance N simulations en parallele (un processus
+chacune) ; une ligne de statut affiche l'avancement de chaque run en
+direct. Chaque comparaison est archivee dans `archives/`
+(`--archive-dir` pour changer) : `<date>_<heure>_comparaison.csv` + `.json`
+du meme nom (arguments CLI et `SimulationConfig` complete, dans sa
+variante avec bornes). Chaque ligne du CSV est ecrite des que son run se
+termine, donc un run interrompu garde les resultats deja obtenus.
+`--csv CHEMIN` ecrit en plus une copie du CSV.
+
+## Trafic
+
+Chaque festivalier tire une fois pour toutes, au debut de la simulation,
+son propre debit de messages dans `TrafficConfig.messages_per_hour_range`
+(defaut `(0.0, 2.0)` messages/heure ; un debit de 0 = n'envoie jamais),
+puis envoie selon un processus de Poisson a ce debit vers un autre
+festivalier actif tire au hasard. La charge totale du reseau suit donc
+naturellement `num_festivaliers`, sans reglage a faire par scenario.
+
+## Valeurs par defaut (festival moyen)
+
+Les defauts de `config.py` et du CLI decrivent un festival de taille
+moyenne :
+- **Site** : 700 m x 500 m (~0,35 km²), **4 000 festivaliers**.
+- **Mobilite** : marche en foule a 0,3-1,2 m/s ; a chaque destination,
+  70 % de chances de s'arreter 5 a 45 min (un concert, une file au bar).
+- **Trafic** : 0 a 4 messages/heure par personne (2 en moyenne).
+- **Batterie** : 3 000 mAh au depart (telephone ~4 500 mAh charge aux
+  deux tiers).
+- **Churn** (si active) : arrivees etalees sur les 30 premieres minutes,
+  presence de 30 min a 3 h.
 
 ## Lancer les tests
 
@@ -132,7 +167,7 @@ avec lecture/pause et curseur temporel — telephones et bornes en points,
 liens de relais/livraison du tick courant en traits. Cout memoire
 proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
 modestes (quelques dizaines/centaines de noeuds), pas au run par defaut
-a 10 000 festivaliers. Programmatiquement :
+a 4 000 festivaliers. Programmatiquement :
 
     from festival_ble_sim.config import SimulationConfig
     from festival_ble_sim.simulation import run_simulation
@@ -156,13 +191,16 @@ a 10 000 festivaliers. Programmatiquement :
   des points d'interet ponderes (`MobilityConfig.points_of_interest`,
   liste de `PointOfInterest(x, y, radius_m, weight)`), pour representer
   une foule qui converge vers des scenes/stands plutot qu'un mouvement
-  brownien uniforme. Le CLI (`--mobility poi`) l'utilise avec un unique
-  point d'interet par defaut (une "scene principale" au centre de la
-  zone) ; pour plusieurs points d'interet ponderes, construis directement
+  brownien uniforme. Le CLI (`--mobility poi`) l'utilise avec un plan de
+  festival par defaut (`main._default_festival_pois`) : grande scene
+  (poids 4), bars/restauration (3), deuxieme scene (2), entree/toilettes
+  (1) ; pour plusieurs points d'interet ponderes, construis directement
   un `MobilityConfig(points_of_interest=(...))` et passe-le a
   `SimulationConfig(mobility=...)`.
 
 ## Algorithmes de routage disponibles
+
+Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithmes/`.
 
 - `epidemic` (`routing/epidemic.py`) — flooding naif, reference/borne haute
   d'overhead.
@@ -242,8 +280,15 @@ a 10 000 festivaliers. Programmatiquement :
                    return RoutingDecision.IGNORE
                return RoutingDecision.FORWARD  # ta logique ici
 
-   Seule `decide()` est obligatoire. Deux hooks optionnels (no-op par
+   Seule `decide()` est obligatoire. Des hooks optionnels (no-op par
    defaut) sont disponibles :
+   - `on_simulation_start(nodes)` — appele une fois avant le debut du run,
+     avec tous les noeuds (ex. `routing/bubble_f.py` y genere son graphe
+     d'amis).
+   - `on_tick(now, neighbors_by_node)` — appele a chaque tick avec toutes
+     les paires a portee, meme sans message a envoyer : `decide()` seul ne
+     voit que les contacts ou le porteur a un message, ce qui sous-estime
+     l'historique de contacts.
    - `on_delivered(message, holder)` — appele quand `message` vient
      d'atteindre sa destination.
    - `on_forward(message, holder, contact, forwarded_copy)` — appele juste
@@ -251,6 +296,9 @@ a 10 000 festivaliers. Programmatiquement :
      stockee chez `contact`. Utile pour un etat par-copie asymetrique
      (ex. `routing/spray_and_wait.py` y repartit les copies restantes
      entre holder et contact).
+   - `choose_eviction(node, now)` — appele quand une copie arrive dans un
+     buffer plein : renvoie l'id du message a evincer, ou `None` pour
+     garder l'eviction FIFO par defaut (ex. `routing/gossip_a.py`).
 
    Points a respecter (voir `CLAUDE.md`) :
    - ne jamais importer `BaseNode`/`BeaconNode` en dehors de
@@ -267,7 +315,7 @@ a 10 000 festivaliers. Programmatiquement :
 2. Rends-le selectionnable depuis le CLI et le script de comparaison en
    l'ajoutant aux deux tables de correspondance :
    - `main.py` → `ROUTING_FACTORIES["mon_algo"] = lambda args: MonAlgoRouting()`
-     et ajoute `"mon_algo"` a la liste `choices` de `--routing`.
+     (les `choices` de `--routing` en sont derives automatiquement).
    - `scripts/compare_algorithms.py` → `ALGORITHMS["mon_algo"] = MonAlgoRouting`.
 
    Ou utilise-le directement sans passer par le CLI :
@@ -289,8 +337,9 @@ Voir `docs/superpowers/specs/2026-09-14-festival-ble-sim-design.md`
 pour le design complet. Points d'injection pour tes propres
 algorithmes :
 - `src/festival_ble_sim/routing/` — nouveaux algorithmes de routage
-  (implemente `RoutingAlgorithm`, avec les hooks optionnels `on_delivered`
-  et `on_forward`).
+  (implemente `RoutingAlgorithm`, avec les hooks optionnels
+  `on_simulation_start`, `on_tick`, `on_delivered`, `on_forward` et
+  `choose_eviction`).
 - `src/festival_ble_sim/mobility/` — nouveaux modeles de mobilite
   (implemente `MobilityModel`).
 - `src/festival_ble_sim/beacons.py` — placement strategique des bornes.
