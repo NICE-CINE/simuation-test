@@ -200,6 +200,8 @@ a 4 000 festivaliers. Programmatiquement :
 
 ## Algorithmes de routage disponibles
 
+Forces et faiblesses detaillees : `docs/algorithmes/algorithmes.md`.
+
 - `epidemic` (`routing/epidemic.py`) — flooding naif, reference/borne haute
   d'overhead.
 - `spray_wait` (`routing/spray_and_wait.py`) — nombre limite de copies
