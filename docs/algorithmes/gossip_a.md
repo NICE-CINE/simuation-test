@@ -17,6 +17,29 @@ Version reduite au niveau reseau (pas de crypto, etiquettes, PoW ni SOS) :
 Les interrupteurs `adaptive`, `suppression` et
 `replicated_first_eviction` permettent des ablations.
 
+## Diagramme
+
+Decision prise pour chaque message du porteur a chaque contact :
+
+```mermaid
+flowchart TD
+    A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
+    B -- oui --> L["Livraison (moteur) puis jeton de purge"]
+    B -- non --> O["Observation : rencontre, densite, echange des jetons de purge"]
+    O --> P{"Message purge chez le porteur ?"}
+    P -- oui --> I["IGNORE"]
+    P -- non --> C{"Voisin a deja le message ?"}
+    C -- oui --> N["Note le voisin comme porteur (suppression), IGNORE"]
+    C -- non --> BU{"Budget de session (octets / bundles) depasse ?"}
+    BU -- oui --> I
+    BU -- non --> R{"Deja refuse pour ce pair dans cette session ?"}
+    R -- oui --> I
+    R -- non --> Q["p : 1 si sauts < K_FLOOD, 0 si sauts >= H_MAX ou deja vu chez K_SUP voisins, sinon clamp(C / densite, P_MIN, 1)"]
+    Q --> D{"Faux positif Bloom ou tirage >= p ?"}
+    D -- oui --> RF["Refus memorise pour la session, IGNORE"]
+    D -- non --> F["FORWARD"]
+```
+
 ## Forces
 
 - Livraison elevee et latence basse : se rapproche de l'inondation sans en

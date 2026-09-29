@@ -16,6 +16,33 @@ voir l'en-tete du fichier) :
   acceleree depuis un porteur en batterie faible ;
 - purge reseau-large des copies une fois le message livre.
 
+## Diagramme
+
+Decision prise pour chaque message du porteur a chaque contact :
+
+```mermaid
+flowchart TD
+    A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
+    B -- oui --> L["Livraison (moteur) puis purge reseau-large"]
+    B -- non --> P{"Message deja livre ?"}
+    P -- oui --> X["Purge de la copie locale, IGNORE"]
+    P -- non --> O["Observation : rencontre, densite, utilite PRoPHET, mobilite"]
+    O --> C{"Voisin a deja le message ?"}
+    C -- oui --> I["IGNORE"]
+    C -- non --> T["Jetons initiaux selon la densite locale (premier passage)"]
+    T --> BAT{"Batterie du voisin critique ?"}
+    BAT -- oui --> I
+    BAT -- non --> H{"Voisin a vu la destination recemment ?"}
+    H -- oui --> F1["FORWARD relais 2 sauts"]
+    H -- non --> S{"Jetons > 1 ?"}
+    S -- oui --> F2["FORWARD spray : division des jetons"]
+    S -- non --> U{"Utilite voisin > utilite porteur + delta ? (delta = 0 si batterie porteur faible)"}
+    U -- oui --> F3["FORWARD focus : la copie passe au voisin"]
+    U -- non --> M{"Utilite porteur ~ 0, voisin = mule, pas encore replique ?"}
+    M -- oui --> F4["FORWARD replication mule : le porteur garde sa copie"]
+    M -- non --> I
+```
+
 ## Forces
 
 - Combine le budget borne de Spray and Wait et l'orientation de PRoPHET.

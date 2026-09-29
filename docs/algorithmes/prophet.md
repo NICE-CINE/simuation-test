@@ -15,6 +15,22 @@ Un message est transmis seulement si le voisin a une meilleure
 predictabilite vers la destination que le porteur (au-dela de
 `forwarding_threshold`).
 
+## Diagramme
+
+Decision prise pour chaque message du porteur a chaque contact :
+
+```mermaid
+flowchart TD
+    A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
+    B -- oui --> L["Livraison (moteur)"]
+    B -- non --> C{"Voisin a deja le message ?"}
+    C -- oui --> I["IGNORE"]
+    C -- non --> U["Mise a jour P(porteur, voisin) : P + (1 - P) x P_init, vieillissement gamma, transitivite optionnelle"]
+    U --> D{"P(voisin, dest) - P(porteur, dest) > seuil ?"}
+    D -- oui --> F["FORWARD"]
+    D -- non --> I
+```
+
 ## Forces
 
 - Oriente : les copies vont vers les noeuds qui croisent souvent la

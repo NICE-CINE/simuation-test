@@ -19,6 +19,35 @@ Inspire de BUBBLE Rap :
 
 Bloom, `rankCap`, SOS et RSSI ne sont pas modelises.
 
+## Diagramme
+
+Decision prise pour chaque message du porteur a chaque contact :
+
+```mermaid
+flowchart TD
+    A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
+    B -- oui --> L["Livraison (moteur) puis purge"]
+    B -- non --> P{"Message deja livre ?"}
+    P -- oui --> X["Purge de la copie locale, IGNORE"]
+    P -- non --> C{"Voisin a deja le message ?"}
+    C -- oui --> I["IGNORE"]
+    C -- non --> AD{"Buffer du voisin plein a 80 % et destination hors de sa communaute ?"}
+    AD -- oui --> I
+    AD -- non --> H{"Voisin a vu la destination recemment ?"}
+    H -- oui --> F1["FORWARD relais 2 sauts"]
+    H -- non --> HI{"Porteur dans la bulle de la destination ?"}
+    HI -- oui --> LR{"Voisin aussi dans la bulle et rang local plus eleve ?"}
+    LR -- oui --> F2["FORWARD bulle"]
+    LR -- non --> I
+    HI -- non --> CI{"Voisin dans la bulle de la destination ?"}
+    CI -- oui --> F2
+    CI -- non --> GR{"Rang global du voisin plus eleve ?"}
+    GR -- oui --> F3["FORWARD rang"]
+    GR -- non --> ST{"Bloque depuis 30 min, voisin hors communaute, pas encore replique ?"}
+    ST -- oui --> F4["FORWARD replication anti-blocage"]
+    ST -- non --> I
+```
+
 ## Forces
 
 - Tres econome en transmissions et en energie, pas de saturation des
