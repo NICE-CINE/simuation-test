@@ -7,6 +7,7 @@ import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
+from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, SimulationConfig
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.routing.base import RoutingAlgorithm
@@ -83,6 +84,15 @@ def append_csv_row(row: dict, path: str, write_header: bool) -> None:
         writer.writerow(row)
 
 
+def build_config(beacon_count: int, seed: int, duration_s: float, num_festivaliers: int) -> SimulationConfig:
+    return SimulationConfig(
+        duration_s=duration_s,
+        num_festivaliers=num_festivaliers,
+        random_seed=seed,
+        beacons=BeaconConfig(count=beacon_count),
+    )
+
+
 def _run_one(
     algo_name: str,
     beacon_count: int,
@@ -91,12 +101,7 @@ def _run_one(
     num_festivaliers: int,
     progress: Optional[MutableMapping[str, float]],
 ) -> Tuple[dict, float]:
-    config = SimulationConfig(
-        duration_s=duration_s,
-        num_festivaliers=num_festivaliers,
-        random_seed=seed,
-        beacons=BeaconConfig(count=beacon_count),
-    )
+    config = build_config(beacon_count, seed, duration_s, num_festivaliers)
     label = run_label(algo_name, beacon_count)
     progress_callback = None
     if progress is not None:
@@ -200,11 +205,24 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--num-festivaliers", type=int, default=200)
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele")
-    parser.add_argument("--csv", default=None, help="Chemin d'export CSV (optionnel)")
+    parser.add_argument("--csv", default=None, help="Copie optionnelle du CSV, en plus de l'archive")
+    parser.add_argument(
+        "--archive-dir", default=DEFAULT_ARCHIVE_DIR,
+        help="Dossier ou chaque comparaison ecrit <date>_comparaison.csv et .json (parametres)",
+    )
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
 
+    stem = archive_stem(args.archive_dir, "comparaison")
+    archive_csv = str(stem.with_suffix(".csv"))
+    # Beacon count varies per row (0 or --beacon-count); the archived config
+    # is the "with beacons" one, the CSV's `beacons` column says which applied.
+    write_params(
+        stem.with_suffix(".json"),
+        vars(args),
+        build_config(args.beacon_count, args.seed, args.duration, args.num_festivaliers),
+    )
     rows = run_matrix(
         seed=args.seed,
         duration_s=args.duration,
@@ -212,11 +230,13 @@ def main(argv: Optional[List[str]] = None) -> None:
         beacon_count=args.beacon_count,
         workers=args.workers,
         show_progress=True,
-        csv_path=args.csv,
+        csv_path=archive_csv,
     )
+    write_csv(rows, archive_csv)
     if args.csv:
         write_csv(rows, args.csv)
     print_table(rows)
+    print(f"\nArchive ecrite dans {archive_csv} / .json")
     if args.csv:
         print(f"\nExporte vers {args.csv}")
 

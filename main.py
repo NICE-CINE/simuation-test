@@ -1,7 +1,8 @@
 from __future__ import annotations
 import argparse
 import random
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
+from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import (
     AreaConfig,
     BeaconConfig,
@@ -36,18 +37,23 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "bubble_f": lambda args: BubbleFRouting(seed=args.seed),
 }
 
-# "poi" has no CLI knobs of its own: build_config() points it at a single
-# default point of interest (a "main stage" at the center of the area) since
-# the mobility_factory signature only takes an RNG, not a config.
+# "poi" has no CLI knobs of its own: build_config() points it at a default
+# festival layout (see _default_festival_pois) since the mobility_factory
+# signature only takes an RNG, not a config.
 MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Random], MobilityModel]]] = {
     "random_waypoint": lambda config: (lambda rng: RandomWaypointMobility(config.mobility, rng=rng)),
     "poi": lambda config: (lambda rng: PoiMobility(config.mobility, rng=rng)),
 }
 
 
-def _default_main_stage_poi(area: AreaConfig) -> PointOfInterest:
-    return PointOfInterest(
-        x=area.width_m / 2, y=area.height_m / 2, radius_m=min(area.width_m, area.height_m) / 4, weight=1.0
+def _default_festival_pois(area: AreaConfig) -> Tuple[PointOfInterest, ...]:
+    w, h = area.width_m, area.height_m
+    r = min(w, h)
+    return (
+        PointOfInterest(x=0.25 * w, y=0.75 * h, radius_m=0.15 * r, weight=4.0),  # main stage
+        PointOfInterest(x=0.80 * w, y=0.70 * h, radius_m=0.10 * r, weight=2.0),  # second stage
+        PointOfInterest(x=0.55 * w, y=0.35 * h, radius_m=0.12 * r, weight=3.0),  # bars / food court
+        PointOfInterest(x=0.50 * w, y=0.05 * h, radius_m=0.08 * r, weight=1.0),  # entrance / toilets
     )
 
 
@@ -58,9 +64,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--beacons", type=int, default=0, help="Nombre de bornes (0 = desactivees)")
     parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
-    parser.add_argument("--num-festivaliers", type=int, default=10000)
+    parser.add_argument("--num-festivaliers", type=int, default=4000)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output", default="rapport_simulation.txt")
+    parser.add_argument("--output", default=None, help="Copie optionnelle du rapport, en plus de l'archive")
+    parser.add_argument(
+        "--archive-dir", default=DEFAULT_ARCHIVE_DIR,
+        help="Dossier ou chaque run ecrit <date>_<algo>.txt (rapport) et .json (parametres)",
+    )
     parser.add_argument("--spray-initial-copies", type=int, default=8, help="Nombre de copies initiales (Spray & Wait)")
     parser.add_argument(
         "--replay-html", default=None,
@@ -69,11 +79,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
-        "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 0.0), metavar=("LO", "HI"),
+        "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
         help="Fenetre (secondes) dans laquelle chaque festivalier arrive, si --churn",
     )
     parser.add_argument(
-        "--churn-session-duration-s", type=float, nargs=2, default=(600.0, 3600.0), metavar=("LO", "HI"),
+        "--churn-session-duration-s", type=float, nargs=2, default=(1800.0, 10800.0), metavar=("LO", "HI"),
         help="Duree de presence (secondes) de chaque festivalier apres son arrivee, si --churn",
     )
     return parser
@@ -83,7 +93,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     area = AreaConfig()
     mobility = MobilityConfig()
     if args.mobility == "poi":
-        mobility = MobilityConfig(points_of_interest=(_default_main_stage_poi(area),))
+        mobility = MobilityConfig(points_of_interest=_default_festival_pois(area))
     churn = ChurnConfig(
         enabled=args.churn,
         arrival_window_s=tuple(args.churn_arrival_window_s),
@@ -117,8 +127,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     text = format_report(report)
     print(text)
-    with open(args.output, "w", encoding="utf-8") as f:
-        f.write(text)
+    stem = archive_stem(args.archive_dir, args.routing)
+    stem.with_suffix(".txt").write_text(text, encoding="utf-8")
+    write_params(stem.with_suffix(".json"), vars(args), config)
+    print(f"Archive ecrite dans {stem}.txt / .json")
+    if args.output is not None:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(text)
     if history is not None:
         render_replay_html(history, args.replay_html, title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
         print(f"Replay HTML ecrit dans {args.replay_html}")

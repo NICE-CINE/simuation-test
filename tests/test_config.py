@@ -29,7 +29,7 @@ def test_rejects_backhaul_loss_probability_outside_unit_range():
 def test_default_config_is_valid():
     config = SimulationConfig()
     assert config.num_festivaliers > 0
-    assert config.area.width_m == 1500.0
+    assert config.area.width_m == 700.0
 
 
 def test_rejects_non_positive_area():

@@ -5,8 +5,10 @@ from typing import List, Optional, Tuple
 
 @dataclass(frozen=True)
 class AreaConfig:
-    width_m: float = 1500.0
-    height_m: float = 1500.0
+    # Mid-size festival site (~0.35 km^2: two stages, bars/food court,
+    # entrance), not a free-roaming square kilometer.
+    width_m: float = 700.0
+    height_m: float = 500.0
 
 
 @dataclass(frozen=True)
@@ -104,10 +106,13 @@ class PointOfInterest:
 
 @dataclass(frozen=True)
 class MobilityConfig:
-    speed_min_mps: float = 0.5
-    speed_max_mps: float = 1.4
-    pause_probability: float = 0.3
-    pause_duration_range_s: Tuple[float, float] = (10.0, 60.0)
+    # Walking through a crowd is slower than free walking (~1.4 m/s), and
+    # festivaliers spend most of their time standing still: a pause is a
+    # concert set, a queue at the bar or a break (5 to 45 min).
+    speed_min_mps: float = 0.3
+    speed_max_mps: float = 1.2
+    pause_probability: float = 0.7
+    pause_duration_range_s: Tuple[float, float] = (300.0, 2700.0)
     tick_interval_s: float = 1.0
     # Only consumed by mobility.poi.PoiMobility (opt-in via mobility_factory);
     # RandomWaypointMobility ignores this field entirely.
@@ -121,7 +126,9 @@ class TrafficConfig:
     # emerges from num_festivaliers x (each person's own rate) rather than
     # a single network-wide average, so it scales realistically with
     # population size without needing to be tuned per run.
-    messages_per_hour_range: Tuple[float, float] = (0.0, 2.0)
+    # Mean 2 msg/h: most people text a few times per hour ("t'es ou ?"),
+    # some never do.
+    messages_per_hour_range: Tuple[float, float] = (0.0, 4.0)
     payload_size_range_bytes: Tuple[int, int] = (20, 512)
     message_ttl_s: float = 1800.0
     # Bluetooth Mesh network-layer TTL, in hops rather than seconds: caps
@@ -133,7 +140,8 @@ class TrafficConfig:
 
 @dataclass(frozen=True)
 class EnergyConfig:
-    initial_battery_mah: float = 2000.0
+    # ~4500 mAh phone arriving about two thirds charged.
+    initial_battery_mah: float = 3000.0
     tx_cost_mah_per_event: float = 0.02
     tx_cost_mah_per_byte: float = 1e-4
     rx_cost_mah_per_event: float = 0.01
@@ -167,14 +175,16 @@ class ChurnConfig:
     # modeling a crowd that trickles in/out over the event rather than
     # being fully present for the whole simulated duration.
     enabled: bool = False
-    arrival_window_s: Tuple[float, float] = (0.0, 0.0)
-    session_duration_range_s: Tuple[float, float] = (600.0, 3600.0)
+    # Arrivals spread over the first 30 min of the run, stays of 30 min
+    # to 3 h (a couple of sets up to the whole evening).
+    arrival_window_s: Tuple[float, float] = (0.0, 1800.0)
+    session_duration_range_s: Tuple[float, float] = (1800.0, 10800.0)
 
 
 @dataclass
 class SimulationConfig:
     duration_s: float = 3600.0
-    num_festivaliers: int = 10000
+    num_festivaliers: int = 4000
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
     area: AreaConfig = field(default_factory=AreaConfig)
