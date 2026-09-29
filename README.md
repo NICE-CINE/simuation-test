@@ -200,7 +200,7 @@ a 4 000 festivaliers. Programmatiquement :
 
 ## Algorithmes de routage disponibles
 
-Forces et faiblesses detaillees : `docs/algorithmes/algorithmes.md`.
+Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithmes/`.
 
 - `epidemic` (`routing/epidemic.py`) — flooding naif, reference/borne haute
   d'overhead.
