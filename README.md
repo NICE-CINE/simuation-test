@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a` ou `bubble_f` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f` ou `managed_flood` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -45,7 +45,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -246,6 +246,21 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   modelises (instance partagee = vues exactes, pas d'attaquant). Avec
   `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
   apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
+- `managed_flood` (`routing/managed_flood.py`) — inondation geree du
+  Bluetooth Mesh (couche reseau), sans stockage-transport : un noeud ne
+  relaie un PDU que pendant `relay_window_s` apres l'avoir recu, puis
+  l'oublie. Boucles et tempetes bornees par le TTL (`ttl`, en sauts), un
+  cache de messages par noeud de taille fixe (`cache_size`, FIFO, cle
+  `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
+  Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
+  ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
+  les copies ; la source oublie elle aussi le PDU apres sa fenetre (pas
+  de stockage-transport cote source) et, sans ACK apres `ack_timeout_s`,
+  le reemet avec un nouveau SEQ, au plus `max_source_retransmissions`
+  fois. Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes`
+  (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
+  le voit pas). Pense pour une topologie connexe : en festival clairseme,
+  la livraison chute par rapport aux algos DTN, c'est attendu.
 
 ## Ajouter un nouvel algorithme de routage
 
