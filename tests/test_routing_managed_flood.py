@@ -91,6 +91,8 @@ def test_rejects_invalid_parameters():
         ManagedFloodRouting(ack_timeout_s=0.0)
     with pytest.raises(ValueError):
         ManagedFloodRouting(max_source_retransmissions=-1)
+    with pytest.raises(ValueError):
+        ManagedFloodRouting(ack_size_bytes=-1)
 
 
 def test_forwards_fresh_pdu_to_uncached_neighbor():
@@ -147,16 +149,45 @@ def test_relay_drops_pdu_after_window():
 def test_unacknowledged_source_retransmits_with_new_seq_then_gives_up():
     algo = ManagedFloodRouting(relay_window_s=1.0, ack_timeout_s=5.0, max_source_retransmissions=1)
     source, contact = _node(1), _node(2)
-    msg = _msg()
-    source.store_message(msg)
-    algo.decide(msg, source, contact, now=0.0)
-    assert algo.decide(msg, source, contact, now=3.0) is RoutingDecision.IGNORE
-    assert 1 in source.buffer
-    algo._remember(contact.id, (1, 0), now=0.0)
-    assert algo.decide(msg, source, contact, now=6.0) is RoutingDecision.FORWARD
-    assert msg.routing_state["attempt"] == 1
-    algo.decide(msg, source, contact, now=12.0)
+    algo.on_simulation_start({1: source, 2: contact})
+    source.store_message(_msg())
+    algo.on_tick(0.0, {})
+    algo.on_tick(3.0, {})
     assert 1 not in source.buffer
+    algo.on_tick(6.0, {})
+    retry = source.buffer[1]
+    assert retry.routing_state["attempt"] == 1
+    algo._remember(contact.id, (1, 0), now=0.0)
+    assert algo.decide(retry, source, contact, now=6.0) is RoutingDecision.FORWARD
+    for now in (8.0, 12.0, 20.0):
+        algo.on_tick(now, {})
+    assert 1 not in source.buffer
+
+
+def test_source_does_not_carry_pdu_to_destination_after_relay_window():
+    nodes = {1: _node(1), 2: _node(2, x=10.0)}
+    nodes[2].is_active = False
+    nodes[1].store_message(_msg(dst_id=2))
+    algo = ManagedFloodRouting(relay_window_s=2.0, ack_timeout_s=100.0)
+    env, metrics = _engine(nodes, algo)
+    env.run(until=5.5)
+    nodes[2].is_active = True
+    env.run(until=10.5)
+    assert metrics.build_report([], 0).messages_delivered == 0
+
+
+def test_ack_hops_cost_energy():
+    nodes = _line(3)
+    nodes[1].store_message(_msg(dst_id=3))
+    algo = ManagedFloodRouting(
+        relay_window_s=10.0, ack_timeout_s=100.0, ack_size_bytes=0,
+        energy=EnergyConfig(tx_cost_mah_per_event=1.0, tx_cost_mah_per_byte=0.0,
+                            rx_cost_mah_per_event=1.0, rx_cost_mah_per_byte=0.0),
+    )
+    _run(nodes, algo, until=5.5)
+    assert algo.knows_ack(1, 1)
+    # Data PDUs are free here (_energy_model is all zeros): ack hops 3->2->1.
+    assert [nodes[i].energy_consumed_mah for i in (1, 2, 3)] == [1.0, 2.0, 1.0]
 
 
 def test_multi_hop_delivery_along_a_line_takes_one_tick_per_hop():

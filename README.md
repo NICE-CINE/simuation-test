@@ -254,10 +254,12 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
   Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
   ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
-  les copies ; sans ACK apres `ack_timeout_s`, la source reemet avec un
-  nouveau SEQ, au plus `max_source_retransmissions` fois. Les ACK ne
-  coutent ni energie ni bande passante (jetons, comme les purges de
-  `gossip_a`). Pense pour une topologie connexe : en festival clairseme,
+  les copies ; la source oublie elle aussi le PDU apres sa fenetre (pas
+  de stockage-transport cote source) et, sans ACK apres `ack_timeout_s`,
+  le reemet avec un nouveau SEQ, au plus `max_source_retransmissions`
+  fois. Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes`
+  (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
+  le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
 
 ## Ajouter un nouvel algorithme de routage
