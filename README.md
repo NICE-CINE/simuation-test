@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood` ou `tide` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -45,7 +45,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -281,6 +281,13 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   PRoPHET est desactivee par defaut (`enable_transitivity`) car en O(N^2)
   a 4000 noeuds. Interrupteurs d'ablation : `islands`, `weighted_tokens`,
   `election`, `reinjection`, `energy_factor`.
+- `fresh_spray` (`routing/fresh_spray.py`) — Spray binaire (`initial_tokens`,
+  defaut 16) + replique vers tout voisin ayant croise la destination depuis
+  moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au
+  voisin qui a vu la destination plus recemment (FRESH) + une seule replique
+  vers le reseau de bornes + purge globale des messages livres. Vise a la
+  fois livraison, latence et energie ; details dans
+  `docs/algorithmes/fresh_spray.md`.
 
 ## Ajouter un nouvel algorithme de routage
 
