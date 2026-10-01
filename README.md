@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -36,16 +36,20 @@ Options disponibles :
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
 - `--replay-html CHEMIN` : ecrit un replay HTML autonome de la simulation
   (voir "Visualisation / replay" plus bas)
+- `--reply-probability P` : probabilite qu'un message livre recoive une
+  reponse du destinataire apres 20 a 180 s (defaut 0, pas de reponses) ;
+  necessaire pour que `tide_g` ait des indices de position
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
 ## Comparer les algorithmes
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
-        --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
+        --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
+        [--mobility poi] [--reply-probability 0.5]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -282,6 +286,21 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   PRoPHET est desactivee par defaut (`enable_transitivity`) car en O(N^2)
   a 4000 noeuds. Interrupteurs d'ablation : `islands`, `weighted_tokens`,
   `election`, `reinjection`, `energy_factor`.
+- `tide_g` (`routing/tide_g.py`) — TIDE-G, TIDE guide par la derniere
+  position connue du destinataire (`message.dst_position`, fournie par le
+  destinataire lui-meme dans son dernier message a la source). Indice
+  utilisable s'il a moins de 15 min, arrondi a une case de 25 m, disque
+  d'incertitude `r = 30 + 0,3 h` m. Les relais elus et les porteurs d'un
+  message a indice prennent un fix GPS toutes les 30 s (10 mA factures).
+  Change trois regles de TIDE : partage des jetons sur
+  `S = max(U, e kappa g)`, focus geographique (copie unique passee a un
+  voisin au moins 15 m plus pres de l'indice), recherche locale (3 jetons
+  « zone » une fois dans le disque) ; la source rafraichit l'indice si elle
+  a recu une position plus recente. Sans indice, identique a TIDE.
+  `hint_stats` donne la couverture d'indice. A lancer avec `--mobility poi
+  --reply-probability 0.5`. Details dans `docs/algorithmes/tide_g.md`,
+  spec complete dans `docs/TIDE-G.md`. Interrupteurs d'ablation :
+  `geo_focus`, `geo_tokens`, `zone_search`, `refresh_hint`, `gps_for_relays`.
 - `fresh_spray` (`routing/fresh_spray.py`) — Spray binaire (`initial_tokens`,
   defaut 16) + replique vers tout voisin ayant croise la destination depuis
   moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au
