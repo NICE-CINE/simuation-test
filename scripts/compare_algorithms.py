@@ -17,6 +17,7 @@ from festival_ble_sim.routing.dasfv import DasfVRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
 from festival_ble_sim.routing.gossip_a import GossipARouting
 from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
+from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.routing.tide import TideRouting
@@ -32,6 +33,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "bubble_f": BubbleFRouting,
     "managed_flood": ManagedFloodRouting,
     "tide": TideRouting,
+    "fresh_spray": FreshSprayRouting,
 }
 
 REPORT_FIELDS = [
