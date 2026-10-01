@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f` ou `tide` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood` ou `tide` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -45,7 +45,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, tide} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -101,6 +101,11 @@ ajoute a chaque tick. Un lien peut donc tomber en dessous de la
 sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
 "moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
 retrouve le modele deterministe (equivalent a un cercle fixe).
+
+**Cout radio de fond** (`EnergyConfig.background_current_ma`, 2 mA par
+defaut, a calibrer sur appareils) : chaque telephone actif paie a chaque
+seconde le courant moyen du scan et des annonces BLE, qu'il envoie ou non
+des messages ; s'ajoute aux couts par emission/reception.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
@@ -246,6 +251,21 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   modelises (instance partagee = vues exactes, pas d'attaquant). Avec
   `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
   apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
+- `managed_flood` (`routing/managed_flood.py`) — inondation geree du
+  Bluetooth Mesh (couche reseau), sans stockage-transport : un noeud ne
+  relaie un PDU que pendant `relay_window_s` apres l'avoir recu, puis
+  l'oublie. Boucles et tempetes bornees par le TTL (`ttl`, en sauts), un
+  cache de messages par noeud de taille fixe (`cache_size`, FIFO, cle
+  `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
+  Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
+  ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
+  les copies ; la source oublie elle aussi le PDU apres sa fenetre (pas
+  de stockage-transport cote source) et, sans ACK apres `ack_timeout_s`,
+  le reemet avec un nouveau SEQ, au plus `max_source_retransmissions`
+  fois. Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes`
+  (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
+  le voit pas). Pense pour une topologie connexe : en festival clairseme,
+  la livraison chute par rapport aux algos DTN, c'est attendu.
 - `tide` (`routing/tide.py`) — TIDE (Tokens, Islands, Density, Energy),
   candidat NICE : jetons initiaux `L0 = clamp(round(12 sqrt(10/rho)), 2, 12)`
   partages au prorata de l'utilite `U = e * [w P + (1-w) exp(-dt/tau)]`,

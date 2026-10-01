@@ -28,6 +28,7 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
             # battery-dead: frozen in place rather than wandering while it
             # can't participate in BLE anyway.
             continue
+        node.consume_energy(config.energy.background_current_ma * config.mobility.tick_interval_s / 3600.0)
         old_x, old_y = node.position.x, node.position.y
         node.move(config.mobility.tick_interval_s, config.area)
         grid.update(node, old_x, old_y)
