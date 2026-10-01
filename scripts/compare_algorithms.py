@@ -20,6 +20,7 @@ from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
 from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
+from festival_ble_sim.routing.tide import TideRouting
 from festival_ble_sim.simulation import run_simulation
 
 ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
@@ -31,6 +32,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "gossip_a": GossipARouting,
     "bubble_f": BubbleFRouting,
     "managed_flood": ManagedFloodRouting,
+    "tide": TideRouting,
     "fresh_spray": FreshSprayRouting,
 }
 

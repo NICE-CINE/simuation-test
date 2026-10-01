@@ -170,3 +170,22 @@ def test_zero_packet_loss_probability_never_drops_with_rng():
     )
     assert contact.has_message(1) is True
     assert metrics.build_report([], 0).packet_loss_count == 0
+
+
+def test_message_routing_ignores_costs_no_energy_or_loss_even_on_lossy_link():
+    sender = _node(1, 0.0, 0.0)
+    contact = _node(2, 5.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(sender)
+    grid.insert(contact)
+    msg = Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0)
+    sender.store_message(msg)
+    contact.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    metrics = MetricsCollector()
+    ble_config = BleConfig(packet_loss_base_probability=1.0, packet_loss_max_probability=1.0)
+    process_node_contacts(
+        now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),
+        energy_model=_energy_model(), metrics=metrics, ble_config=ble_config, rng=random.Random(0),
+    )
+    assert sender.battery_mah == 100.0
+    assert metrics.build_report([], 0).packet_loss_count == 0

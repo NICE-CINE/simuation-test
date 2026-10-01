@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -45,7 +45,7 @@ Options disponibles :
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -101,6 +101,11 @@ ajoute a chaque tick. Un lien peut donc tomber en dessous de la
 sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
 "moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
 retrouve le modele deterministe (equivalent a un cercle fixe).
+
+**Cout radio de fond** (`EnergyConfig.background_current_ma`, 2 mA par
+defaut, a calibrer sur appareils) : chaque telephone actif paie a chaque
+seconde le courant moyen du scan et des annonces BLE, qu'il envoie ou non
+des messages ; s'ajoute aux couts par emission/reception.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
@@ -261,6 +266,21 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
   le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
+- `tide` (`routing/tide.py`) — TIDE (Tokens, Islands, Density, Energy),
+  candidat NICE : jetons initiaux `L0 = clamp(round(12 sqrt(10/rho)), 2, 12)`
+  partages au prorata de l'utilite `U = e * [w P + (1-w) exp(-dt/tau)]`,
+  livraison directe dans les ilots (tout voisin qui voit la destination
+  recoit une copie), relais elus toutes les 5 min avec
+  `p = min(1, rho_cible/rho * e/e_moy)` (membres et feuilles < 15 % ne
+  portent pas les messages des autres, repli relais apres 30 s sans relais
+  visible), K synchros par minute, copie fantome et reinjection par la
+  source a 3/6/20 min, purge par ACK et eviction (acquittes, expires, en
+  retard, copies a 1 jeton de faible utilite, jamais les messages propres).
+  Non modelises : crypto, ID ephemeres, digests, cycle de scan/annonce,
+  quota par emetteur, reputation, ordre de transmission. La transitivite
+  PRoPHET est desactivee par defaut (`enable_transitivity`) car en O(N^2)
+  a 4000 noeuds. Interrupteurs d'ablation : `islands`, `weighted_tokens`,
+  `election`, `reinjection`, `energy_factor`.
 - `fresh_spray` (`routing/fresh_spray.py`) — Spray binaire (`initial_tokens`,
   defaut 16) + replique vers tout voisin ayant croise la destination depuis
   moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au

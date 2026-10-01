@@ -173,6 +173,24 @@ def process_node_contacts(
             if not contact.is_active:
                 break
 
+            is_delivery = contact.id == message.dst_id
+            if is_delivery:
+                if contact.has_message(message.msg_id):
+                    continue
+            else:
+                # Network-layer hop TTL only caps relaying, not direct delivery:
+                # a holder still carries and can hand off a hop-exhausted
+                # message straight to its destination, it just stops spreading
+                # it to other relays — the same "wait phase" semantics Spray &
+                # Wait already uses for its last copy.
+                if message.hop_limit_reached():
+                    continue
+                if routing_algorithm.decide(message, sender, contact, now) is not RoutingDecision.FORWARD:
+                    continue
+
+            # Budget and loss only apply once something is actually sent: a
+            # message the routing would ignore (or the contact already has)
+            # costs neither airtime nor energy.
             if remaining_budget is not None and message.size_bytes > remaining_budget:
                 # Doesn't fit this tick's link budget; stays queued, retried next tick.
                 continue
@@ -184,48 +202,19 @@ def process_node_contacts(
                 metrics.record_packet_loss()
                 continue
 
-            if contact.id == message.dst_id:
-                if not contact.has_message(message.msg_id):
-                    delivered_msg = replace(
-                        message,
-                        hops=message.hops + 1,
-                        routing_state=dict(message.routing_state),
-                    )
-                    contact.mark_delivered(delivered_msg.msg_id)
-                    sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
-                    contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
-                    metrics.record_transmission()
-                    metrics.record_delivery(delivered_msg, now)
-                    routing_algorithm.on_delivered(delivered_msg, sender)
-                    if event_log is not None:
-                        event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": True})
-                continue
-
-            # Network-layer hop TTL only caps relaying, not direct delivery
-            # (handled above): a holder still carries and can hand off a
-            # hop-exhausted message straight to its destination, it just
-            # stops spreading it to other relays — the same "wait phase"
-            # semantics Spray & Wait already uses for its last copy.
-            if message.hop_limit_reached():
-                continue
-
-            decision = routing_algorithm.decide(message, sender, contact, now)
-            if decision is RoutingDecision.FORWARD:
-                forwarded = replace(
-                    message,
-                    hops=message.hops + 1,
-                    routing_state=dict(message.routing_state),
-                )
-                contact.store_message(
-                    forwarded, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now)
-                )
-                sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
-                contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
-                metrics.record_transmission()
-                routing_algorithm.on_forward(message, sender, contact, forwarded)
-                if event_log is not None:
-                    event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": False})
-
+            copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
+            sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
+            contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
+            metrics.record_transmission()
+            if is_delivery:
+                contact.mark_delivered(copy.msg_id)
+                metrics.record_delivery(copy, now)
+                routing_algorithm.on_delivered(copy, sender)
+            else:
+                contact.store_message(copy, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now))
+                routing_algorithm.on_forward(message, sender, contact, copy)
+            if event_log is not None:
+                event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": is_delivery})
 
 def beacon_backhaul_relay(
     now: float,

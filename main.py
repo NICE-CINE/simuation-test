@@ -25,6 +25,7 @@ from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
 from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
+from festival_ble_sim.routing.tide import TideRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
@@ -38,6 +39,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "gossip_a": lambda args: GossipARouting(seed=args.seed),
     "bubble_f": lambda args: BubbleFRouting(seed=args.seed),
     "managed_flood": lambda args: ManagedFloodRouting(),
+    "tide": lambda args: TideRouting(seed=args.seed),
     "fresh_spray": lambda args: FreshSprayRouting(),
 }
 
