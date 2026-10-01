@@ -99,14 +99,25 @@ def build_config(beacon_count: int, seed: int, duration_s: float, num_festivalie
     )
 
 
+_worker_progress: Optional[MutableMapping[str, float]] = None
+
+
+def _init_worker(progress: Optional[MutableMapping[str, float]]) -> None:
+    # The Manager proxy is handed over once per worker, not per task: a
+    # per-task proxy copy being garbage-collected closes the worker's
+    # shared Manager connection under the next task's proxy.
+    global _worker_progress
+    _worker_progress = progress
+
+
 def _run_one(
     algo_name: str,
     beacon_count: int,
     seed: int,
     duration_s: float,
     num_festivaliers: int,
-    progress: Optional[MutableMapping[str, float]],
 ) -> Tuple[dict, float]:
+    progress = _worker_progress
     config = build_config(beacon_count, seed, duration_s, num_festivaliers)
     label = run_label(algo_name, beacon_count)
     progress_callback = None
@@ -142,10 +153,10 @@ def run_matrix(
     matrix_start = time.monotonic()
     manager = multiprocessing.Manager() if show_progress else None
     progress = manager.dict() if manager is not None else None
-    executor = ProcessPoolExecutor(max_workers=workers)
+    executor = ProcessPoolExecutor(max_workers=workers, initializer=_init_worker, initargs=(progress,))
     try:
         futures: Dict[Future, int] = {
-            executor.submit(_run_one, algo_name, count, seed, duration_s, num_festivaliers, progress): index
+            executor.submit(_run_one, algo_name, count, seed, duration_s, num_festivaliers): index
             for index, (algo_name, count) in enumerate(tasks)
         }
         pending = set(futures)
