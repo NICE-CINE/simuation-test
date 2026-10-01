@@ -102,6 +102,11 @@ sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
 "moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
 retrouve le modele deterministe (equivalent a un cercle fixe).
 
+**Cout radio de fond** (`EnergyConfig.background_current_ma`, 2 mA par
+defaut, a calibrer sur appareils) : chaque telephone actif paie a chaque
+seconde le courant moyen du scan et des annonces BLE, qu'il envoie ou non
+des messages ; s'ajoute aux couts par emission/reception.
+
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
 - un **debit limite par lien et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
