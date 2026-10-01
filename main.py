@@ -23,6 +23,7 @@ from festival_ble_sim.routing.epidemic import EpidemicRouting
 from festival_ble_sim.routing.gossip_a import GossipARouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
+from festival_ble_sim.routing.tide import TideRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
@@ -35,6 +36,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "dasfv": lambda args: DasfVRouting(),
     "gossip_a": lambda args: GossipARouting(seed=args.seed),
     "bubble_f": lambda args: BubbleFRouting(seed=args.seed),
+    "tide": lambda args: TideRouting(seed=args.seed),
 }
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
