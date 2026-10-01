@@ -146,6 +146,10 @@ class EnergyConfig:
     tx_cost_mah_per_byte: float = 1e-4
     rx_cost_mah_per_event: float = 0.01
     rx_cost_mah_per_byte: float = 5e-5
+    # Average current of BLE scanning + advertising, paid every second a
+    # phone is active whether or not it sends anything. Starting guess, to
+    # recalibrate on real devices.
+    background_current_ma: float = 2.0
 
 
 @dataclass(frozen=True)
@@ -210,6 +214,8 @@ class SimulationConfig:
             raise ValueError("messages_per_hour_range must satisfy 0 <= lo <= hi")
         if self.traffic.message_ttl_hops is not None and self.traffic.message_ttl_hops < 1:
             raise ValueError("message_ttl_hops must be None or >= 1")
+        if self.energy.background_current_ma < 0:
+            raise ValueError("background_current_ma must be >= 0")
         if self.ble.transfer_rate_bytes_per_s <= 0:
             raise ValueError("transfer_rate_bytes_per_s must be positive")
         if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:
