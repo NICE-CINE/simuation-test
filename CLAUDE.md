@@ -72,7 +72,14 @@ viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
 
 ### Traffic
 
-Each `MobileNode` gets its own `traffic.traffic_process` with a fixed personal rate drawn once from `TrafficConfig.messages_per_hour_range` (default `(0.0, 2.0)`; a node drawing 0 never sends). Total load therefore scales with `num_festivaliers` — there is no network-wide `mean_interval_s` anymore. Destination is a uniformly random other active node.
+Each `MobileNode` gets its own `traffic.traffic_process` with a fixed personal rate drawn once from `TrafficConfig.messages_per_hour_range` (default `(0.0, 2.0)`; a node drawing 0 never sends). Total load therefore scales with `num_festivaliers` — there is no network-wide `mean_interval_s` anymore. Destination is a uniformly random active *friend* (`TrafficConfig.friends_only`, default `True`; `False` restores a uniformly random other active node). Friend groups come from one shared graph, `social.assign_friend_groups` driven by `SimulationConfig.social`, set on each `MobileNode.friends` before `on_simulation_start` — `bubble_f` reads it from there rather than generating its own. Friendless people (`no_friend_fraction`, default 20 %) send nothing.
+
+### GPS
+
+Engine-provided, so position-unaware algorithms are unaffected:
+- `node.gps_position()` — noisy reading (`GpsConfig.noise_std_m`, default 5 m, resampled per call from one shared seeded RNG); beacons and σ=0 read exact. Use it for the holder and its neighbors (`contact` in `decide`, `neighbors_by_node` in `on_tick`); `node.position` is the ground-truth oracle.
+- `message.src_position` — source's GPS at creation. On delivery `network.py` stores it in the destination's `known_positions[src_id] = (position, creation_time)` (newest wins).
+- `message.dst_position` / `dst_position_time` — source's last known position of the destination at creation, i.e. from the destination's last message delivered to the source. `None` when unknown (frequent: no replies are simulated) — geographic algorithms must fall back to a non-geographic decision.
 
 ### Extension points (Strategy pattern)
 

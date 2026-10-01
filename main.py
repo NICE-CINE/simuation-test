@@ -36,7 +36,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "beacon_priority": lambda args: BeaconPriorityRouting(),
     "dasfv": lambda args: DasfVRouting(),
     "gossip_a": lambda args: GossipARouting(seed=args.seed),
-    "bubble_f": lambda args: BubbleFRouting(seed=args.seed),
+    "bubble_f": lambda args: BubbleFRouting(),
     "managed_flood": lambda args: ManagedFloodRouting(),
     "tide": lambda args: TideRouting(seed=args.seed),
 }

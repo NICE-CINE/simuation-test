@@ -208,6 +208,8 @@ def process_node_contacts(
             metrics.record_transmission()
             if is_delivery:
                 contact.mark_delivered(copy.msg_id)
+                if copy.src_position is not None:
+                    contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
                 metrics.record_delivery(copy, now)
                 routing_algorithm.on_delivered(copy, sender)
             else:

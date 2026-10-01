@@ -136,6 +136,24 @@ class TrafficConfig:
     # been alive, bounding flood radius the way real mesh deployments do
     # (typical default TTL values are single digits). None = unlimited.
     message_ttl_hops: Optional[int] = 8
+    # People text their friends, not strangers: destinations are drawn from
+    # the sender's SocialConfig group, and friendless people send nothing.
+    # False restores a uniformly random destination among active nodes.
+    friends_only: bool = True
+
+
+@dataclass(frozen=True)
+class SocialConfig:
+    # Friend groups (the QR-code graph) shared by traffic and bubble_f.
+    group_size_range: Tuple[int, int] = (2, 8)
+    no_friend_fraction: float = 0.2
+
+
+@dataclass(frozen=True)
+class GpsConfig:
+    # Phone GPS error, resampled on every read. Typical outdoor smartphone
+    # accuracy; 0.0 gives exact positions. Beacons always read exact.
+    noise_std_m: float = 5.0
 
 
 @dataclass(frozen=True)
@@ -198,6 +216,8 @@ class SimulationConfig:
     energy: EnergyConfig = field(default_factory=EnergyConfig)
     beacons: BeaconConfig = field(default_factory=BeaconConfig)
     churn: ChurnConfig = field(default_factory=ChurnConfig)
+    social: SocialConfig = field(default_factory=SocialConfig)
+    gps: GpsConfig = field(default_factory=GpsConfig)
 
     def __post_init__(self) -> None:
         if self.area.width_m <= 0 or self.area.height_m <= 0:
@@ -253,6 +273,13 @@ class SimulationConfig:
         session_lo, session_hi = self.churn.session_duration_range_s
         if session_lo <= 0 or session_hi < session_lo:
             raise ValueError("session_duration_range_s must satisfy 0 < lo <= hi")
+        group_lo, group_hi = self.social.group_size_range
+        if not 2 <= group_lo <= group_hi:
+            raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
+        if not (0.0 <= self.social.no_friend_fraction <= 1.0):
+            raise ValueError("no_friend_fraction must be within [0, 1]")
+        if self.gps.noise_std_m < 0:
+            raise ValueError("gps noise_std_m must be >= 0")
         for radio in (self.ble.phone_radio, self.ble.beacon_radio):
             if radio.path_loss_exponent <= 0:
                 raise ValueError("path_loss_exponent must be positive")
