@@ -73,3 +73,27 @@ def traffic_process(
         )
         node.store_message(message)
         metrics.record_creation(message)
+
+
+def reply_process(
+    env,
+    node: MobileNode,
+    dst_id: int,
+    delay_s: float,
+    nodes: Dict[int, MobileNode],
+    config: TrafficConfig,
+    metrics: MetricsCollector,
+    id_generator: Iterator[int],
+    rng: random.Random,
+):
+    yield env.timeout(delay_s)
+    target = nodes.get(dst_id)
+    if not node.is_active or target is None or not target.is_active:
+        return
+    message = generate_message(
+        next(id_generator), env.now, node.id, dst_id, config, rng,
+        src_position=node.gps_position(),
+        dst_known=node.known_positions.get(dst_id),
+    )
+    node.store_message(message)
+    metrics.record_creation(message)

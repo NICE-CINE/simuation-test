@@ -230,6 +230,7 @@ class TideRouting(RoutingAlgorithm):
             state[_REINJECTIONS] = 0
         if self._reinjection and holder.id == message.src_id:
             self._maybe_reinject(message, now)
+        self._before_route(message, holder, now)
 
         if not self._sync_allowed(holder.id, contact.id, now):
             return RoutingDecision.IGNORE
@@ -245,15 +246,34 @@ class TideRouting(RoutingAlgorithm):
 
         tokens = state[_TOKENS]
         if tokens > 1:
+            if not self._spray_ok(message, holder, contact, now):
+                return RoutingDecision.IGNORE
             state[_FORWARD_REASON] = "spray"
             return RoutingDecision.FORWARD
-        if tokens == 1:
-            u_holder = self._utility(holder, message.dst_id, now)
-            u_contact = self._utility(contact, message.dst_id, now)
-            if u_contact > u_holder + self._delta:
-                state[_FORWARD_REASON] = "focus"
-                return RoutingDecision.FORWARD
+        if tokens == 1 and self._focus_ok(message, holder, contact, now):
+            state[_FORWARD_REASON] = "focus"
+            return RoutingDecision.FORWARD
         return RoutingDecision.IGNORE
+
+    # Extension points, overridden by TIDE-G (tide_g.py).
+
+    def _before_route(self, message: Message, holder: "BaseNode", now: float) -> None:
+        pass
+
+    def _spray_ok(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> bool:
+        return True
+
+    def _focus_ok(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> bool:
+        u_holder = self._utility(holder, message.dst_id, now)
+        u_contact = self._utility(contact, message.dst_id, now)
+        return u_contact > u_holder + self._delta
+
+    def _token_share(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> float:
+        if not self._weighted_tokens:
+            return 0.5
+        u_a = self._utility(holder, message.dst_id, now)
+        u_b = self._utility(contact, message.dst_id, now)
+        return 0.5 if u_a + u_b == 0.0 else u_b / (u_a + u_b)
 
     def _maybe_reinject(self, message: Message, now: float) -> None:
         state = message.routing_state
@@ -284,12 +304,7 @@ class TideRouting(RoutingAlgorithm):
                 holder.buffer.pop(message.msg_id, None)
             return
 
-        if self._weighted_tokens:
-            u_a = self._utility(holder, message.dst_id, self._now)
-            u_b = self._utility(contact, message.dst_id, self._now)
-            share = 0.5 if u_a + u_b == 0.0 else u_b / (u_a + u_b)
-        else:
-            share = 0.5
+        share = self._token_share(message, holder, contact, self._now)
         k_b = int(min(tokens - 1, max(1, round(tokens * share))))
         message.routing_state[_TOKENS] = tokens - k_b
         forwarded_copy.routing_state[_TOKENS] = k_b

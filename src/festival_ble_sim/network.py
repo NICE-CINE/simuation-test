@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from dataclasses import replace
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -74,6 +74,7 @@ def process_node_contacts(
     contention_counts: Optional[Dict[int, int]] = None,
     event_log: Optional[List[Dict[str, Any]]] = None,
     neighbors: Optional[List[BaseNode]] = None,
+    on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -212,6 +213,8 @@ def process_node_contacts(
                     contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
                 metrics.record_delivery(copy, now)
                 routing_algorithm.on_delivered(copy, sender)
+                if on_delivery is not None:
+                    on_delivery(copy, contact, now)
             else:
                 contact.store_message(copy, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now))
                 routing_algorithm.on_forward(message, sender, contact, copy)
@@ -284,6 +287,7 @@ def network_engine(
     beacon_config: Optional[BeaconConfig] = None,
     rng: Optional[random.Random] = None,
     event_log: Optional[List[Dict[str, Any]]] = None,
+    on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
     while True:
@@ -311,4 +315,5 @@ def network_engine(
                 contention_counts=contention_counts,
                 event_log=event_log,
                 neighbors=neighbors_by_node.get(node_id) if neighbors_by_node is not None else None,
+                on_delivery=on_delivery,
             )

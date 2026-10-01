@@ -17,7 +17,7 @@ from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
 from .social import assign_friend_groups
 from .spatial import SpatialGrid
-from .traffic import traffic_process
+from .traffic import reply_process, traffic_process
 from .viz.history import SimulationHistory
 
 
@@ -149,6 +149,18 @@ def run_simulation(
 
     routing_algorithm.on_simulation_start(nodes)
     network_rng = random.Random(rng.randrange(1 << 30))
+    on_delivery = None
+    if config.traffic.reply_probability > 0:
+        # Drawn only when replies are on, so runs without them stay identical.
+        reply_rng = random.Random(network_rng.randrange(1 << 30))
+
+        def on_delivery(message, receiver, now):
+            if receiver.id not in mobile_nodes or reply_rng.random() >= config.traffic.reply_probability:
+                return
+            env.process(reply_process(
+                env, mobile_nodes[receiver.id], message.src_id, reply_rng.uniform(*config.traffic.reply_delay_range_s),
+                mobile_nodes, config.traffic, metrics, msg_id_counter, reply_rng,
+            ))
     env.process(
         network_engine(
             env, nodes, grid, routing_algorithm, energy_model, metrics,
@@ -157,6 +169,7 @@ def run_simulation(
             beacon_config=config.beacons,
             rng=network_rng,
             event_log=history.events if history is not None else None,
+            on_delivery=on_delivery,
         )
     )
 

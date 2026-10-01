@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
-from typing import Optional
-from ..config import AreaConfig, MobilityConfig
+from typing import Optional, Tuple
+from ..config import AreaConfig, MobilityConfig, PointOfInterest
 from ..models import Position
 from .base import MobilityModel
 from .random_waypoint import move_towards
@@ -59,3 +59,14 @@ class PoiMobility(MobilityModel):
             self._pick_new_target(area)
 
         return move_towards(current, self._target, self._speed_mps, dt)
+
+
+def default_festival_pois(area: AreaConfig) -> Tuple[PointOfInterest, ...]:
+    w, h = area.width_m, area.height_m
+    r = min(w, h)
+    return (
+        PointOfInterest(x=0.25 * w, y=0.75 * h, radius_m=0.15 * r, weight=4.0),  # main stage
+        PointOfInterest(x=0.80 * w, y=0.70 * h, radius_m=0.10 * r, weight=2.0),  # second stage
+        PointOfInterest(x=0.55 * w, y=0.35 * h, radius_m=0.12 * r, weight=3.0),  # bars / food court
+        PointOfInterest(x=0.50 * w, y=0.05 * h, radius_m=0.08 * r, weight=1.0),  # entrance / toilets
+    )
