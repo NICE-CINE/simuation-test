@@ -8,8 +8,9 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.config import BeaconConfig, SimulationConfig
+from festival_ble_sim.config import AreaConfig, BeaconConfig, MobilityConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
+from festival_ble_sim.mobility.poi import PoiMobility, default_festival_pois
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -21,6 +22,7 @@ from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.routing.tide import TideRouting
+from festival_ble_sim.routing.tide_g import TideGRouting
 from festival_ble_sim.simulation import run_simulation
 
 ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
@@ -33,6 +35,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "bubble_f": BubbleFRouting,
     "managed_flood": ManagedFloodRouting,
     "tide": TideRouting,
+    "tide_g": TideGRouting,
     "fresh_spray": FreshSprayRouting,
 }
 
@@ -90,12 +93,24 @@ def append_csv_row(row: dict, path: str, write_header: bool) -> None:
         writer.writerow(row)
 
 
-def build_config(beacon_count: int, seed: int, duration_s: float, num_festivaliers: int) -> SimulationConfig:
+def build_config(
+    beacon_count: int,
+    seed: int,
+    duration_s: float,
+    num_festivaliers: int,
+    mobility: str = "random_waypoint",
+    reply_probability: float = 0.0,
+) -> SimulationConfig:
+    area = AreaConfig()
+    pois = default_festival_pois(area) if mobility == "poi" else ()
     return SimulationConfig(
         duration_s=duration_s,
         num_festivaliers=num_festivaliers,
         random_seed=seed,
+        area=area,
+        mobility=MobilityConfig(points_of_interest=pois),
         beacons=BeaconConfig(count=beacon_count),
+        traffic=TrafficConfig(reply_probability=reply_probability),
     )
 
 
@@ -116,9 +131,11 @@ def _run_one(
     seed: int,
     duration_s: float,
     num_festivaliers: int,
+    mobility: str = "random_waypoint",
+    reply_probability: float = 0.0,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
-    config = build_config(beacon_count, seed, duration_s, num_festivaliers)
+    config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
     label = run_label(algo_name, beacon_count)
     progress_callback = None
     if progress is not None:
@@ -131,6 +148,7 @@ def _run_one(
     report: SimulationReport = run_simulation(
         config,
         routing_algorithm=ALGORITHMS[algo_name](),
+        mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
         progress_callback=progress_callback,
         progress_interval_s=max(duration_s / 1000, 1.0),
     )
@@ -147,6 +165,8 @@ def run_matrix(
     workers: int = 1,
     show_progress: bool = False,
     csv_path: Optional[str] = None,
+    mobility: str = "random_waypoint",
+    reply_probability: float = 0.0,
 ) -> List[dict]:
     tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
@@ -156,7 +176,9 @@ def run_matrix(
     executor = ProcessPoolExecutor(max_workers=workers, initializer=_init_worker, initargs=(progress,))
     try:
         futures: Dict[Future, int] = {
-            executor.submit(_run_one, algo_name, count, seed, duration_s, num_festivaliers): index
+            executor.submit(
+                _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability
+            ): index
             for index, (algo_name, count) in enumerate(tasks)
         }
         pending = set(futures)
@@ -221,6 +243,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--duration", type=float, default=3600.0)
     parser.add_argument("--num-festivaliers", type=int, default=200)
     parser.add_argument("--beacon-count", type=int, default=6)
+    parser.add_argument("--mobility", choices=["random_waypoint", "poi"], default="random_waypoint")
+    parser.add_argument(
+        "--reply-probability", type=float, default=0.0,
+        help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
+    )
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele")
     parser.add_argument("--csv", default=None, help="Copie optionnelle du CSV, en plus de l'archive")
     parser.add_argument(
@@ -238,7 +265,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     write_params(
         stem.with_suffix(".json"),
         vars(args),
-        build_config(args.beacon_count, args.seed, args.duration, args.num_festivaliers),
+        build_config(
+            args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability
+        ),
     )
     rows = run_matrix(
         seed=args.seed,
@@ -248,6 +277,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         workers=args.workers,
         show_progress=True,
         csv_path=archive_csv,
+        mobility=args.mobility,
+        reply_probability=args.reply_probability,
     )
     write_csv(rows, archive_csv)
     if args.csv:

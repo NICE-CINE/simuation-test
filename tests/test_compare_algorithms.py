@@ -56,3 +56,10 @@ def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
     params = json.loads(csvs[0].with_suffix(".json").read_text(encoding="utf-8"))
     assert params["cli"]["num_festivaliers"] == 10
     assert params["config"]["duration_s"] == 30.0
+
+
+def test_run_matrix_with_poi_mobility_and_replies():
+    rows = compare_algorithms.run_matrix(
+        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, mobility="poi", reply_probability=0.5
+    )
+    assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)

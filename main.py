@@ -8,12 +8,12 @@ from festival_ble_sim.config import (
     BeaconConfig,
     ChurnConfig,
     MobilityConfig,
-    PointOfInterest,
     SimulationConfig,
+    TrafficConfig,
 )
 from festival_ble_sim.metrics import format_report
 from festival_ble_sim.mobility.base import MobilityModel
-from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.mobility.poi import PoiMobility, default_festival_pois
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
@@ -26,6 +26,7 @@ from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.routing.tide import TideRouting
+from festival_ble_sim.routing.tide_g import TideGRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
@@ -40,27 +41,17 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "bubble_f": lambda args: BubbleFRouting(),
     "managed_flood": lambda args: ManagedFloodRouting(),
     "tide": lambda args: TideRouting(seed=args.seed),
+    "tide_g": lambda args: TideGRouting(seed=args.seed),
     "fresh_spray": lambda args: FreshSprayRouting(),
 }
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
-# festival layout (see _default_festival_pois) since the mobility_factory
+# festival layout (see default_festival_pois) since the mobility_factory
 # signature only takes an RNG, not a config.
 MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Random], MobilityModel]]] = {
     "random_waypoint": lambda config: (lambda rng: RandomWaypointMobility(config.mobility, rng=rng)),
     "poi": lambda config: (lambda rng: PoiMobility(config.mobility, rng=rng)),
 }
-
-
-def _default_festival_pois(area: AreaConfig) -> Tuple[PointOfInterest, ...]:
-    w, h = area.width_m, area.height_m
-    r = min(w, h)
-    return (
-        PointOfInterest(x=0.25 * w, y=0.75 * h, radius_m=0.15 * r, weight=4.0),  # main stage
-        PointOfInterest(x=0.80 * w, y=0.70 * h, radius_m=0.10 * r, weight=2.0),  # second stage
-        PointOfInterest(x=0.55 * w, y=0.35 * h, radius_m=0.12 * r, weight=3.0),  # bars / food court
-        PointOfInterest(x=0.50 * w, y=0.05 * h, radius_m=0.08 * r, weight=1.0),  # entrance / toilets
-    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -83,6 +74,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Ecrit un replay HTML autonome (positions + evenements) vers ce chemin. "
         "Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
+    parser.add_argument(
+        "--reply-probability", type=float, default=0.0,
+        help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
+    )
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -99,7 +94,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     area = AreaConfig()
     mobility = MobilityConfig()
     if args.mobility == "poi":
-        mobility = MobilityConfig(points_of_interest=_default_festival_pois(area))
+        mobility = MobilityConfig(points_of_interest=default_festival_pois(area))
     churn = ChurnConfig(
         enabled=args.churn,
         arrival_window_s=tuple(args.churn_arrival_window_s),
@@ -113,6 +108,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         mobility=mobility,
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
         churn=churn,
+        traffic=TrafficConfig(reply_probability=args.reply_probability),
     )
 
 
