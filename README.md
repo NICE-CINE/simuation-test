@@ -239,8 +239,9 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   interrupteurs `adaptive`, `suppression` et `replicated_first_eviction`
   servent aux ablations.
 - `bubble_f` (`routing/bubble_f.py`) — BUBBLE-F, routage social inspire de
-  BUBBLE Rap : communautes amorcees par un graphe d'amis (QR) genere au
-  lancement (groupes de 2 a 8, 20 % d'utilisateurs sans ami par defaut),
+  BUBBLE Rap : communautes amorcees par le graphe d'amis (QR) partage de la
+  simulation (`SimulationConfig.social` : groupes de 2 a 8, 20 % sans ami
+  par defaut ; le meme graphe que celui du trafic),
   enrichies par SIMPLE (familiers apres 20 min de contact cumule, ajout par
   recouvrement, fusion), rangs global/local C-Window (4 fenetres de 30 min),
   budget de 8 jetons en division binaire : entrer dans la bulle du
@@ -312,8 +313,8 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
    Seule `decide()` est obligatoire. Des hooks optionnels (no-op par
    defaut) sont disponibles :
    - `on_simulation_start(nodes)` — appele une fois avant le debut du run,
-     avec tous les noeuds (ex. `routing/bubble_f.py` y genere son graphe
-     d'amis).
+     avec tous les noeuds (ex. `routing/bubble_f.py` y lit le graphe
+     d'amis via `node.friends`).
    - `on_tick(now, neighbors_by_node)` — appele a chaque tick avec toutes
      les paires a portee, meme sans message a envoyer : `decide()` seul ne
      voit que les contacts ou le porteur a un message, ce qui sous-estime

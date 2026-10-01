@@ -36,6 +36,12 @@ class Message:
     # above. None = unlimited hops (this field's real-world default is
     # unbounded; TrafficConfig.message_ttl_hops is what actually caps it).
     ttl_hops: Optional[int] = None
+    # Source's GPS reading at creation, and the source's last known position
+    # of the destination (from the destination's last message delivered to
+    # it). None = unknown: geographic algorithms must fall back.
+    src_position: Optional[Position] = None
+    dst_position: Optional[Position] = None
+    dst_position_time: Optional[float] = None
 
     def is_expired(self, now: float) -> bool:
         return (now - self.creation_time) > self.ttl_s

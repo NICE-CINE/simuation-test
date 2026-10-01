@@ -134,3 +134,16 @@ def test_network_engine_two_hop_relay_takes_two_intervals():
     report = metrics.build_report([], 0)
     assert report.messages_delivered == 1
     assert report.avg_hops == pytest.approx(2.0)
+
+
+def test_delivery_records_source_position_at_destination():
+    sender = _node(1, 0.0, 0.0)
+    dest = _node(2, 5.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(sender)
+    grid.insert(dest)
+    msg = Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=4.0, ttl_s=100.0, src_position=Position(3.0, 4.0))
+    sender.store_message(msg)
+    process_node_contacts(now=5.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(), energy_model=_energy_model(), metrics=MetricsCollector())
+    assert dest.known_positions[1] == (Position(3.0, 4.0), 4.0)
+    assert 2 not in sender.known_positions

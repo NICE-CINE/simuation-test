@@ -1,17 +1,27 @@
 from __future__ import annotations
 import pytest
-from festival_ble_sim.config import SimulationConfig
+import random
+from festival_ble_sim.config import SimulationConfig, SocialConfig
 from festival_ble_sim.models import Message, Position
 from festival_ble_sim.nodes import BaseNode, BeaconNode
 from festival_ble_sim.routing.base import RoutingDecision
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
 from festival_ble_sim.simulation import run_simulation
+from festival_ble_sim.social import assign_friend_groups
 
 
 def _node(node_id, capacity=50):
     return BaseNode(
         node_id=node_id, position=Position(0.0, 0.0), radio_range_m=20.0, buffer_capacity=capacity, battery_mah=100.0
     )
+
+
+def _people(n, group_size_range=(2, 8)):
+    nodes = {i: _node(i) for i in range(1, n + 1)}
+    config = SocialConfig(group_size_range=group_size_range, no_friend_fraction=0.0)
+    for node_id, friends in assign_friend_groups(list(nodes), config, random.Random(1)).items():
+        nodes[node_id].friends = friends
+    return nodes
 
 
 def _msg(msg_id=1, src_id=1, dst_id=99, ttl_s=100000.0):
@@ -35,15 +45,11 @@ def _decide_and_forward(algo, msg, holder, contact, now):
 def test_rejects_invalid_parameters():
     with pytest.raises(ValueError):
         BubbleFRouting(l_base=0)
-    with pytest.raises(ValueError):
-        BubbleFRouting(group_size_range=(1, 8))
-    with pytest.raises(ValueError):
-        BubbleFRouting(no_friend_fraction=1.5)
 
 
-def test_friend_groups_partition_people_and_skip_beacons():
-    algo = BubbleFRouting(group_size_range=(2, 8), no_friend_fraction=0.0, seed=1)
-    nodes = {i: _node(i) for i in range(1, 101)}
+def test_friend_groups_come_from_shared_graph_and_skip_beacons():
+    algo = BubbleFRouting()
+    nodes = _people(100)
     nodes[200] = BeaconNode(node_id=200, position=Position(0.0, 0.0), radio_range_m=50.0, buffer_capacity=50)
     algo.on_simulation_start(nodes)
     assert 200 not in algo._groups
@@ -51,17 +57,12 @@ def test_friend_groups_partition_people_and_skip_beacons():
         assert member in group
         assert 2 <= len(group) <= 8
         assert algo._community_of(member) == group
-
-
-def test_no_friend_fraction_leaves_some_people_friendless():
-    algo = BubbleFRouting(no_friend_fraction=0.5, seed=1)
-    algo.on_simulation_start({i: _node(i) for i in range(1, 101)})
-    assert len(algo._groups) <= 50
+        assert group == nodes[member].friends | {member}
 
 
 def test_disabling_friend_bootstrap_starts_from_singleton_communities():
-    algo = BubbleFRouting(no_friend_fraction=0.0, friend_bootstrap=False)
-    algo.on_simulation_start({i: _node(i) for i in range(1, 11)})
+    algo = BubbleFRouting(friend_bootstrap=False)
+    algo.on_simulation_start(_people(10))
     assert algo._groups
     assert algo._community_of(1) == {1}
 
@@ -251,8 +252,8 @@ def test_global_rank_counts_distinct_meetings_per_window():
 
 
 def test_epoch_change_keeps_friends_and_drops_other_members():
-    algo = BubbleFRouting(epoch_s=1000.0, no_friend_fraction=0.0, group_size_range=(2, 2))
-    algo.on_simulation_start({1: _node(1), 2: _node(2)})
+    algo = BubbleFRouting(epoch_s=1000.0)
+    algo.on_simulation_start(_people(2, group_size_range=(2, 2)))
     algo._ensure_epoch(1, 0.0)
     algo._community_of(1).add(42)
     algo._familiar[1] = {42}
@@ -262,8 +263,8 @@ def test_epoch_change_keeps_friends_and_drops_other_members():
 
 
 def test_community_jaccard_is_one_right_after_bootstrap():
-    algo = BubbleFRouting(no_friend_fraction=0.0)
-    algo.on_simulation_start({i: _node(i) for i in range(1, 21)})
+    algo = BubbleFRouting()
+    algo.on_simulation_start(_people(20))
     assert algo.community_jaccard() == 1.0
 
 

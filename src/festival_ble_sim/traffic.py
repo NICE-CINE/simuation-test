@@ -1,9 +1,9 @@
 from __future__ import annotations
 import random
-from typing import Dict, Iterator
+from typing import Dict, Iterator, Optional, Tuple
 from .config import TrafficConfig
 from .metrics import MetricsCollector
-from .models import Message
+from .models import Message, Position
 from .nodes import MobileNode
 
 
@@ -22,6 +22,8 @@ def generate_message(
     dst_id: int,
     config: TrafficConfig,
     rng: random.Random,
+    src_position: Optional[Position] = None,
+    dst_known: Optional[Tuple[Position, float]] = None,
 ) -> Message:
     lo, hi = config.payload_size_range_bytes
     size_bytes = rng.randint(lo, hi)
@@ -33,6 +35,9 @@ def generate_message(
         creation_time=now,
         ttl_s=config.message_ttl_s,
         ttl_hops=config.message_ttl_hops,
+        src_position=src_position,
+        dst_position=dst_known[0] if dst_known is not None else None,
+        dst_position_time=dst_known[1] if dst_known is not None else None,
     )
 
 
@@ -52,10 +57,19 @@ def traffic_process(
         yield env.timeout(sample_interval_s(rate_per_hour, rng))
         if not node.is_active:
             continue
-        candidate_ids = [dst_id for dst_id, other in nodes.items() if dst_id != node.id and other.is_active]
+        if config.friends_only:
+            if not node.friends:
+                return
+            candidate_ids = sorted(f for f in node.friends if f in nodes and nodes[f].is_active)
+        else:
+            candidate_ids = [dst_id for dst_id, other in nodes.items() if dst_id != node.id and other.is_active]
         if not candidate_ids:
             continue
         dst_id = rng.choice(candidate_ids)
-        message = generate_message(next(id_generator), env.now, node.id, dst_id, config, rng)
+        message = generate_message(
+            next(id_generator), env.now, node.id, dst_id, config, rng,
+            src_position=node.gps_position(),
+            dst_known=node.known_positions.get(dst_id),
+        )
         node.store_message(message)
         metrics.record_creation(message)

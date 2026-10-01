@@ -15,6 +15,7 @@ from .nodes import BaseNode, BeaconNode, MobileNode
 from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
+from .social import assign_friend_groups
 from .spatial import SpatialGrid
 from .traffic import traffic_process
 from .viz.history import SimulationHistory
@@ -135,6 +136,13 @@ def run_simulation(
 
         traffic_rng = random.Random(rng.randrange(1 << 30))
         env.process(traffic_process(env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng))
+
+    friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
+    gps_rng = random.Random(rng.randrange(1 << 30))
+    for node_id, mobile in mobile_nodes.items():
+        mobile.friends = friends.get(node_id, set())
+        mobile.gps_noise_std_m = config.gps.noise_std_m
+        mobile.gps_rng = gps_rng
 
     if history is not None:
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))

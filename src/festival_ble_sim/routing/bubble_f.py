@@ -1,5 +1,4 @@
 from __future__ import annotations
-import random
 from collections import deque
 from typing import Deque, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
@@ -39,9 +38,6 @@ class BubbleFRouting(RoutingAlgorithm):
         observation_interval_s: float = 10.0,
         admission_threshold: float = 0.8,
         epoch_s: Optional[float] = None,
-        group_size_range: Tuple[int, int] = (2, 8),
-        no_friend_fraction: float = 0.2,
-        seed: int = 0,
         friend_bootstrap: bool = True,
         simple_detection: bool = True,
         two_hop_relay: bool = True,
@@ -51,10 +47,6 @@ class BubbleFRouting(RoutingAlgorithm):
             raise ValueError("l_base must be >= 1")
         if window_s <= 0 or n_windows < 1:
             raise ValueError("window_s must be > 0 and n_windows >= 1")
-        if not 2 <= group_size_range[0] <= group_size_range[1]:
-            raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
-        if not 0.0 <= no_friend_fraction <= 1.0:
-            raise ValueError("no_friend_fraction must be in [0, 1]")
         self._l_base = l_base
         self._t_meet_s = t_meet_s
         self._t_fam_s = t_fam_s
@@ -71,9 +63,6 @@ class BubbleFRouting(RoutingAlgorithm):
         self._observation_interval_s = observation_interval_s
         self._admission_threshold = admission_threshold
         self._epoch_s = epoch_s
-        self._group_size_range = group_size_range
-        self._no_friend_fraction = no_friend_fraction
-        self._seed = seed
         self._friend_bootstrap = friend_bootstrap
         self._simple_detection = simple_detection
         self._two_hop_relay = two_hop_relay
@@ -106,20 +95,15 @@ class BubbleFRouting(RoutingAlgorithm):
         self.relays_by_node: Dict[int, int] = {}
 
     def on_simulation_start(self, nodes: Dict[int, "BaseNode"]) -> None:
-        rng = random.Random(self._seed)
-        people = sorted(node_id for node_id, node in nodes.items() if not getattr(node, "is_beacon", False))
-        rng.shuffle(people)
-        start = round(self._no_friend_fraction * len(people))
-        while start < len(people):
-            size = rng.randint(*self._group_size_range)
-            group = set(people[start:start + size])
-            start += size
-            if len(group) < 2:
-                break
-            for member in group:
-                self._groups[member] = group
-                if self._friend_bootstrap:
-                    self._friends[member] = group - {member}
+        # Friend groups come from the simulation's shared graph
+        # (social.assign_friend_groups), the same one traffic writes along.
+        for node_id, node in nodes.items():
+            friends = getattr(node, "friends", set())
+            if not friends:
+                continue
+            self._groups[node_id] = friends | {node_id}
+            if self._friend_bootstrap:
+                self._friends[node_id] = set(friends)
 
     def _community_of(self, node_id: int) -> Set[int]:
         community = self._community.get(node_id)

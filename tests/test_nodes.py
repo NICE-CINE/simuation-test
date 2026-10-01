@@ -89,3 +89,23 @@ def test_beacon_node_can_have_limited_power():
     beacon = BeaconNode(node_id=1, position=Position(0, 0), radio_range_m=60.0, buffer_capacity=100, unlimited_power=False, battery_mah=5.0)
     beacon.consume_energy(10.0)
     assert beacon.is_active is False
+
+
+def test_gps_position_is_exact_without_noise_and_seeded_noisy_otherwise():
+    import random
+    node = BaseNode(node_id=1, position=Position(10.0, 20.0), radio_range_m=10.0, buffer_capacity=5, battery_mah=100.0)
+    assert node.gps_position() == Position(10.0, 20.0)
+    node.gps_noise_std_m = 5.0
+    node.gps_rng = random.Random(3)
+    first = node.gps_position()
+    assert first != Position(10.0, 20.0)
+    assert first.distance_to(node.position) < 50.0
+    node.gps_rng = random.Random(3)
+    assert node.gps_position() == first
+
+
+def test_record_known_position_keeps_the_most_recent():
+    node = BaseNode(node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=5, battery_mah=100.0)
+    node.record_known_position(2, Position(1, 1), 10.0)
+    node.record_known_position(2, Position(9, 9), 5.0)
+    assert node.known_positions[2] == (Position(1, 1), 10.0)

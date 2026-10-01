@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
-from typing import Callable, Dict, Optional, Set
+import random
+from typing import Callable, Dict, Optional, Set, Tuple
 from .config import AreaConfig
 from .mobility.base import MobilityModel
 from .models import Message, Position
@@ -31,6 +32,23 @@ class BaseNode:
         self.delivered_ids: Set[int] = set()
         self.buffer_evictions = 0
         self.is_beacon = False
+        self.friends: Set[int] = set()
+        self.gps_noise_std_m = 0.0
+        self.gps_rng: Optional[random.Random] = None
+        self.known_positions: Dict[int, Tuple[Position, float]] = {}
+
+    def gps_position(self) -> Position:
+        if self.gps_noise_std_m <= 0 or self.gps_rng is None:
+            return Position(self.position.x, self.position.y)
+        return Position(
+            self.position.x + self.gps_rng.gauss(0.0, self.gps_noise_std_m),
+            self.position.y + self.gps_rng.gauss(0.0, self.gps_noise_std_m),
+        )
+
+    def record_known_position(self, node_id: int, position: Position, time: float) -> None:
+        known = self.known_positions.get(node_id)
+        if known is None or time > known[1]:
+            self.known_positions[node_id] = (position, time)
 
     def has_message(self, msg_id: int) -> bool:
         return msg_id in self.buffer or msg_id in self.delivered_ids
