@@ -140,6 +140,11 @@ class TrafficConfig:
     # the sender's SocialConfig group, and friendless people send nothing.
     # False restores a uniformly random destination among active nodes.
     friends_only: bool = True
+    # Conversations: probability that a delivered message gets a reply from
+    # its destination, after a delay drawn from reply_delay_range_s. Replies
+    # can themselves be replied to. 0.0 = no replies (previous behavior).
+    reply_probability: float = 0.0
+    reply_delay_range_s: Tuple[float, float] = (20.0, 180.0)
 
 
 @dataclass(frozen=True)
@@ -234,6 +239,8 @@ class SimulationConfig:
             raise ValueError("messages_per_hour_range must satisfy 0 <= lo <= hi")
         if self.traffic.message_ttl_hops is not None and self.traffic.message_ttl_hops < 1:
             raise ValueError("message_ttl_hops must be None or >= 1")
+        if not 0.0 <= self.traffic.reply_probability < 1.0:
+            raise ValueError("reply_probability must be in [0, 1)")
         if self.energy.background_current_ma < 0:
             raise ValueError("background_current_ma must be >= 0")
         if self.ble.transfer_rate_bytes_per_s <= 0:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 import math
+from festival_ble_sim.config import AreaConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.models import Message, Position
 from festival_ble_sim.nodes import BaseNode
 from festival_ble_sim.routing.base import RoutingDecision
 from festival_ble_sim.routing.tide_g import TideGRouting
+from festival_ble_sim.simulation import run_simulation
 
 
 def _node(node_id, x):
@@ -130,3 +132,15 @@ def test_relays_pay_for_their_gps_fixes():
     a, b = _node(2, 0.0), _node(3, 20.0)
     algo = _algo_with([a, b], {2: [b], 3: [a]}, gps_for_relays=False)
     assert a.battery_mah == 100.0 and algo.hint_stats["gps_fixes"] == 0
+
+
+def test_small_festival_with_replies_produces_hinted_deliveries():
+    config = SimulationConfig(
+        duration_s=600.0, num_festivaliers=60, random_seed=3,
+        area=AreaConfig(width_m=120.0, height_m=120.0),
+        traffic=TrafficConfig(messages_per_hour_range=(4.0, 8.0), reply_probability=0.9),
+    )
+    algo = TideGRouting(seed=3)
+    report = run_simulation(config, routing_algorithm=algo)
+    assert report.messages_delivered > 0
+    assert algo.hint_stats["delivered_hinted"] > 0 and algo.hint_stats["gps_fixes"] > 0

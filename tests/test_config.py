@@ -79,3 +79,8 @@ def test_rejects_non_positive_signal_margin_cutoff():
 def test_rejects_weak_signal_probability_outside_unit_range():
     with pytest.raises(ValueError):
         SimulationConfig(ble=BleConfig(weak_signal_max_probability=1.5))
+
+
+def test_reply_probability_must_be_below_one():
+    with pytest.raises(ValueError, match="reply_probability"):
+        SimulationConfig(traffic=TrafficConfig(reply_probability=1.0))
