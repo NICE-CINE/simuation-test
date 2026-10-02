@@ -1,0 +1,63 @@
+import csv, sys, time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+sys.path.insert(0, "scripts")
+from compare_algorithms import build_config
+from festival_ble_sim.routing.tide import TideRouting
+from festival_ble_sim.routing.tide_g import TideGRouting
+from festival_ble_sim.simulation import run_simulation
+
+N, DUR, SEEDS = 1000, 900.0, (1, 2)
+
+TIDE_VARIANTS = {
+    "default": {},
+    "l_max=6": {"l_max": 6}, "l_max=20": {"l_max": 20},
+    "l_min=1": {"l_min": 1}, "l_min=4": {"l_min": 4},
+    "rho_target=8": {"rho_target": 8.0}, "rho_target=30": {"rho_target": 30.0},
+    "rho_ref=5": {"rho_ref": 5.0}, "rho_ref=20": {"rho_ref": 20.0},
+    "w=0.2": {"w": 0.2}, "w=0.8": {"w": 0.8},
+    "tau=600": {"tau_s": 600.0}, "tau=2400": {"tau_s": 2400.0},
+    "delta=0": {"delta": 0.0}, "delta=0.15": {"delta": 0.15},
+    "syncs=2": {"max_syncs_per_minute": 2}, "syncs=10": {"max_syncs_per_minute": 10},
+    "syncs=None": {"max_syncs_per_minute": None},
+    "transitivity": {"enable_transitivity": True},
+    "reinj_fast": {"reinjection_schedule_s": (60.0, 180.0, 600.0)},
+    "no_reinjection": {"reinjection": False},
+    "no_election": {"election": False},
+    "no_islands": {"islands": False},
+    "fallback=10": {"member_fallback_s": 10.0},
+}
+TIDE_G_VARIANTS = {
+    "default": {},
+    "gps_for_relays=False": {"gps_for_relays": False},
+    "gps_period=60": {"gps_period_s": 60.0, "fix_max_age_s": 120.0},
+    "gps_period=10": {"gps_period_s": 10.0, "fix_max_age_s": 20.0},
+    "zone_tokens=1": {"zone_tokens": 1}, "zone_tokens=6": {"zone_tokens": 6},
+    "geo_lambda=50": {"geo_lambda_m": 50.0}, "geo_lambda=200": {"geo_lambda_m": 200.0},
+    "min_progress=5": {"min_progress_m": 5.0}, "min_progress=40": {"min_progress_m": 40.0},
+    "hint_max_age=1800": {"hint_max_age_s": 1800.0},
+    "no_geo_focus": {"geo_focus": False}, "no_zone_search": {"zone_search": False},
+}
+
+
+def run(algo, label, kw, seed):
+    cls = TideRouting if algo == "tide" else TideGRouting
+    r = run_simulation(build_config(10, seed, DUR, N, reply_probability=0.5), routing_algorithm=cls(**kw))
+    return dict(algo=algo, variant=label, seed=seed, delivery_ratio=r.delivery_ratio,
+                avg_latency_s=r.avg_latency_s, overhead=r.overhead,
+                energy=r.total_energy_consumed_mah, loss=r.packet_loss_count)
+
+
+if __name__ == "__main__":
+    out = sys.argv[1]
+    jobs = [("tide", k, v, s) for k, v in TIDE_VARIANTS.items() for s in SEEDS]
+    jobs += [("tide_g", k, v, s) for k, v in TIDE_G_VARIANTS.items() for s in SEEDS]
+    t0 = time.time()
+    with open(out, "w", newline="") as f, ProcessPoolExecutor(7) as ex:
+        w = None
+        futs = [ex.submit(run, *j) for j in jobs]
+        for i, fut in enumerate(as_completed(futs), 1):
+            row = fut.result()
+            if w is None:
+                w = csv.DictWriter(f, fieldnames=list(row)); w.writeheader()
+            w.writerow(row); f.flush()
+            print(f"{i}/{len(jobs)} {time.time()-t0:.0f}s", flush=True)
