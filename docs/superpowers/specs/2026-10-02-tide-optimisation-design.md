@@ -14,7 +14,7 @@ touchés.
   par défaut actuelles).
 - **Seuil de bruit :** un changement n'est retenu que si son gain moyen
   dépasse 1 point de livraison sur les seeds de réglage, avec le même signe
-  sur chaque seed.
+  sur chaque seed (seeds 1 à 4 dès l'étape de combinaison et en phase B).
 - **Validation finale :** scénario complet (4 000 festivaliers, 3 600 s,
   seed 42, 10 balises, `reply_probability=0.5`). Le nouveau défaut doit battre
   l'ancien sur la livraison, en respectant les garde-fous.
@@ -41,7 +41,8 @@ ne porte de `dst_position`, et TIDE-G se réduit à TIDE plus le coût du GPS
      `geo_lambda_m`, `min_progress_m`, `hint_max_age_s`, plus les
      interrupteurs.
 2. **Combinaison** des variantes gagnantes (au-dessus du seuil de bruit et
-   dans les garde-fous), vérifiée sur les seeds 1 à 3. Les interactions entre
+   dans les garde-fous), vérifiée sur les seeds 1 à 4 : le premier balayage
+   a montré un bruit de ±3 points entre seeds, trop pour trancher à 2 seeds. Les interactions entre
    paramètres sont vérifiées là, pas présupposées.
 3. **Nouveaux défauts** dans `TideRouting.__init__` et
    `TideGRouting.__init__`. Les tests qui supposent les anciens défauts sont
