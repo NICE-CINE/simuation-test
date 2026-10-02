@@ -11,7 +11,8 @@ du fichier) :
 - utilite `U_X(d) = e_X [w P_X(d) + (1-w) exp(-dt_X(d)/tau)]`, avec
   PRoPHET (transitivite desactivee par defaut, trop couteuse a 4000
   noeuds) et fraicheur de la derniere rencontre directe ;
-- jetons initiaux selon la densite locale, partages au prorata de
+- jetons initiaux selon la densite locale (entre `l_min=2` et `l_max=16`,
+  regle sur 4 seeds, cf. `archives/2026-10-02_*_tune_tide_combo*`), partages au prorata de
   l'utilite, puis copie unique qui avance si `U_B > U_A + delta` ;
 - ilots : tout voisin qui voit la destination recoit une copie (0 jeton) ;
 - election des relais toutes les 5 min selon densite et energie ; les
