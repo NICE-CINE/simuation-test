@@ -86,6 +86,9 @@ class GossipARouting(RoutingAlgorithm):
         self._sync_tick: Optional[float] = None
         self._now = 0.0
         self._last_prune = 0.0
+        self._ctx_holder = -1
+        self._ctx_contact = -1
+        self._ctx_now = -math.inf
 
     def _record_encounter(self, a: int, b: int, now: float) -> None:
         if self._last_seen.get(a, {}).get(b) == now:
@@ -191,15 +194,26 @@ class GossipARouting(RoutingAlgorithm):
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now
-        self._prune(now)
-        self._record_encounter(holder.id, contact.id, now)
-        self._sync_purges(holder, contact, now)
-        if message.msg_id not in holder.buffer:
+        if now - self._last_prune >= self._session_cooldown_s:
+            self._prune(now)
+        holder_id = holder.id
+        contact_id = contact.id
+        # Both calls are idempotent for a given (holder, contact, now), and the
+        # engine walks every buffered message for one contact in a row.
+        if holder_id != self._ctx_holder or contact_id != self._ctx_contact or now != self._ctx_now:
+            self._ctx_holder = holder_id
+            self._ctx_contact = contact_id
+            self._ctx_now = now
+            self._record_encounter(holder_id, contact_id, now)
+            self._sync_purges(holder, contact, now)
+        msg_id = message.msg_id
+        if msg_id not in holder.buffer:
             return RoutingDecision.IGNORE
 
-        if message.msg_id in contact.buffer:
-            self._note_holder(holder.id, message.msg_id, contact.id, now)
-            self._note_holder(contact.id, message.msg_id, holder.id, now)
+        if msg_id in contact.buffer:
+            seen = self._seen_holders
+            seen.setdefault(holder_id, {}).setdefault(msg_id, {})[contact_id] = now
+            seen.setdefault(contact_id, {}).setdefault(msg_id, {})[holder_id] = now
             return RoutingDecision.IGNORE
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
