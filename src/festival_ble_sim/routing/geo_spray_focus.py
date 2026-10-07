@@ -139,7 +139,7 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
     def _needs_gps(self, node: "BaseNode", neighbors: List["BaseNode"], now: float) -> bool:
         if self._gps_policy == "all":
             return bool(neighbors)
-        return any(self._hint(m, now) is not None for m in node.buffer.values())
+        return any(self._geo_hint(m, now) is not None for m in node.buffer.values())
 
     # --- geography --------------------------------------------------------
 
@@ -154,6 +154,12 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             c = self._hint_cell_m
             pos = Position((math.floor(pos.x / c) + 0.5) * c, (math.floor(pos.y / c) + 0.5) * c)
         return _Hint(pos, self._hint_r0_m + self._drift_mps * age)
+
+    def _geo_hint(self, message: Message, now: float) -> Optional[_Hint]:
+        hint = self._hint(message, now)
+        if hint is None or hint.radius_m > self._r_flood_m or message.routing_state.get(_ESCALATION, 0) > 0:
+            return None
+        return hint
 
     def _fix(self, node: "BaseNode", now: float) -> Optional[Position]:
         if node.is_beacon:
@@ -201,9 +207,9 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         age = now - message.creation_time
         level = 2 if age >= self._escalation[1] else 1 if age >= self._escalation[0] else 0
         if level > state[_ESCALATION]:
+            self.stats["escalations"] += level - state[_ESCALATION]
             state[_ESCALATION] = level
             state[_TOKENS] = max(state[_TOKENS], self._l_max)
-            self.stats["escalations"] += 1
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         if message.msg_id in self._delivered:
@@ -225,10 +231,9 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             return "island"
         if state[_ESCALATION] >= 2:
             return "flood"
-        hint = self._hint(message, now)
-        geo = hint is not None and hint.radius_m <= self._r_flood_m and state[_ESCALATION] == 0
-        d_a = self._distance(holder, hint, now) if geo else None
-        d_b = self._distance(contact, hint, now) if geo else None
+        hint = self._geo_hint(message, now)
+        d_a = self._distance(holder, hint, now) if hint is not None else None
+        d_b = self._distance(contact, hint, now) if hint is not None else None
 
         if state[_TOKENS] > 1:
             # Oriented spray: a contact clearly farther from the hint than the
@@ -286,6 +291,7 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             if fix is None or now - fix[1] > self._fix_max_age_s:
                 pos = dst.gps_fix()
                 dst.consume_energy(self._gps_current_ma * _ACK_FIX_S / 3600.0)
+                self.stats["gps_fixes"] += 1
                 fix = None if pos is None else (pos, now)
                 if fix is not None:
                     self._fixes[dst.id] = fix

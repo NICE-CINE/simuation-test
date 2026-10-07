@@ -13,9 +13,9 @@ def _node(node_id, x):
     )
 
 
-def _msg(dst_position=None, dst_position_time=None, creation_time=0.0, tokens=None):
+def _msg(dst_position=None, dst_position_time=None, creation_time=0.0, tokens=None, msg_id=1, src_id=1):
     msg = Message(
-        msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=creation_time, ttl_s=7200.0,
+        msg_id=msg_id, src_id=src_id, dst_id=99, size_bytes=10, creation_time=creation_time, ttl_s=7200.0,
         dst_position=dst_position, dst_position_time=dst_position_time,
     )
     if tokens is not None:
@@ -107,6 +107,53 @@ def test_source_escalates_to_more_copies_then_flooding():
     assert algo.stats["escalations"] == 2 and algo.stats["flood"] == 1
 
 
+def test_escalations_count_levels_even_when_one_is_skipped():
+    src, relay, d = _node(1, 0.0), _node(2, 20.0), _node(99, 900.0)
+    algo = _algo_with([src, relay, d], {1: [relay], 2: [src], 99: []})
+    msg = _msg(tokens=0)
+    src.store_message(msg)
+    algo.decide(msg, src, relay, 200.0)
+    assert msg.routing_state["escalation"] == 2 and algo.stats["escalations"] == 2
+
+
+def test_only_the_source_escalates_and_only_with_a_schedule():
+    src, relay, d = _node(1, 0.0), _node(2, 20.0), _node(99, 900.0)
+    algo = _algo_with([src, relay, d], {1: [relay], 2: [src], 99: []})
+    msg = _msg(tokens=1)
+    relay.store_message(msg)
+    algo.decide(msg, relay, src, 500.0)
+    assert msg.routing_state == {"tokens": 1, "escalation": 0}
+
+    algo = _algo_with([src, relay, d], {1: [relay], 2: [src], 99: []}, escalation_schedule_s=None)
+    msg = _msg(tokens=1)
+    src.store_message(msg)
+    algo.decide(msg, src, relay, 500.0)
+    assert msg.routing_state["escalation"] == 0
+
+
+def test_escalated_copy_sprays_without_geography():
+    a, far, d = _node(2, 100.0), _node(3, 170.0), _node(99, 900.0)
+    algo = _algo_with([a, far, d], {2: [far], 3: [a], 99: []})
+    msg = _msg(Position(0.0, 0.0), 1.0, tokens=8)
+    msg.routing_state["escalation"] = 1
+    a.store_message(msg)
+    assert algo.decide(msg, a, far, 1.0) is RoutingDecision.FORWARD
+
+
+def test_eviction_drops_delivered_then_fewest_tokens_then_most_hops_never_own():
+    node, d = _node(5, 0.0), _node(99, 900.0)
+    algo = _algo_with([node, d], {5: [], 99: []})
+    own = _msg(tokens=1, msg_id=10, src_id=5)
+    rich = _msg(tokens=4, msg_id=11, src_id=7)
+    poor_near = _msg(tokens=1, msg_id=12, src_id=7)
+    poor_far = Message(**{**_msg(tokens=1, msg_id=13, src_id=7).__dict__, "hops": 3})
+    for m in (own, rich, poor_near, poor_far):
+        node.store_message(m)
+    assert algo.choose_eviction(node, 1.0) == 13
+    algo.on_delivered(rich, node)
+    assert algo.choose_eviction(node, 1.0) == 11
+
+
 def test_delivery_purges_every_copy_and_returns_the_destination_position():
     src, relay, other, d = _node(1, 0.0), _node(2, 20.0), _node(3, 40.0), _node(99, 60.0)
     ticks = {1: [relay], 2: [src, other], 3: [relay, d], 99: [other]}
@@ -130,6 +177,24 @@ def test_carriers_policy_only_fixes_nodes_carrying_a_hinted_message():
     algo = _algo_with([a, b], {2: [b], 3: [a]}, gps_policy="carriers", gps_current_ma=36.0)
     assert abs(a.battery_mah - 99.7) < 1e-9 and b.battery_mah == 100.0
     assert algo.stats["gps_fixes"] == 1
+
+
+def test_carriers_policy_skips_messages_that_no_longer_use_geography():
+    a, b = _node(2, 0.0), _node(3, 20.0)
+    msg = _msg(Position(400.0, 0.0), 1.0, tokens=1)
+    msg.routing_state["escalation"] = 1
+    a.store_message(msg)
+    algo = _algo_with([a, b], {2: [b], 3: [a]}, gps_policy="carriers")
+    assert a.battery_mah == 100.0 and algo.stats["gps_fixes"] == 0
+
+
+def test_ack_cold_fix_is_billed_and_counted():
+    src, relay, d = _node(1, 0.0), _node(2, 20.0), _node(99, 40.0)
+    ticks = {1: [relay], 2: [src, d], 99: [relay]}
+    algo = _algo_with([src, relay, d], ticks, gps_policy="carriers", gps_current_ma=36.0)
+    algo.on_tick(10.0, ticks)
+    algo.on_delivered(_msg(creation_time=4.0, tokens=1), relay)
+    assert abs(d.battery_mah - 99.95) < 1e-9 and algo.stats["gps_fixes"] == 1
 
 
 def test_small_festival_delivers_with_hints():
