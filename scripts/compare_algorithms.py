@@ -18,6 +18,7 @@ from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
 from festival_ble_sim.routing.dasfv import DasfVRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
+from festival_ble_sim.routing.geo_spray_focus import GeoSprayFocusRouting
 from festival_ble_sim.routing.gossip_a import GossipARouting
 from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
 from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
@@ -40,6 +41,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "tide_g": TideGRouting,
     "tide_g2": lambda: TideGRouting(**TIDE_G2_KWARGS),
     "fresh_spray": FreshSprayRouting,
+    "geo_spray_focus": GeoSprayFocusRouting,
 }
 
 REPORT_FIELDS = [
