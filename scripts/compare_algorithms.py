@@ -8,7 +8,9 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.config import AreaConfig, BeaconConfig, MobilityConfig, SimulationConfig, TrafficConfig
+from festival_ble_sim.config import (
+    AreaConfig, BeaconConfig, GpsConfig, MobilityConfig, SimulationConfig, TrafficConfig,
+)
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility, default_festival_pois
 from festival_ble_sim.routing.base import RoutingAlgorithm
@@ -22,7 +24,7 @@ from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.routing.tide import TideRouting
-from festival_ble_sim.routing.tide_g import TideGRouting
+from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
 
 ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
@@ -36,6 +38,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "managed_flood": ManagedFloodRouting,
     "tide": TideRouting,
     "tide_g": TideGRouting,
+    "tide_g2": lambda: TideGRouting(**TIDE_G2_KWARGS),
     "fresh_spray": FreshSprayRouting,
 }
 
@@ -100,6 +103,8 @@ def build_config(
     num_festivaliers: int,
     mobility: str = "random_waypoint",
     reply_probability: float = 0.0,
+    followup_probability: float = 0.0,
+    gps_fix_failure: float = 0.0,
 ) -> SimulationConfig:
     area = AreaConfig()
     pois = default_festival_pois(area) if mobility == "poi" else ()
@@ -110,7 +115,8 @@ def build_config(
         area=area,
         mobility=MobilityConfig(points_of_interest=pois),
         beacons=BeaconConfig(count=beacon_count),
-        traffic=TrafficConfig(reply_probability=reply_probability),
+        traffic=TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability),
+        gps=GpsConfig(fix_failure_probability=gps_fix_failure),
     )
 
 
@@ -133,9 +139,14 @@ def _run_one(
     num_festivaliers: int,
     mobility: str = "random_waypoint",
     reply_probability: float = 0.0,
+    followup_probability: float = 0.0,
+    gps_fix_failure: float = 0.0,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
-    config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
+    config = build_config(
+        beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
+        followup_probability, gps_fix_failure,
+    )
     label = run_label(algo_name, beacon_count)
     progress_callback = None
     if progress is not None:
@@ -167,6 +178,8 @@ def run_matrix(
     csv_path: Optional[str] = None,
     mobility: str = "random_waypoint",
     reply_probability: float = 0.0,
+    followup_probability: float = 0.0,
+    gps_fix_failure: float = 0.0,
 ) -> List[dict]:
     tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
@@ -177,7 +190,8 @@ def run_matrix(
     try:
         futures: Dict[Future, int] = {
             executor.submit(
-                _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability
+                _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
+                followup_probability, gps_fix_failure,
             ): index
             for index, (algo_name, count) in enumerate(tasks)
         }
@@ -248,6 +262,14 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--reply-probability", type=float, default=0.0,
         help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
     )
+    parser.add_argument(
+        "--followup-probability", type=float, default=0.0,
+        help="Probabilite qu'un message spontane soit suivi d'une relance au meme destinataire (0 = pas de rafales)",
+    )
+    parser.add_argument(
+        "--gps-fix-failure", type=float, default=0.0,
+        help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
+    )
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele")
     parser.add_argument("--csv", default=None, help="Copie optionnelle du CSV, en plus de l'archive")
     parser.add_argument(
@@ -266,7 +288,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         stem.with_suffix(".json"),
         vars(args),
         build_config(
-            args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability
+            args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
+            args.followup_probability, args.gps_fix_failure,
         ),
     )
     rows = run_matrix(
@@ -279,6 +302,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         csv_path=archive_csv,
         mobility=args.mobility,
         reply_probability=args.reply_probability,
+        followup_probability=args.followup_probability,
+        gps_fix_failure=args.gps_fix_failure,
     )
     write_csv(rows, archive_csv)
     if args.csv:

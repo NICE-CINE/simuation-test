@@ -49,6 +49,7 @@ def traffic_process(
     metrics: MetricsCollector,
     id_generator: Iterator[int],
     rng: random.Random,
+    followup_rng: Optional[random.Random] = None,
 ):
     rate_per_hour = sample_message_rate_per_hour(config, rng)
     if rate_per_hour <= 0:
@@ -68,11 +69,31 @@ def traffic_process(
         dst_id = rng.choice(candidate_ids)
         message = generate_message(
             next(id_generator), env.now, node.id, dst_id, config, rng,
-            src_position=node.gps_position(),
+            src_position=node.gps_fix(),
             dst_known=node.known_positions.get(dst_id),
         )
         node.store_message(message)
         metrics.record_creation(message)
+        if followup_rng is not None and config.followup_probability > 0:
+            env.process(followup_process(env, node, dst_id, nodes, config, metrics, id_generator, followup_rng))
+
+
+def followup_process(
+    env,
+    node: MobileNode,
+    dst_id: int,
+    nodes: Dict[int, MobileNode],
+    config: TrafficConfig,
+    metrics: MetricsCollector,
+    id_generator: Iterator[int],
+    rng: random.Random,
+):
+    while rng.random() < config.followup_probability:
+        delay_s = rng.uniform(*config.followup_delay_range_s)
+        yield from reply_process(env, node, dst_id, delay_s, nodes, config, metrics, id_generator, rng)
+        target = nodes.get(dst_id)
+        if not node.is_active or target is None or not target.is_active:
+            return
 
 
 def reply_process(
@@ -92,7 +113,7 @@ def reply_process(
         return
     message = generate_message(
         next(id_generator), env.now, node.id, dst_id, config, rng,
-        src_position=node.gps_position(),
+        src_position=node.gps_fix(),
         dst_known=node.known_positions.get(dst_id),
     )
     node.store_message(message)

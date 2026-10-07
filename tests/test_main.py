@@ -43,7 +43,7 @@ def test_build_config_churn_disabled_by_default():
 
 def test_routing_factories_cover_every_cli_choice():
     args = main_module.build_arg_parser().parse_args([])
-    for name in ["epidemic", "spray_wait", "prophet", "beacon_priority", "dasfv", "gossip_a", "bubble_f", "managed_flood", "tide"]:
+    for name in sorted(main_module.ROUTING_FACTORIES):
         args.routing = name
         algo = main_module.ROUTING_FACTORIES[name](args)
         assert algo is not None
@@ -141,3 +141,13 @@ def test_main_archives_report_and_params_named_after_date_and_algo(tmp_path):
     assert params["cli"]["routing"] == "prophet"
     assert params["config"]["random_seed"] == 3
     assert params["config"]["num_festivaliers"] == 10
+
+
+def test_tide_g2_cli_wires_followups_and_fix_failures():
+    args = main_module.build_arg_parser().parse_args(
+        ["--routing", "tide_g2", "--followup-probability", "0.3", "--gps-fix-failure", "0.1"]
+    )
+    config = main_module.build_config(args)
+    assert config.traffic.followup_probability == 0.3
+    assert config.gps.fix_failure_probability == 0.1
+    assert main_module.ROUTING_FACTORIES["tide_g2"](args)._ack_hint

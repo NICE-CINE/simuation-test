@@ -63,3 +63,12 @@ def test_run_matrix_with_poi_mobility_and_replies():
         seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, mobility="poi", reply_probability=0.5
     )
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
+
+
+def test_build_config_wires_followups_and_fix_failures():
+    config = compare_algorithms.build_config(
+        0, 1, 60.0, 10, followup_probability=0.3, gps_fix_failure=0.1
+    )
+    assert config.traffic.followup_probability == 0.3
+    assert config.gps.fix_failure_probability == 0.1
+    assert "tide_g2" in compare_algorithms.ALGORITHMS

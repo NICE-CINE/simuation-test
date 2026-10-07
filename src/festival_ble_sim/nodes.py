@@ -35,6 +35,7 @@ class BaseNode:
         self.friends: Set[int] = set()
         self.gps_noise_std_m = 0.0
         self.gps_rng: Optional[random.Random] = None
+        self.gps_fix_failure_probability = 0.0
         self.known_positions: Dict[int, Tuple[Position, float]] = {}
 
     def gps_position(self) -> Position:
@@ -44,6 +45,15 @@ class BaseNode:
             self.position.x + self.gps_rng.gauss(0.0, self.gps_noise_std_m),
             self.position.y + self.gps_rng.gauss(0.0, self.gps_noise_std_m),
         )
+
+    def gps_fix(self) -> Optional[Position]:
+        if (
+            self.gps_fix_failure_probability > 0
+            and self.gps_rng is not None
+            and self.gps_rng.random() < self.gps_fix_failure_probability
+        ):
+            return None
+        return self.gps_position()
 
     def record_known_position(self, node_id: int, position: Position, time: float) -> None:
         known = self.known_positions.get(node_id)
