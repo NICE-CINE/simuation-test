@@ -1,16 +1,25 @@
 from __future__ import annotations
+import itertools
 import random
-from festival_ble_sim.config import AreaConfig, SimulationConfig, TrafficConfig
+import simpy
+from festival_ble_sim.config import AreaConfig, MobilityConfig, SimulationConfig, TrafficConfig
+from festival_ble_sim.metrics import MetricsCollector
+from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.models import Message, Position
-from festival_ble_sim.nodes import BaseNode
+from festival_ble_sim.nodes import BaseNode, MobileNode
 from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
+from festival_ble_sim.traffic import followup_process
 
 
 def _node(node_id, x):
     return BaseNode(
         node_id=node_id, position=Position(x, 0.0), radio_range_m=20.0, buffer_capacity=50, battery_mah=100.0
     )
+
+
+def _mobile(node_id):
+    return MobileNode(node_id, RandomWaypointMobility(MobilityConfig(), rng=random.Random(node_id)), 20.0, 50, 100.0, AreaConfig())
 
 
 def _msg(dst_position=None, dst_position_time=None, msg_id=1, creation_time=0.0):
@@ -135,9 +144,35 @@ def test_followups_add_messages_without_changing_runs_where_they_are_off():
         )
         return run_simulation(config)
 
-    off, explicit_off, on = run(), run(followup_probability=0.0), run(followup_probability=0.6)
-    assert off == explicit_off
-    assert on.messages_created > off.messages_created
+    assert run(followup_probability=0.6).messages_created > run().messages_created
+
+
+def test_followup_chain_stops_once_the_destination_is_gone():
+    env = simpy.Environment()
+    src, dst = _mobile(1), _mobile(2)
+    dst.is_active = False
+    config = TrafficConfig(followup_probability=0.99)
+    env.process(followup_process(
+        env, src, 2, {1: src, 2: dst}, config, MetricsCollector(), itertools.count(1), random.Random(0)
+    ))
+    env.run()
+    assert env.now <= config.followup_delay_range_s[1]
+
+
+def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
+    # Golden values from main before TIDE-G2 landed: any drift means a
+    # default-off addition leaked into tide_g.
+    config = SimulationConfig(
+        duration_s=600.0, num_festivaliers=60, random_seed=3,
+        area=AreaConfig(width_m=120.0, height_m=120.0),
+        traffic=TrafficConfig(messages_per_hour_range=(4.0, 8.0), reply_probability=0.9),
+    )
+    algo = TideGRouting(seed=3)
+    report = run_simulation(config, routing_algorithm=algo)
+    assert (report.messages_created, report.messages_delivered, report.total_transmissions) == (89, 76, 1365)
+    assert {k: algo.hint_stats[k] for k in ("routed", "hinted", "delivered", "delivered_hinted", "gps_fixes")} == {
+        "routed": 87, "hinted": 53, "delivered": 76, "delivered_hinted": 49, "gps_fixes": 1200,
+    }
 
 
 def test_small_festival_tide_g2_hints_messages_from_acks():

@@ -91,6 +91,9 @@ def followup_process(
     while rng.random() < config.followup_probability:
         delay_s = rng.uniform(*config.followup_delay_range_s)
         yield from reply_process(env, node, dst_id, delay_s, nodes, config, metrics, id_generator, rng)
+        target = nodes.get(dst_id)
+        if not node.is_active or target is None or not target.is_active:
+            return
 
 
 def reply_process(
