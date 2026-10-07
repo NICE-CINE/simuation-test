@@ -119,7 +119,7 @@ Les seuils 60 s et 180 s visent l'objectif du cahier des charges : livraison par
 
 ### 2.7 Éviction
 
-Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, puis ceux à moins de jetons, puis ceux qui ont fait le plus de sauts. Les messages dont le nœud est la source ne sont jamais évincés.
+Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, puis ceux à moins de jetons, puis ceux qui ont fait le plus de sauts. Les messages dont le nœud est la source ne sont évincés qu'en dernier recours : si le buffer ne contient plus qu'eux, le moteur retombe sur son éviction FIFO (comme pour TIDE).
 
 ### 2.8 Paramètres
 
@@ -152,10 +152,11 @@ Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, pu
 | Fichier | Changement |
 |---|---|
 | `src/festival_ble_sim/routing/geo_spray_focus.py` | Nouveau : `GeoSprayFocusRouting` |
-| `tests/test_routing_geo_spray_focus.py` | Nouveau : 9 tests |
+| `tests/test_routing_geo_spray_focus.py` | Nouveau : 15 tests |
 | `main.py` | `"geo_spray_focus": lambda args: GeoSprayFocusRouting()` dans `ROUTING_FACTORIES` |
 | `scripts/compare_algorithms.py` | `"geo_spray_focus": GeoSprayFocusRouting` dans `ALGORITHMS` |
 | `CLAUDE.md` | Entrée `geo_spray_focus` dans la liste des algorithmes |
+| `README.md` | `--routing geo_spray_focus`, matrice de comparaison, entrée dans la liste des algorithmes |
 | `docs/GSF.md` | Ce document |
 
 ```bash
@@ -188,10 +189,10 @@ def _reason(self, message, holder, contact, now):
         return "island"
     if state[_ESCALATION] >= 2:
         return "flood"
-    hint = self._hint(message, now)
-    geo = hint is not None and hint.radius_m <= self._r_flood_m and state[_ESCALATION] == 0
-    d_a = self._distance(holder, hint, now) if geo else None
-    d_b = self._distance(contact, hint, now) if geo else None
+    # Hint usable for geography: present, r(h) <= r_flood, escalation 0.
+    hint = self._geo_hint(message, now)
+    d_a = self._distance(holder, hint, now) if hint is not None else None
+    d_b = self._distance(contact, hint, now) if hint is not None else None
 
     if state[_TOKENS] > 1:
         # Oriented spray: a contact clearly farther from the hint than the
@@ -214,11 +215,12 @@ Escalade, côté source, avant chaque décision :
 age = now - message.creation_time
 level = 2 if age >= self._escalation[1] else 1 if age >= self._escalation[0] else 0
 if level > state[_ESCALATION]:
+    self.stats["escalations"] += level - state[_ESCALATION]
     state[_ESCALATION] = level
     state[_TOKENS] = max(state[_TOKENS], self._l_max)
 ```
 
-Statistiques exposées dans `algo.stats` : `routed`, `hinted`, `spray`, `focus_geo`, `focus_encounter`, `island`, `flood`, `escalations`, `gps_fixes`, `ack_hints`.
+Statistiques exposées dans `algo.stats` : `routed`, `hinted`, `spray`, `focus_geo`, `focus_encounter`, `island`, `flood`, `escalations` (niveaux franchis : un message routé pour la première fois après 180 s en compte 2), `gps_fixes` (fixes périodiques et fixes d'ACK), `ack_hints`. En mode `carriers`, seul un porteur d'un message dont l'indice sert encore à la géographie (même prédicat `_geo_hint` que la décision) prend un fix.
 
 ### 3.3 Tests (`tests/test_routing_geo_spray_focus.py`)
 
@@ -231,7 +233,13 @@ Statistiques exposées dans `algo.stats` : `routed`, `hinted`, `spray`, `focus_g
 | `test_contact_next_to_the_destination_gets_a_copy` | Règle des îlots, copie à 0 jeton |
 | `test_source_escalates_to_more_copies_then_flooding` | 60 s : 12 jetons ; 180 s : niveau 2 |
 | `test_delivery_purges_every_copy_and_returns_the_destination_position` | Purge au tick suivant ; position d'ACK reçue après le trajet retour |
+| `test_escalations_count_levels_even_when_one_is_skipped` | Premier routage à 200 s : niveau 2, deux escalades comptées |
+| `test_only_the_source_escalates_and_only_with_a_schedule` | Un relais n'escalade jamais ; `escalation_schedule_s=None` : pas d'escalade |
+| `test_escalated_copy_sprays_without_geography` | Au niveau 1, le spray orienté est désactivé |
+| `test_eviction_drops_delivered_then_fewest_tokens_then_most_hops_never_own` | Ordre du §2.7 |
 | `test_carriers_policy_only_fixes_nodes_carrying_a_hinted_message` | `gps_policy="carriers"` : seul le porteur paie un fix |
+| `test_carriers_policy_skips_messages_that_no_longer_use_geography` | Message escaladé : pas de fix en mode `carriers` |
+| `test_ack_cold_fix_is_billed_and_counted` | Fix d'ACK de 5 s facturé et compté dans `gps_fixes` |
 | `test_small_festival_delivers_with_hints` | Intégration : livraisons, indices et positions d'ACK non nuls |
 
 ---
