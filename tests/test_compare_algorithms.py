@@ -72,3 +72,11 @@ def test_build_config_wires_followups_and_fix_failures():
     assert config.traffic.followup_probability == 0.3
     assert config.gps.fix_failure_probability == 0.1
     assert "tide_g2" in compare_algorithms.ALGORITHMS
+
+
+def test_geo_spray_focus_is_registered_in_both_scripts():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import main as main_module
+
+    assert "geo_spray_focus" in compare_algorithms.ALGORITHMS
+    assert "geo_spray_focus" in main_module.ROUTING_FACTORIES

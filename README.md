@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray` ou `geo_spray_focus` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -52,7 +52,7 @@ Options disponibles :
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -323,6 +323,19 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   vers le reseau de bornes + purge globale des messages livres. Vise a la
   fois livraison, latence et energie ; details dans
   `docs/algorithmes/fresh_spray.md`.
+- `geo_spray_focus` (`routing/geo_spray_focus.py`) — GSF, Spray-and-Focus
+  autonome guide par la derniere position connue du destinataire : budget
+  de 2 a 12 copies selon l'aire d'incertitude de l'indice, spray refuse a
+  un voisin nettement plus loin de l'indice, derniere copie passee a un
+  voisin au moins 15 m plus pres (sinon a qui a croise le destinataire le
+  plus recemment), regle des ilots. La source escalade un message non
+  livre : 12 jetons sans geographie a 60 s, puis inondation a 180 s
+  (bornee par le TTL de 8 sauts). Purge au tick suivant la livraison,
+  position du destinataire renvoyee dans l'ACK. `stats` donne la
+  repartition des transmissions par raison. Le gain mesure vient de
+  l'inondation tardive, pas de la geographie : variante sans GPS
+  `GeoSprayFocusRouting(hint_max_age_s=1e-9, gps_policy="carriers",
+  ack_hint=False)`. Spec dans `docs/GSF.md`.
 
 ## Ajouter un nouvel algorithme de routage
 
