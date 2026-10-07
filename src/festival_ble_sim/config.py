@@ -145,6 +145,11 @@ class TrafficConfig:
     # can themselves be replied to. 0.0 = no replies (previous behavior).
     reply_probability: float = 0.0
     reply_delay_range_s: Tuple[float, float] = (20.0, 180.0)
+    # Bursts: after each spontaneous message, the sender writes again to the
+    # same destination with this probability (geometric chain), after a
+    # delay drawn from followup_delay_range_s. 0.0 = off (previous behavior).
+    followup_probability: float = 0.0
+    followup_delay_range_s: Tuple[float, float] = (10.0, 120.0)
 
 
 @dataclass(frozen=True)
@@ -159,6 +164,9 @@ class GpsConfig:
     # Phone GPS error, resampled on every read. Typical outdoor smartphone
     # accuracy; 0.0 gives exact positions. Beacons always read exact.
     noise_std_m: float = 5.0
+    # Probability that a fix attempt yields nothing (indoors, cold start,
+    # crowd). Drawn only when > 0, so runs without it are unchanged.
+    fix_failure_probability: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -241,6 +249,11 @@ class SimulationConfig:
             raise ValueError("message_ttl_hops must be None or >= 1")
         if not 0.0 <= self.traffic.reply_probability < 1.0:
             raise ValueError("reply_probability must be in [0, 1)")
+        if not 0.0 <= self.traffic.followup_probability < 1.0:
+            raise ValueError("followup_probability must be in [0, 1)")
+        followup_lo, followup_hi = self.traffic.followup_delay_range_s
+        if followup_lo < 0 or followup_hi < followup_lo:
+            raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")
         if self.energy.background_current_ma < 0:
             raise ValueError("background_current_ma must be >= 0")
         if self.ble.transfer_rate_bytes_per_s <= 0:
@@ -287,6 +300,8 @@ class SimulationConfig:
             raise ValueError("no_friend_fraction must be within [0, 1]")
         if self.gps.noise_std_m < 0:
             raise ValueError("gps noise_std_m must be >= 0")
+        if not 0.0 <= self.gps.fix_failure_probability < 1.0:
+            raise ValueError("gps fix_failure_probability must be in [0, 1)")
         for radio in (self.ble.phone_radio, self.ble.beacon_radio):
             if radio.path_loss_exponent <= 0:
                 raise ValueError("path_loss_exponent must be positive")

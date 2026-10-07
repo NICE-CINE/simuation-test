@@ -111,6 +111,11 @@ def run_simulation(
 
     mobile_nodes: Dict[int, MobileNode] = {}
     msg_id_counter = itertools.count(1)
+    # Seeded apart from rng (str seeds are deterministic), so enabling
+    # followups never shifts any existing draw.
+    followup_rng = (
+        random.Random(f"{config.random_seed}-followup") if config.traffic.followup_probability > 0 else None
+    )
     for _ in range(config.num_festivaliers):
         node_id = next(id_counter)
         node_rng = random.Random(rng.randrange(1 << 30))
@@ -135,7 +140,9 @@ def run_simulation(
                 env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
 
         traffic_rng = random.Random(rng.randrange(1 << 30))
-        env.process(traffic_process(env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng))
+        env.process(traffic_process(
+            env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng, followup_rng
+        ))
 
     friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
     gps_rng = random.Random(rng.randrange(1 << 30))
@@ -143,6 +150,7 @@ def run_simulation(
         mobile.friends = friends.get(node_id, set())
         mobile.gps_noise_std_m = config.gps.noise_std_m
         mobile.gps_rng = gps_rng
+        mobile.gps_fix_failure_probability = config.gps.fix_failure_probability
 
     if history is not None:
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
