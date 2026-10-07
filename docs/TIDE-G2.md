@@ -109,6 +109,8 @@ Non modélisé : la corrélation des échecs (zones couvertes, foule compacte) e
 
 Après chaque message spontané, l'émetteur relance **le même destinataire** avec la probabilité `followup_probability`, après un délai tiré dans `followup_delay_range_s` (10–120 s par défaut). La chaîne est géométrique : une rafale compte en moyenne `1 / (1 − p)` messages.
 
+La chaîne s'arrête dès que l'émetteur ou le destinataire n'est plus actif au moment d'une relance.
+
 C'est la situation typique « t'es où ? » puis « on est devant la grande scène » une minute après. Sans elle, l'ajout 1 ne peut presque rien montrer.
 
 Le générateur aléatoire des rafales est seedé à part (`random.Random(f"{seed}-followup")`, déterministe) et n'existe que si p > 0 : activer les rafales ne décale aucun autre tirage.
@@ -571,5 +573,6 @@ Ablations, sur la densité où TIDE-G2 se distingue le plus :
 - **Le gain dépend du trafic.** Tout repose sur la part de messages qui ont un indice. Elle dépend des relances et des réponses, dont les taux réels en festival sont inconnus. À instrumenter dans l'appli (de façon anonyme) dès les premiers tests terrain.
 - **ACK instantané dans le moteur.** La purge réseau reste instantanée ; seule la position de l'ACK est retardée. Si un jour l'ACK est simulé comme un vrai paquet, `ack_hint_delay_factor` disparaît au profit de son temps de trajet réel.
 - **Coût GPS.** Les fixes ponctuels s'ajoutent aux fixes périodiques des relais. Avec `gps_for_relays=True`, la plupart des sources et destinataires ont déjà un fix frais, donc le surcoût est faible ; avec `gps_for_relays=False`, il devient le coût principal.
+- **Fix d'envoi découplé de `src_position`.** Le fix facturé (§2.5) est pris au premier routage par la source, pas à la création, et c'est un tirage distinct du `gps_fix()` qui remplit `src_position`. Avec `fix_failure_probability > 0`, l'un peut échouer sans l'autre, et un message livré directement au destinataire (sans `decide`) ne paie rien. Effet négligeable sur l'énergie, à garder en tête pour les ablations d'échec de fix.
 - **Échecs de fix indépendants.** Le modèle tire chaque échec indépendamment. En réalité, ils sont corrélés (une personne sous une tente échoue plusieurs fois de suite), ce qui est plus défavorable.
 - **Densité.** Les résultats du §5 sont à densité modérée (≈ 1 140 personnes/km²), où le réseau est souvent coupé. Ils sont à refaire à la densité de référence de TIDE-G (≈ 11 400/km²) avant toute conclusion pour la thèse.
