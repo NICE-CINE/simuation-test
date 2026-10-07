@@ -23,9 +23,14 @@ pytest tests/test_network.py::test_network_engine_two_hop_relay_takes_two_interv
 # Compare every routing algo x {with, without beacons}, same seed, in parallel
 python scripts/compare_algorithms.py --seed 42 --duration 3600 \
     --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv out.csv]
+
+# Sweep fresh_spray's initial_tokens over seeds (per-token means at the end)
+python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
+    --duration 10800 --num-festivaliers 5000 --beacon-count 6 --workers 12 \
+    --mobility poi --reply-probability 0.5
 ```
 
-Every run of either script is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `<...>_comparaison.csv` for the comparison, each with a same-named `.json` holding the CLI args *and* the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run). `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
+Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), each with a same-named `.json` holding the CLI args *and* the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run). `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
 
 No lint/format tooling is configured (no ruff/black/mypy config in `pyproject.toml`).
 
