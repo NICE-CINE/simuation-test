@@ -7,6 +7,7 @@ from festival_ble_sim.config import (
     AreaConfig,
     BeaconConfig,
     ChurnConfig,
+    GpsConfig,
     MobilityConfig,
     SimulationConfig,
     TrafficConfig,
@@ -26,7 +27,7 @@ from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.routing.prophet import ProphetRouting
 from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
 from festival_ble_sim.routing.tide import TideRouting
-from festival_ble_sim.routing.tide_g import TideGRouting
+from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
@@ -42,6 +43,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "managed_flood": lambda args: ManagedFloodRouting(),
     "tide": lambda args: TideRouting(seed=args.seed),
     "tide_g": lambda args: TideGRouting(seed=args.seed),
+    "tide_g2": lambda args: TideGRouting(seed=args.seed, **TIDE_G2_KWARGS),
     "fresh_spray": lambda args: FreshSprayRouting(),
 }
 
@@ -78,6 +80,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--reply-probability", type=float, default=0.0,
         help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
     )
+    parser.add_argument(
+        "--followup-probability", type=float, default=0.0,
+        help="Probabilite qu'un message spontane soit suivi d'une relance au meme destinataire (0 = pas de rafales)",
+    )
+    parser.add_argument(
+        "--gps-fix-failure", type=float, default=0.0,
+        help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
+    )
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -108,7 +118,10 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         mobility=mobility,
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
         churn=churn,
-        traffic=TrafficConfig(reply_probability=args.reply_probability),
+        traffic=TrafficConfig(
+            reply_probability=args.reply_probability, followup_probability=args.followup_probability
+        ),
+        gps=GpsConfig(fix_failure_probability=args.gps_fix_failure),
     )
 
 
