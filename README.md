@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
@@ -39,6 +39,9 @@ Options disponibles :
 - `--reply-probability P` : probabilite qu'un message livre recoive une
   reponse du destinataire apres 20 a 180 s (defaut 0, pas de reponses) ;
   necessaire pour que `tide_g` ait des indices de position
+- `--followup-probability P` : probabilite qu'un message soit suivi d'une
+  relance au meme destinataire apres 10 a 120 s (defaut 0, pas de rafales)
+- `--gps-fix-failure P` : probabilite qu'un fix GPS echoue (defaut 0)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -46,7 +49,7 @@ Options disponibles :
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
-        [--mobility poi] [--reply-probability 0.5]
+        [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, fresh_spray} x {avec/sans bornes} avec le meme seed pour chaque run
