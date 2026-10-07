@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2` ou `fresh_spray` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray` ou `geo_spray_focus` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
