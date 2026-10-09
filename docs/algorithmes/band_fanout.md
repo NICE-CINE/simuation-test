@@ -1,6 +1,7 @@
 # `band_fanout` — Eventail borne sur une bande de distance + purge
 
 Fichier : `src/festival_ble_sim/routing/band_fanout.py`
+Spec : `docs/algorithmes/specs/BAND-FANOUT.md`
 Hook moteur associe : `RoutingAlgorithm.select_links` (`routing/base.py`)
 Balayage de variantes : `scripts/sweep_band_fanout.py`
 
@@ -62,7 +63,10 @@ flowchart TD
 | `purge_delivered` | True | purge globale a la livraison |
 
 Un arbre complet de copies peut atteindre `1 + 3 + 3^2 + 3^3 + 3^4 = 121`
-porteurs avec les defauts.
+porteurs avec les defauts. Cette borne n'est pas stricte : chaque borne
+qui recoit une copie par le backhaul repart avec un budget neuf (meme
+nombre de sauts), et un noeud qui a perdu sa copie par eviction aussi
+s'il la recoit de nouveau.
 
 ## Ecarts avec un vrai protocole
 
@@ -80,6 +84,10 @@ porteurs avec les defauts.
 `scripts/sweep_band_fanout.py`, mobilite `poi`, 500 festivaliers, 3600 s,
 6 bornes, `reply_probability` 0.5, moyenne des seeds 1-3. Archive :
 `archives/2026-10-09_09-47-35_sweep_band_fanout.csv` (+ `.json`).
+
+Attention : ce balayage date d'avant le correctif `d775dbc` (liaisons
+reservees aux destinataires, budget par porteur, voisins inutiles ecartes) ;
+les chiffres ne correspondent pas exactement au code actuel.
 
 | variante | livraison | latence moy. (s) | p95 (s) | overhead | energie (mAh) |
 |---|---|---|---|---|---|

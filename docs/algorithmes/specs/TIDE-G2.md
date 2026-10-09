@@ -2,7 +2,7 @@
 
 TIDE-G2 n'est pas un nouvel algorithme : c'est **TIDE-G avec cinq ajouts activables un par un**, plus deux réalismes côté moteur (échec du fix GPS, rafales de messages). Tous les ajouts sont **désactivés par défaut** : `tide_g` donne exactement les mêmes résultats qu'avant. `tide_g2` est le preset qui active la combinaison retenue.
 
-Ce document suppose connus TIDE (`docs/algorithmes/tide.md`) et TIDE-G (`docs/TIDE-G.md`). Il ne décrit que le delta.
+Ce document suppose connus TIDE (`docs/algorithmes/tide.md`) et TIDE-G (`docs/algorithmes/specs/TIDE-G.md`). Il ne décrit que le delta.
 
 > **Statut** : implémenté (`routing/tide_g.py`, `TIDE_G2_KWARGS`), 11 tests dans `tests/test_routing_tide_g2.py`. `tide_g` et `tide` sont bit-à-bit identiques avant et après le changement (run de référence : 150 festivaliers, 15 min, réponses à 50 %, mobilité `poi`). Une première campagne (81 simulations, §5, faite sur un prototype) a servi à choisir le preset.
 
@@ -28,7 +28,7 @@ Principe directeur, hérité de TIDE-G : **sans indice utilisable, on retombe ex
 
 ### 2.1 Position du destinataire dans l'ACK (`ack_hint`)
 
-**Constat.** Dans TIDE-G, Léa n'a un indice pour Paul que si Paul lui a écrit dans les 15 dernières minutes. Sans réponses, environ 3 % des messages ont un indice ; avec 50 % de réponses, environ 24 % (`docs/TIDE-G.md` §6).
+**Constat.** Dans TIDE-G, Léa n'a un indice pour Paul que si Paul lui a écrit dans les 15 dernières minutes. Sans réponses, environ 3 % des messages ont un indice ; avec 50 % de réponses, environ 24 % (`docs/algorithmes/specs/TIDE-G.md` §6).
 
 **Ajout.** Quand Paul reçoit un message de Léa, son ACK transporte sa propre position, **chiffrée pour Léa**. Léa obtient ainsi une position fraîche de Paul à chaque message livré, sans que Paul ait à répondre. Le prochain message de Léa vers Paul part avec un indice.
 
@@ -260,7 +260,7 @@ _ZONE = "zone"
 _GEO_L0 = "geo_l0"
 
 # TIDE-G2 preset: hint_scaled_tokens lost deliveries and relay_hint_merge
-# bends the privacy rule, so both stay ablations (docs/TIDE-G2.md §5).
+# bends the privacy rule, so both stay ablations (docs/algorithmes/specs/TIDE-G2.md §5).
 TIDE_G2_KWARGS = dict(ack_hint=True, geo_giveup_s=180.0, charge_message_fixes=True)
 ```
 

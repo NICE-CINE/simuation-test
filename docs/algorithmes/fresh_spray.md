@@ -1,6 +1,7 @@
 # `fresh_spray` — Spray + fraicheur de contact + bornes + purge
 
 Fichier : `src/festival_ble_sim/routing/fresh_spray.py`
+Spec : `docs/algorithmes/specs/FRESH-SPRAY.md`
 
 ## Principe
 

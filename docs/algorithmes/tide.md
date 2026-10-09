@@ -1,7 +1,7 @@
 # `tide` — TIDE (Tokens, Islands, Density, Energy)
 
 Fichier : `src/festival_ble_sim/routing/tide.py`
-Spec : `NICE — Algorithmes de routage candidats et protocole de comparaison.md`
+Spec : `docs/algorithmes/specs/TIDE.md`
 
 ## Principe
 

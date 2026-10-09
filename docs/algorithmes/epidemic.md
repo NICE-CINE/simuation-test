@@ -1,6 +1,7 @@
 # `epidemic` — inondation naive
 
 Fichier : `src/festival_ble_sim/routing/epidemic.py`
+Spec : `docs/algorithmes/specs/EPIDEMIC.md`
 
 ## Principe
 

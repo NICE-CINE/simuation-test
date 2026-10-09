@@ -28,7 +28,7 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
     # flooding. One shared instance holds the encounter table, GPS fixes and
     # delivered set instead of simulating summary exchanges; ACKs purge
     # network-wide on the next tick (as dasfv/fresh_spray), only the ACK's
-    # position travels back with a delay. Spec: docs/GSF.md.
+    # position travels back with a delay. Spec: docs/algorithmes/specs/GSF.md.
     def __init__(
         self,
         hint_max_age_s: float = 900.0,

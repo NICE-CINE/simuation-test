@@ -1,6 +1,7 @@
 # `dasfv` — DASF-V (Density-Aware Spray-and-Focus + purge)
 
 Fichier : `src/festival_ble_sim/routing/dasfv.py`
+Spec : `docs/algorithmes/specs/DASF-V.md`
 
 ## Principe
 

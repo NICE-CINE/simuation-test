@@ -1,6 +1,7 @@
 # `beacon_priority` — priorite aux bornes
 
 Fichier : `src/festival_ble_sim/routing/beacon_priority.py`
+Spec : `docs/algorithmes/specs/BEACON-PRIORITY.md`
 
 ## Principe
 

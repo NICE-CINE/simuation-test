@@ -1,6 +1,7 @@
 # `spray_wait` — Spray and Wait binaire
 
 Fichier : `src/festival_ble_sim/routing/spray_and_wait.py`
+Spec : `docs/algorithmes/specs/SPRAY-WAIT.md`
 
 ## Principe
 

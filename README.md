@@ -107,14 +107,112 @@ overhead, energie).
   meme nom ; les chaines de variantes ne sont que dans les arguments CLI du
   `.json`.
 
+## Balayer les jetons de `fresh_spray`
+
+    python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
+        --duration 10800 --num-festivaliers 5000 --beacon-count 6 --workers 12 \
+        --mobility poi --reply-probability 0.5
+
+Lance `fresh_spray` pour chaque valeur de `initial_tokens` (`--tokens`,
+defaut `4 8 16 32`) et chaque graine (`--seeds`, defaut `1 2 3`), puis
+affiche la moyenne par valeur de jetons (livraison, latence moyenne et
+p95, surcharge, energie). Memes options que `compare_algorithms.py` pour
+le scenario (`--duration` defaut 3600, `--num-festivaliers` defaut 200,
+`--beacon-count` defaut 6, `--mobility`, `--size`, `--reply-probability`,
+`--workers`, `--archive-dir`), sans `--followup-probability` ni
+`--gps-fix-failure`. Archive :
+`<date>_<heure>_sweep_fresh_spray_tokens.csv` + `.json` ; la liste des
+jetons n'est que dans les arguments CLI du `.json`. Resultats a 5 000
+festivaliers : `docs/algorithmes/fresh_spray.md`.
+
 ## Trafic
 
-Chaque festivalier tire une fois pour toutes, au debut de la simulation,
-son propre debit de messages dans `TrafficConfig.messages_per_hour_range`
-(defaut `(0.0, 2.0)` messages/heure ; un debit de 0 = n'envoie jamais),
-puis envoie selon un processus de Poisson a ce debit vers un autre
-festivalier actif tire au hasard. La charge totale du reseau suit donc
+**Debit.** Chaque festivalier tire une fois pour toutes, au debut de la
+simulation, son propre debit de messages dans
+`TrafficConfig.messages_per_hour_range` (defaut `(0.0, 4.0)` messages/heure,
+2 en moyenne ; un debit de 0 = n'envoie jamais), puis envoie selon un
+processus de Poisson a ce debit. La charge totale du reseau suit donc
 naturellement `num_festivaliers`, sans reglage a faire par scenario.
+Chaque message fait 20 a 512 octets, vit 1 800 s (`message_ttl_s`) et
+au plus 8 sauts de relais (`message_ttl_hops`).
+
+**Destinataire : un ami.** On n'ecrit qu'a ses amis
+(`TrafficConfig.friends_only`, defaut `True`). Le graphe d'amis (les QR
+codes echanges) est tire une fois par `social.assign_friend_groups`
+selon `SimulationConfig.social` :
+- 20 % des festivaliers n'ont aucun ami dans l'appli
+  (`no_friend_fraction`) et **n'envoient rien** ;
+- les autres sont repartis en groupes disjoints de 2 a 8 personnes
+  (`group_size_range`), ou tout le monde est ami avec tout le monde ;
+- a chaque envoi, le destinataire est un ami actif tire au hasard (envoi
+  saute si aucun ami n'est present).
+
+Le meme graphe sert a `bubble_f`. Les amis ne se deplacent **pas**
+ensemble : la mobilite ignore le graphe. `friends_only=False` revient a un
+destinataire tire parmi tous les festivaliers actifs.
+
+**Reponses** (`--reply-probability P`, defaut 0) : un message livre a un
+festivalier recoit une reponse avec la probabilite P, envoyee 20 a 180 s
+plus tard (`reply_delay_range_s`) si les deux sont encore presents. Une
+reponse peut elle-meme recevoir une reponse : on obtient des
+conversations. C'est ce qui donne aux algos geographiques (`tide_g`,
+`tide_g2`, `geo_spray_focus`) une position recente du destinataire (voir
+"GPS" ci-dessous).
+
+**Relances** (`--followup-probability P`, defaut 0) : apres chaque message
+spontane (pas apres une reponse), l'emetteur reecrit au meme destinataire
+avec la probabilite P, 10 a 120 s plus tard (`followup_delay_range_s`),
+et recommence tant que le tirage reussit (chaine geometrique) et que les
+deux sont presents.
+
+Reponses et relances sont des messages comme les autres : elles comptent
+dans les messages crees et dans le taux de livraison. Leurs tirages
+aleatoires n'existent que si P > 0, donc un run sans elles est identique
+a ce qu'il etait avant leur ajout.
+
+## GPS
+
+Fourni par le moteur, donc sans effet sur les algos qui ne s'en servent
+pas (`GpsConfig`, `SimulationConfig.gps`) :
+- **Bruit** : une lecture GPS d'un telephone vaut sa vraie position plus
+  un bruit gaussien de 5 m d'ecart-type par axe (`noise_std_m`), retire a
+  chaque lecture. Les bornes lisent leur position exacte.
+- **Echec de fix** (`--gps-fix-failure P`, defaut 0) : une prise de fix
+  echoue avec la probabilite P et ne donne aucune position.
+- **Position de la source** : a la creation d'un message, la source y
+  joint son fix (`message.src_position`, absent si le fix echoue). A la
+  livraison, le destinataire memorise cette position, datee de la
+  creation du message (la plus recente l'emporte).
+- **Indice sur le destinataire** : a la creation, le message porte la
+  derniere position connue du destinataire par la source
+  (`message.dst_position`), c'est-a-dire celle du dernier message que le
+  destinataire lui a fait parvenir. `tide_g2` et `geo_spray_focus` la
+  rapportent aussi dans l'ACK. Sans reponses, l'indice est presque
+  toujours absent : les algos geographiques retombent alors sur une
+  decision sans geographie.
+
+Le moteur ne facture pas le GPS : les algos qui prennent des fixes
+paient eux-memes leur courant (`tide_g`, `geo_spray_focus` : un fix toutes
+les 30 s facture 30 s a 10 mA, soit un GPS allume en continu).
+
+## Metriques du rapport
+
+`main.py` affiche le rapport, `compare_algorithms.py` en met les champs en
+colonnes du CSV :
+
+| Champ | Definition |
+|---|---|
+| Taux de livraison (`delivery_ratio`) | messages livres / messages crees (reponses et relances comprises) ; un message encore en route a la fin du run compte comme non livre |
+| Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages livres seulement |
+| Sauts moyens (`avg_hops`) | sauts de la copie livree en premier |
+| Surcharge (`overhead`) | transmissions BLE reussies (relais et livraisons) / messages livres. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
+| Transmissions totales | numerateur de la surcharge |
+| Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |
+| Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
+| Messages perdus (buffer) | evictions de buffer plein |
+| Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
+| Transmissions / pertes backhaul | copies entre bornes par le reseau filaire, et celles perdues |
+| Backoffs | tours sautes par un emetteur a cause de la contention |
 
 ## Valeurs par defaut (festival moyen)
 
@@ -255,6 +353,8 @@ a 4 000 festivaliers. Programmatiquement :
 ## Algorithmes de routage disponibles
 
 Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithmes/`.
+Specification complete (regles exactes, parametres, ecarts avec la reference) :
+un fichier par algorithme dans `docs/algorithmes/specs/`.
 
 - `epidemic` (`routing/epidemic.py`) — flooding naif, reference/borne haute
   d'overhead.
@@ -317,7 +417,7 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
 - `tide` (`routing/tide.py`) — TIDE (Tokens, Islands, Density, Energy),
-  candidat NICE : jetons initiaux `L0 = clamp(round(12 sqrt(10/rho)), 2, 12)`
+  candidat NICE : jetons initiaux `L0 = clamp(round(16 sqrt(10/rho)), 2, 16)`
   partages au prorata de l'utilite `U = e * [w P + (1-w) exp(-dt/tau)]`,
   livraison directe dans les ilots (tout voisin qui voit la destination
   recoit une copie), relais elus toutes les 5 min avec
@@ -344,7 +444,7 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   a recu une position plus recente. Sans indice, identique a TIDE.
   `hint_stats` donne la couverture d'indice. A lancer avec `--mobility poi
   --reply-probability 0.5`. Details dans `docs/algorithmes/tide_g.md`,
-  spec complete dans `docs/TIDE-G.md`. Interrupteurs d'ablation :
+  spec complete dans `docs/algorithmes/specs/TIDE-G.md`. Interrupteurs d'ablation :
   `geo_focus`, `geo_tokens`, `zone_search`, `refresh_hint`, `gps_for_relays`.
 - `tide_g2` (`routing/tide_g.py`, preset `TIDE_G2_KWARGS`) — TIDE-G + trois
   ajouts : l'ACK rapporte a la source la position du destinataire (apres
@@ -357,7 +457,7 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   `hinted_by_ack`, `delivered_after_giveup`, `message_fixes`... Tous les
   ajouts sont desactives par defaut : `tide_g` est inchange. A lancer avec
   `--mobility poi --reply-probability 0.5 --followup-probability 0.5`.
-  Spec dans `docs/TIDE-G2.md`.
+  Spec dans `docs/algorithmes/specs/TIDE-G2.md`.
 - `fresh_spray` (`routing/fresh_spray.py`) — Spray binaire (`initial_tokens`,
   defaut 16) + replique vers tout voisin ayant croise la destination depuis
   moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au
@@ -377,7 +477,7 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   repartition des transmissions par raison. Le gain mesure vient de
   l'inondation tardive, pas de la geographie : variante sans GPS
   `GeoSprayFocusRouting(hint_max_age_s=1e-9, gps_policy="carriers",
-  ack_hint=False)`. Spec dans `docs/GSF.md`.
+  ack_hint=False)`. Spec dans `docs/algorithmes/specs/GSF.md`.
 - `eco_sf` (`routing/eco_sf.py`) — ECO-SF, Spray-and-Focus sans GPS econome
   en reveils radio. Modelise : beacons a cadence Trickle (Imin 2 s, Imax
   30/60/120 s selon la batterie, suppression k = 1) qui conditionnent la
@@ -396,7 +496,7 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   densite, plafond de resets anti-spam. Les beacons n'ont pas de cout
   energetique propre (le moteur facture un courant de fond fixe) : `stats`
   compte beacons, resets Trickle, connexions, spray et focus. Spec et
-  resultats dans `docs/ECO-SF.md`.
+  resultats dans `docs/algorithmes/specs/ECO-SF.md`.
 - `band_fanout` (`routing/band_fanout.py`) — relais a eventail borne :
   chaque copie peut etre relayee `fanout` fois (3 par defaut), la copie
   relayee repart avec un budget neuf, puis il ne reste que la livraison
@@ -420,7 +520,8 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   `band_high`, `purge_delivered`) sur plusieurs graines ;
   sans `--variant`, il teste les defauts, l'absence de purge, la bande
   0-100 %, `fanout` 2 et 4, `max_hops` 3 et 5. Resultats et diagramme dans
-  `docs/algorithmes/band_fanout.md`.
+  `docs/algorithmes/band_fanout.md`, spec dans
+  `docs/algorithmes/specs/BAND-FANOUT.md`.
 
 ## Ajouter un nouvel algorithme de routage
 

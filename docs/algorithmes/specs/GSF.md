@@ -4,7 +4,7 @@ GSF est un algorithme de routage DTN unicast **autonome** (il ne dérive pas de 
 
 Il entre dans la comparaison comme candidat indépendant, face à TIDE, TIDE-G et TIDE-G2.
 
-> **Statut** : implémenté dans `src/festival_ble_sim/routing/geo_spray_focus.py`, 9 tests dans `tests/test_routing_geo_spray_focus.py`. Une campagne de 90 simulations (§5, faite sur un prototype) a mesuré GSF et 6 variantes. GSF s'appuie sur `gps_fix()` et les rafales de messages ajoutés avec TIDE-G2 (`docs/TIDE-G2.md`).
+> **Statut** : implémenté dans `src/festival_ble_sim/routing/geo_spray_focus.py`, 9 tests dans `tests/test_routing_geo_spray_focus.py`. Une campagne de 90 simulations (§5, faite sur un prototype) a mesuré GSF et 6 variantes. GSF s'appuie sur `gps_fix()` et les rafales de messages ajoutés avec TIDE-G2 (`docs/algorithmes/specs/TIDE-G2.md`).
 
 > **Résultat principal** (§5) : GSF livre 14 à 21 points de plus que TIDE-G, mais **tout ce gain vient de l'inondation tardive, pas de la géographie**. Avec la géographie désactivée (aucun GPS), GSF livre exactement autant et consomme 5 à 6 mAh de moins par nœud.
 
@@ -34,7 +34,7 @@ centre    = centre de la case de 25 m contenant dst_position
 rayon     r(h) = r0 + v · h          (r0 = 30 m, v = 0,3 m/s)
 ```
 
-Ce sont les valeurs calibrées pour TIDE-G sur la mobilité `poi` du simulateur : r(h) couvre environ 80 % des déplacements réels (`docs/TIDE-G.md` §3.1). Le mode géographique ne s'applique que si `r(h) ≤ r_flood` (300 m, soit un indice d'environ 15 min) ; au-delà, l'indice ne sert plus.
+Ce sont les valeurs calibrées pour TIDE-G sur la mobilité `poi` du simulateur : r(h) couvre environ 80 % des déplacements réels (`docs/algorithmes/specs/TIDE-G.md` §3.1). Le mode géographique ne s'applique que si `r(h) ≤ r_flood` (300 m, soit un indice d'environ 15 min) ; au-delà, l'indice ne sert plus.
 
 ### 2.2 Budget initial de copies
 
@@ -114,7 +114,7 @@ Les seuils 60 s et 180 s visent l'objectif du cahier des charges : livraison par
 ### 2.6 ACK et purge
 
 - **Purge** : à la livraison, le message est marqué livré ; toutes ses copies sont supprimées au tick suivant, partout. C'est la même simplification que `dasfv` et `fresh_spray` (ACK instantané et gratuit).
-- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) arrive chez la source après `ack_hint_delay_factor × latence aller`, comme dans TIDE-G2 (`docs/TIDE-G2.md` §2.1). Elle alimente `known_positions`, donc l'indice du message suivant.
+- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) arrive chez la source après `ack_hint_delay_factor × latence aller`, comme dans TIDE-G2 (`docs/algorithmes/specs/TIDE-G2.md` §2.1). Elle alimente `known_positions`, donc l'indice du message suivant.
 - **Rafraîchissement** : la source remplace l'indice de sa propre copie si elle a reçu une position plus récente entre-temps.
 
 ### 2.7 Éviction
@@ -157,7 +157,7 @@ Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, pu
 | `scripts/compare_algorithms.py` | `"geo_spray_focus": GeoSprayFocusRouting` dans `ALGORITHMS` |
 | `CLAUDE.md` | Entrée `geo_spray_focus` dans la liste des algorithmes |
 | `README.md` | `--routing geo_spray_focus`, matrice de comparaison, entrée dans la liste des algorithmes |
-| `docs/GSF.md` | Ce document |
+| `docs/algorithmes/specs/GSF.md` | Ce document |
 
 ```bash
 python main.py --routing geo_spray_focus --mobility poi --reply-probability 0.5 \
@@ -255,7 +255,7 @@ Statistiques exposées dans `algo.stats` : `routed`, `hinted`, `spray`, `focus_g
 
 ## 5. Résultats
 
-Conditions : mobilité `poi`, 400 festivaliers sur le site par défaut (0,35 km², environ 1 140 personnes/km²), 30 min, sans bornes, graines 1 à 3. Mêmes configurations et mêmes graines que la campagne de `docs/TIDE-G2.md` §5, dont les lignes TIDE, TIDE-G et TIDE-G2 sont reprises. « Écart apparié » : différence de livraison avec TIDE-G **à graine égale**, moyenne ± écart-type. « Surcharge » : transmissions par message livré.
+Conditions : mobilité `poi`, 400 festivaliers sur le site par défaut (0,35 km², environ 1 140 personnes/km²), 30 min, sans bornes, graines 1 à 3. Mêmes configurations et mêmes graines que la campagne de `docs/algorithmes/specs/TIDE-G2.md` §5, dont les lignes TIDE, TIDE-G et TIDE-G2 sont reprises. « Écart apparié » : différence de livraison avec TIDE-G **à graine égale**, moyenne ± écart-type. « Surcharge » : transmissions par message livré.
 
 **Réponses 50 %, sans rafales** (moyenne sur 3 graines)
 

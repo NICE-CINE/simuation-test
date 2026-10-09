@@ -34,7 +34,7 @@ class _NodeState:
 
 
 class EcoSfRouting(RoutingAlgorithm):
-    # Network-level reduction of ECO-SF (docs/ECO-SF.md). Beacons are not
+    # Network-level reduction of ECO-SF (docs/algorithmes/specs/ECO-SF.md). Beacons are not
     # simulated as BLE frames: a Trickle-timed beacon is "heard" by every
     # active node in the sender's range that tick, and the Bloom digests are
     # read as exact sets. What the Trickle timer does model is discovery:

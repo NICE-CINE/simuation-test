@@ -1,6 +1,7 @@
 # `managed_flood` — inondation geree (Bluetooth Mesh)
 
 Fichier : `src/festival_ble_sim/routing/managed_flood.py`
+Spec : `docs/algorithmes/specs/MANAGED-FLOOD.md`
 
 ## Principe
 

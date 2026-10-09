@@ -11,7 +11,7 @@ _ZONE = "zone"
 _GEO_L0 = "geo_l0"
 
 # TIDE-G2 preset: hint_scaled_tokens lost deliveries and relay_hint_merge
-# bends the privacy rule, so both stay ablations (docs/TIDE-G2.md §5).
+# bends the privacy rule, so both stay ablations (docs/algorithmes/specs/TIDE-G2.md §5).
 TIDE_G2_KWARGS = dict(ack_hint=True, geo_giveup_s=180.0, charge_message_fixes=True)
 
 

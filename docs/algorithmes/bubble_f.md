@@ -1,6 +1,7 @@
 # `bubble_f` — BUBBLE-F (routage social)
 
 Fichier : `src/festival_ble_sim/routing/bubble_f.py`
+Spec : `docs/algorithmes/specs/BUBBLE-F.md`
 
 ## Principe
 

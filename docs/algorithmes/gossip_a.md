@@ -1,6 +1,7 @@
 # `gossip_a` — GOSSIP-A (gossip probabiliste adaptatif)
 
 Fichier : `src/festival_ble_sim/routing/gossip_a.py`
+Spec : `docs/algorithmes/specs/GOSSIP-A.md`
 
 ## Principe
 

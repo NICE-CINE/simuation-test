@@ -1,7 +1,7 @@
 # `tide_g` — TIDE-G (TIDE guide par la position du destinataire)
 
 Fichier : `src/festival_ble_sim/routing/tide_g.py`
-Spec : `docs/TIDE-G.md`
+Spec : `docs/algorithmes/specs/TIDE-G.md`
 
 ## Principe
 
