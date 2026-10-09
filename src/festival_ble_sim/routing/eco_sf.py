@@ -14,6 +14,10 @@ _GIVE = "_give"
 _Views = Dict[int, Dict[int, float]]
 
 
+def _rank(item: Tuple[int, Tuple[float, float, float]]) -> float:
+    return item[1][2]
+
+
 class _NodeState:
     __slots__ = ("interval", "end", "tx_at", "heard", "epoch", "neighbors", "utility")
 
@@ -25,8 +29,8 @@ class _NodeState:
         self.epoch = 0
         # sender id -> (last heard, entry expiry, sender's digest epoch)
         self.neighbors: Dict[int, Tuple[float, float, int]] = {}
-        # dest id -> (u, last update)
-        self.utility: Dict[int, Tuple[float, float]] = {}
+        # dest id -> (u, last update, rank); see EcoSfRouting._set_u
+        self.utility: Dict[int, Tuple[float, float, float]] = {}
 
 
 class EcoSfRouting(RoutingAlgorithm):
@@ -77,6 +81,7 @@ class EcoSfRouting(RoutingAlgorithm):
         self._alpha = alpha
         self._beta = beta
         self._gamma = gamma_per_min
+        self._ln_gamma = math.log(gamma_per_min)
         self._delta = delta
         self._table_size = utility_table_size
         self._exchange_size = utility_exchange_size
@@ -149,17 +154,21 @@ class EcoSfRouting(RoutingAlgorithm):
         entry = state.utility.get(dest)
         if entry is None:
             return 0.0
-        u, last = entry
+        u, last, _ = entry
         return u * self._gamma ** (max(0.0, now - last) / 60.0)
 
     def _set_u(self, state: _NodeState, dest: int, u: float, now: float) -> None:
+        # Every entry ages by the same factor, so ordering by aged utility is
+        # ordering by ln(u) - last/60 * ln(gamma): computed once here instead
+        # of re-aging the whole table on each eviction (a dense crowd evicts
+        # on nearly every beacon heard).
         if dest not in state.utility and len(state.utility) >= self._table_size:
-            del state.utility[min(state.utility, key=lambda d: self._u(state, d, now))]
-        state.utility[dest] = (u, now)
+            del state.utility[min(state.utility.items(), key=_rank)[0]]
+        state.utility[dest] = (u, now, math.log(u) - now / 60.0 * self._ln_gamma)
 
     def _top_utilities(self, state: _NodeState, now: float) -> Dict[int, float]:
-        top = heapq.nlargest(self._exchange_size, ((self._u(state, d, now), d) for d in state.utility))
-        return {d: u for u, d in top}
+        top = heapq.nlargest(self._exchange_size, state.utility.items(), key=lambda kv: (kv[1][2], kv[0]))
+        return {d: self._u(state, d, now) for d, _ in top}
 
     def _hear(self, receiver_id: int, sender: "BaseNode", now: float) -> None:
         receiver = self._state(receiver_id, now)
