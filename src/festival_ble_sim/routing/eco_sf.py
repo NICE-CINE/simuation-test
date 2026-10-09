@@ -88,6 +88,11 @@ class EcoSfRouting(RoutingAlgorithm):
         self._battery_silent = battery_silent_pct
         self._nodes: Dict[int, "BaseNode"] = {}
         self._states: Dict[int, _NodeState] = {}
+        # Cooldown clock per pair, pruned every cooldown period. The exchanged
+        # utility views and refusals only matter within one tick, so they are
+        # dropped at each on_tick instead of piling up for every pair ever met.
+        self._last_connect: Dict[Tuple[int, int], float] = {}
+        self._last_prune = 0.0
         self._connections: Dict[Tuple[int, int], Tuple[float, _Views]] = {}
         self._refused: Dict[Tuple[int, int], float] = {}
         # Signed ACKs gossip epidemically in the spec; modelled as an instant,
@@ -171,6 +176,11 @@ class EcoSfRouting(RoutingAlgorithm):
             receiver.heard += 1
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        self._connections.clear()
+        self._refused.clear()
+        if now - self._last_prune >= self._cooldown:
+            self._last_connect = {k: t for k, t in self._last_connect.items() if now - t < self._cooldown}
+            self._last_prune = now
         for node_id, neighbors in neighbors_by_node.items():
             node = self._nodes.get(node_id)
             if node is None:
@@ -230,11 +240,11 @@ class EcoSfRouting(RoutingAlgorithm):
     def _connection(self, holder: "BaseNode", peer: "BaseNode", now: float) -> Optional[_Views]:
         key = (min(holder.id, peer.id), max(holder.id, peer.id))
         existing = self._connections.get(key)
-        if existing is not None:
-            if existing[0] == now:
-                return existing[1]
-            if now - existing[0] < self._cooldown:
-                return None
+        if existing is not None and existing[0] == now:
+            return existing[1]
+        last = self._last_connect.get(key)
+        if last is not None and now - last < self._cooldown:
+            return None
         if self._refused.get((holder.id, peer.id)) == now:
             return None
         if not self._should_connect(holder, peer, now):
@@ -245,6 +255,7 @@ class EcoSfRouting(RoutingAlgorithm):
         self._transitive(holder_state, holder.id, peer.id, views[peer.id], now)
         self._transitive(peer_state, peer.id, holder.id, views[holder.id], now)
         self._connections[key] = (now, views)
+        self._last_connect[key] = now
         self.stats["connections"] += 1
         return views
 

@@ -149,3 +149,12 @@ def test_eviction_spares_own_messages():
     own, relayed = _msg(1, src=1), _msg(2, src=5)
     node.buffer.update({1: own, 2: relayed})
     assert algo.choose_eviction(node, 10.0) == 2
+
+
+def test_per_pair_bookkeeping_does_not_outlive_the_cooldown():
+    algo, holder, contact = _setup()
+    msg = _msg(copies=8)
+    holder.buffer[1] = msg
+    algo.decide(msg, holder, contact, 4.0)
+    algo.on_tick(30.0, {1: [contact], 2: [holder]})
+    assert not algo._connections and not algo._last_connect
