@@ -12,6 +12,7 @@ from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, T
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -43,6 +44,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "fresh_spray": FreshSprayRouting,
     "geo_spray_focus": GeoSprayFocusRouting,
     "eco_sf": EcoSfRouting,
+    "band_fanout": BandFanoutRouting,
 }
 
 REPORT_FIELDS = [

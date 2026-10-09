@@ -15,6 +15,7 @@ from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -50,6 +51,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "fresh_spray": lambda args: FreshSprayRouting(),
     "geo_spray_focus": lambda args: GeoSprayFocusRouting(),
     "eco_sf": lambda args: EcoSfRouting(seed=args.seed),
+    "band_fanout": lambda args: BandFanoutRouting(seed=args.seed),
 }
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default

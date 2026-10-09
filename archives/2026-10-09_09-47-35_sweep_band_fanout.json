@@ -1,0 +1,162 @@
+{
+  "cli": {
+    "variant": [
+      "",
+      "purge_delivered=0",
+      "band_low=0,band_high=1",
+      "fanout=2",
+      "fanout=4",
+      "max_hops=3",
+      "max_hops=5"
+    ],
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "duration": 3600.0,
+    "num_festivaliers": 500,
+    "beacon_count": 6,
+    "mobility": "poi",
+    "reply_probability": 0.5,
+    "workers": 12,
+    "archive_dir": "archives"
+  },
+  "config": {
+    "duration_s": 3600.0,
+    "num_festivaliers": 500,
+    "node_buffer_capacity": 100,
+    "random_seed": 1,
+    "area": {
+      "width_m": 700.0,
+      "height_m": 500.0
+    },
+    "ble": {
+      "phone_radio": {
+        "tx_power_dbm": -10.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "beacon_radio": {
+        "tx_power_dbm": -2.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "transfer_rate_bytes_per_s": 10000.0,
+      "contact_check_interval_s": 1.0,
+      "max_concurrent_links": 6,
+      "packet_loss_base_probability": 0.01,
+      "packet_loss_congestion_coefficient": 0.02,
+      "signal_margin_cutoff_db": 6.0,
+      "weak_signal_max_probability": 0.3,
+      "packet_loss_max_probability": 0.3,
+      "relay_backoff_coefficient": 0.05,
+      "relay_backoff_max_probability": 0.5,
+      "collision_loss_coefficient": 0.03,
+      "collision_loss_max_probability": 0.4
+    },
+    "mobility": {
+      "speed_min_mps": 0.3,
+      "speed_max_mps": 1.2,
+      "pause_probability": 0.7,
+      "pause_duration_range_s": [
+        300.0,
+        2700.0
+      ],
+      "tick_interval_s": 1.0,
+      "points_of_interest": [
+        {
+          "x": 175.0,
+          "y": 375.0,
+          "radius_m": 75.0,
+          "weight": 4.0
+        },
+        {
+          "x": 560.0,
+          "y": 350.0,
+          "radius_m": 50.0,
+          "weight": 2.0
+        },
+        {
+          "x": 385.00000000000006,
+          "y": 175.0,
+          "radius_m": 60.0,
+          "weight": 3.0
+        },
+        {
+          "x": 350.0,
+          "y": 25.0,
+          "radius_m": 40.0,
+          "weight": 1.0
+        }
+      ]
+    },
+    "traffic": {
+      "messages_per_hour_range": [
+        0.0,
+        4.0
+      ],
+      "payload_size_range_bytes": [
+        20,
+        512
+      ],
+      "message_ttl_s": 1800.0,
+      "message_ttl_hops": 8,
+      "friends_only": true,
+      "reply_probability": 0.5,
+      "reply_delay_range_s": [
+        20.0,
+        180.0
+      ],
+      "followup_probability": 0.0,
+      "followup_delay_range_s": [
+        10.0,
+        120.0
+      ]
+    },
+    "energy": {
+      "initial_battery_mah": 3000.0,
+      "tx_cost_mah_per_event": 0.02,
+      "tx_cost_mah_per_byte": 0.0001,
+      "rx_cost_mah_per_event": 0.01,
+      "rx_cost_mah_per_byte": 5e-05,
+      "background_current_ma": 2.0
+    },
+    "beacons": {
+      "count": 6,
+      "placement": "grid",
+      "manual_positions": null,
+      "unlimited_power": true,
+      "backhaul_latency_s": 0.05,
+      "backhaul_loss_probability": 0.0
+    },
+    "churn": {
+      "enabled": false,
+      "arrival_window_s": [
+        0.0,
+        1800.0
+      ],
+      "session_duration_range_s": [
+        1800.0,
+        10800.0
+      ]
+    },
+    "social": {
+      "group_size_range": [
+        2,
+        8
+      ],
+      "no_friend_fraction": 0.2
+    },
+    "gps": {
+      "noise_std_m": 5.0,
+      "fix_failure_probability": 0.0
+    }
+  }
+}
