@@ -37,7 +37,7 @@ def _forward(algo, msg, holder, contact, now=1.0):
 def test_initial_tokens_shrink_with_density():
     algo = TideRouting()
     algo._density = {1: 10.0, 2: 40.0, 3: 1000.0}
-    assert [algo._initial_tokens(i) for i in (1, 2, 3)] == [12, 6, 2]
+    assert [algo._initial_tokens(i) for i in (1, 2, 3)] == [16, 8, 2]
 
 
 def test_energy_factor_is_linear_between_20_and_50_percent():

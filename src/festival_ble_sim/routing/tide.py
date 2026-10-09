@@ -35,7 +35,7 @@ class TideRouting(RoutingAlgorithm):
         enable_transitivity: bool = False,
         rho_target: float = 15.0,
         rho_ref: float = 10.0,
-        l_max: int = 12,
+        l_max: int = 16,
         l_min: int = 2,
         delta: float = 0.05,
         election_period_s: float = 300.0,

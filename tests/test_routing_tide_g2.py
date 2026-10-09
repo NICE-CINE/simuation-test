@@ -75,7 +75,7 @@ def test_fresh_hint_shrinks_only_the_first_spray():
     msg = _msg(Position(500.0, 0.0), 1.0)
     src.store_message(msg)
     algo.decide(msg, src, relay, 1.0)
-    assert msg.routing_state["tokens"] == 2 and msg.routing_state["l0"] == 12
+    assert msg.routing_state["tokens"] == 2 and msg.routing_state["l0"] == 16
     assert algo.hint_stats["scaled_tokens"] == 1
 
 
@@ -84,7 +84,7 @@ def test_stale_hint_keeps_the_full_tide_budget():
     msg = _msg(Position(500.0, 0.0), 0.0, creation_time=400.0)
     src.store_message(msg)
     algo.decide(msg, src, relay, 400.0)
-    assert msg.routing_state["tokens"] == msg.routing_state["l0"] == 12
+    assert msg.routing_state["tokens"] == msg.routing_state["l0"] == 16
     assert algo.hint_stats["scaled_tokens"] == 0
 
 
@@ -160,7 +160,7 @@ def test_followup_chain_stops_once_the_destination_is_gone():
 
 
 def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
-    # Golden values from main before TIDE-G2 landed: any drift means a
+    # Golden values from main before TIDE-G2 landed (rerun with l_max=16): any drift means a
     # default-off addition leaked into tide_g.
     config = SimulationConfig(
         duration_s=600.0, num_festivaliers=60, random_seed=3,
@@ -169,9 +169,9 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     )
     algo = TideGRouting(seed=3)
     report = run_simulation(config, routing_algorithm=algo)
-    assert (report.messages_created, report.messages_delivered, report.total_transmissions) == (89, 76, 1365)
+    assert (report.messages_created, report.messages_delivered, report.total_transmissions) == (83, 68, 1369)
     assert {k: algo.hint_stats[k] for k in ("routed", "hinted", "delivered", "delivered_hinted", "gps_fixes")} == {
-        "routed": 87, "hinted": 53, "delivered": 76, "delivered_hinted": 49, "gps_fixes": 1200,
+        "routed": 82, "hinted": 45, "delivered": 68, "delivered_hinted": 42, "gps_fixes": 1200,
     }
 
 
