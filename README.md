@@ -25,7 +25,11 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf` ou `band_fanout` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf` ou `band_fanout` (un seul choix a la fois, pas de `|`).
+  `band_fanout` n'a pas d'option dediee : `main.py` le lance avec ses
+  defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
+  `--seed` pour le tirage des relais ; pour faire varier ses parametres,
+  voir "Balayer les variantes de band_fanout"
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
@@ -73,6 +77,35 @@ du meme nom (arguments CLI et `SimulationConfig` complete, dans sa
 variante avec bornes). Chaque ligne du CSV est ecrite des que son run se
 termine, donc un run interrompu garde les resultats deja obtenus.
 `--csv CHEMIN` ecrit en plus une copie du CSV.
+
+## Balayer les variantes de band_fanout
+
+    python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 \
+        --num-festivaliers 500 --beacon-count 6 --workers 12 \
+        --mobility poi --reply-probability 0.5 [--variant "fanout=2,max_hops=4" ...]
+
+Compare plusieurs configurations de `BandFanoutRouting` (avec
+`--beacon-count` bornes) sur plusieurs graines, dans un seul pool de processus, puis
+affiche la moyenne par variante (livraison, latence moyenne et p95,
+overhead, energie).
+
+- `--variant "cle=val,cle=val"` : une variante, option repetable ;
+  `--variant ""` = les defauts. Cles : `fanout` (entier), `max_hops`
+  (entier), `band_low` et `band_high` (flottants, fractions de la portee),
+  `purge_delivered` (`0` ou `1`). Une cle inconnue ou une valeur invalide
+  arrete le script avant de lancer quoi que ce soit.
+- Sans `--variant`, le script teste 7 variantes : les defauts,
+  `purge_delivered=0`, `band_low=0,band_high=1` (pas de bande), `fanout=2`,
+  `fanout=4`, `max_hops=3` et `max_hops=5`.
+- `--seeds` (defaut `1 2 3`), `--duration` (defaut 3600), `--num-festivaliers`
+  (defaut 200), `--beacon-count` (defaut 6), `--mobility`
+  (`random_waypoint` par defaut ou `poi`), `--reply-probability` (defaut 0),
+  `--workers` (defaut 2), `--archive-dir` (defaut `archives`). Pas d'option
+  `--size`, `--followup-probability` ni `--gps-fix-failure` ici.
+- Archive : `<date>_<heure>_sweep_band_fanout.csv` (une ligne par variante et
+  par graine, ecrite des que le run se termine, avec `wall_s`) + `.json` du
+  meme nom ; les chaines de variantes ne sont que dans les arguments CLI du
+  `.json`.
 
 ## Trafic
 
@@ -381,7 +414,8 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   (`purge_delivered=True`) ; l'ACK est instantane et global, aucun temps
   radio n'est facture. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
   continue d'etre transmis apres la livraison. Pas d'eviction dediee.
-  `scripts/sweep_band_fanout.py` compare des variantes (`--variant
+  `scripts/sweep_band_fanout.py` (options : voir "Balayer les variantes de
+  band_fanout") compare des variantes (`--variant
   "fanout=2,max_hops=4"`, cles : `fanout`, `max_hops`, `band_low`,
   `band_high`, `purge_delivered`) sur plusieurs graines ;
   sans `--variant`, il teste les defauts, l'absence de purge, la bande

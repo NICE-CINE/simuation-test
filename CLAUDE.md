@@ -30,7 +30,9 @@ python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
     --mobility poi --reply-probability 0.5
 
 # Compare band_fanout variants (defaults, no purge, no band, fanout, max_hops) over seeds
-python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 --num-festivaliers 500     --beacon-count 6 --workers 12 --mobility poi --reply-probability 0.5     [--variant "fanout=2,max_hops=4" ...]
+python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 --num-festivaliers 500 \
+    --beacon-count 6 --workers 12 --mobility poi --reply-probability 0.5 \
+    [--variant "fanout=2,max_hops=4" ...]
 ```
 
 Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args *and* the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run). `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
