@@ -385,7 +385,8 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   "fanout=2,max_hops=4"`, cles : `fanout`, `max_hops`, `band_low`,
   `band_high`, `purge_delivered`) sur plusieurs graines ;
   sans `--variant`, il teste les defauts, l'absence de purge, la bande
-  0-100 %, `fanout` 2 et 4, `max_hops` 3 et 5.
+  0-100 %, `fanout` 2 et 4, `max_hops` 3 et 5. Resultats et diagramme dans
+  `docs/algorithmes/band_fanout.md`.
 
 ## Ajouter un nouvel algorithme de routage
 
