@@ -14,7 +14,7 @@ def _sample_history() -> SimulationHistory:
 
 
 def _extract_embedded_data(html: str) -> dict:
-    match = re.search(r"const DATA = (\{.*\});", html, re.DOTALL)
+    match = re.search(r"^const DATA = (\{.*\});$", html, re.MULTILINE)
     assert match is not None
     return json.loads(match.group(1))
 
@@ -56,3 +56,26 @@ def test_render_replay_html_handles_empty_history(tmp_path):
     data = _extract_embedded_data(output_path.read_text(encoding="utf-8"))
     assert data["frames"] == []
     assert data["events"] == []
+
+
+def test_render_replay_html_embeds_message_index_built_from_events(tmp_path):
+    history = _sample_history()
+    history.events = [
+        {"time": 1.0, "from": 2, "to": 3, "delivered": False, "msg": 7, "hops": 1, "src": 2, "dst": 9, "created": 0.5},
+        {"time": 2.0, "from": 3, "to": 9, "delivered": True, "msg": 7, "hops": 2, "src": 2, "dst": 9, "created": 0.5},
+        {"time": 2.0, "from": 3, "to": 1, "delivered": False, "msg": 8, "hops": 1, "src": 3, "dst": 2, "created": 1.5},
+    ]
+    output_path = tmp_path / "replay.html"
+    render_replay_html(history, str(output_path))
+    data = _extract_embedded_data(output_path.read_text(encoding="utf-8"))
+    assert data["messages"]["7"] == {"src": 2, "dst": 9, "created": 0.5}
+    assert data["messages"]["8"] == {"src": 3, "dst": 2, "created": 1.5}
+    assert data["events"][1] == {"time": 2.0, "from": 3, "to": 9, "delivered": True, "msg": 7, "hops": 2}
+
+
+def test_render_replay_html_has_message_tracking_panel(tmp_path):
+    output_path = tmp_path / "replay.html"
+    render_replay_html(_sample_history(), str(output_path))
+    content = output_path.read_text(encoding="utf-8")
+    assert 'id="msgList"' in content
+    assert 'id="trackPanel"' in content

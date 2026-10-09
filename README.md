@@ -221,7 +221,16 @@ avec lecture/pause et curseur temporel — telephones et bornes en points,
 liens de relais/livraison du tick courant en traits. Cout memoire
 proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
 modestes (quelques dizaines/centaines de noeuds), pas au run par defaut
-a 4 000 festivaliers. Programmatiquement :
+a 4 000 festivaliers.
+
+Le panneau "Suivre un message" liste les messages relayes (livres en
+premier, plus de sauts d'abord). En choisir un grise le reste et affiche
+sa source, son destinataire, les porteurs de copies, chaque relais avec
+son numero de saut (chemin livre en vert, backhaul des bornes en
+pointille orange) et une chronologie cliquable ; "Suivre depuis la
+creation" lance la lecture au bon moment. Les copies purgees ou evincees
+ne sont pas enregistrees : un porteur reste affiche jusqu'a la fin.
+Programmatiquement :
 
     from festival_ble_sim.config import SimulationConfig
     from festival_ble_sim.simulation import run_simulation

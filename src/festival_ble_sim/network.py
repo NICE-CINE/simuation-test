@@ -214,7 +214,18 @@ def process_node_contacts(
                 contact.store_message(copy, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now))
                 routing_algorithm.on_forward(message, sender, contact, copy)
             if event_log is not None:
-                event_log.append({"time": now, "from": sender.id, "to": contact.id, "delivered": is_delivery})
+                event_log.append(_relay_event(now, sender.id, contact.id, copy, is_delivery))
+
+def _relay_event(now: float, from_id: int, to_id: int, message: Message, delivered: bool, backhaul: bool = False) -> Dict[str, Any]:
+    event = {
+        "time": now, "from": from_id, "to": to_id, "delivered": delivered,
+        "msg": message.msg_id, "hops": message.hops,
+        "src": message.src_id, "dst": message.dst_id, "created": message.creation_time,
+    }
+    if backhaul:
+        event["backhaul"] = True
+    return event
+
 
 def beacon_backhaul_relay(
     now: float,
@@ -225,6 +236,7 @@ def beacon_backhaul_relay(
     contact_check_interval_s: float = 1.0,
     beacon_config: Optional[BeaconConfig] = None,
     rng: Optional[random.Random] = None,
+    event_log: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     # Simulates a WiFi/wired backhaul between fixed beacons: no radio-range
     # check, no BLE bandwidth/contention, and (like the hop count it
@@ -268,6 +280,8 @@ def beacon_backhaul_relay(
                 relayed = replace(message, routing_state=dict(message.routing_state))
                 target.store_message(relayed)
                 metrics.record_backhaul_transmission()
+                if event_log is not None:
+                    event_log.append(_relay_event(now, src_id, dst_id, relayed, False, backhaul=True))
 
 
 def network_engine(
@@ -294,6 +308,7 @@ def network_engine(
             contact_check_interval_s=contact_check_interval_s,
             beacon_config=beacon_config,
             rng=rng,
+            event_log=event_log,
         )
         neighbors_by_node = _compute_neighbors(nodes, grid) if ble_config is not None else None
         if neighbors_by_node is not None:
