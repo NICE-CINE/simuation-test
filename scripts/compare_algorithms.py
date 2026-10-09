@@ -12,6 +12,7 @@ from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, T
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -43,6 +44,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
     "fresh_spray": FreshSprayRouting,
     "geo_spray_focus": GeoSprayFocusRouting,
     "eco_sf": EcoSfRouting,
+    "band_fanout": BandFanoutRouting,
 }
 
 REPORT_FIELDS = [
@@ -90,8 +92,8 @@ def render_status(
     return "\r" + line[:width].ljust(width)
 
 
-def append_csv_row(row: dict, path: str, write_header: bool) -> None:
-    headers = ["algorithm", "beacons"] + REPORT_FIELDS
+def append_csv_row(row: dict, path: str, write_header: bool, headers: Optional[List[str]] = None) -> None:
+    headers = headers or ["algorithm", "beacons"] + REPORT_FIELDS
     with open(path, "w" if write_header else "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=headers)
         if write_header:
