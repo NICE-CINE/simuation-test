@@ -19,6 +19,7 @@ from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
 from festival_ble_sim.routing.dasfv import DasfVRouting
+from festival_ble_sim.routing.eco_sf import EcoSfRouting
 from festival_ble_sim.routing.epidemic import EpidemicRouting
 from festival_ble_sim.routing.geo_spray_focus import GeoSprayFocusRouting
 from festival_ble_sim.routing.gossip_a import GossipARouting
@@ -48,6 +49,7 @@ ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] =
     "tide_g2": lambda args: TideGRouting(seed=args.seed, **TIDE_G2_KWARGS),
     "fresh_spray": lambda args: FreshSprayRouting(),
     "geo_spray_focus": lambda args: GeoSprayFocusRouting(),
+    "eco_sf": lambda args: EcoSfRouting(seed=args.seed),
 }
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
