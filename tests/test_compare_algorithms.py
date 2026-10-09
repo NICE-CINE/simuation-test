@@ -80,8 +80,9 @@ def test_geo_spray_focus_is_registered_in_both_scripts():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import main as main_module
 
-    assert "geo_spray_focus" in compare_algorithms.ALGORITHMS
-    assert "geo_spray_focus" in main_module.ROUTING_FACTORIES
+    for name in ("geo_spray_focus", "eco_sf"):
+        assert name in compare_algorithms.ALGORITHMS
+        assert name in main_module.ROUTING_FACTORIES
 
 
 def test_build_config_size_sets_site_and_crowd():

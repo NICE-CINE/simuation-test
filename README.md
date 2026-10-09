@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray` ou `geo_spray_focus` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus` ou `eco_sf` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
@@ -61,7 +61,7 @@ Options disponibles :
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -345,6 +345,25 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   l'inondation tardive, pas de la geographie : variante sans GPS
   `GeoSprayFocusRouting(hint_max_age_s=1e-9, gps_policy="carriers",
   ack_hint=False)`. Spec dans `docs/GSF.md`.
+- `eco_sf` (`routing/eco_sf.py`) — ECO-SF, Spray-and-Focus sans GPS econome
+  en reveils radio. Modelise : beacons a cadence Trickle (Imin 2 s, Imax
+  30/60/120 s selon la batterie, suppression k = 1) qui conditionnent la
+  decouverte (pas de connexion sans beacon entendu dans un sens), utilite
+  PRoPHET allegee (vieillissement par minute, table de 64 entrees,
+  transitivite sur les 32 meilleures, echangee seulement en connexion),
+  budget de 2 a 16 copies selon les voisins entendus sur 60 s, partage
+  pondere par l'utilite (25-75 %), focus avec hysteresis `delta`, connexion
+  seulement si le voisin a une utilite > `dest_bloom_threshold` (0.05)
+  pour un message qu'il n'a pas, cooldown de 20 s par paire, plus aucun
+  relais apres 10 min (livraison directe seulement), batterie < 20 % :
+  refuse les relais, < 10 % : muet sauf message propre, eviction par
+  priorite sans toucher aux messages propres. Omis : Bloom filters (lus
+  comme des ensembles exacts, sans faux positifs), ACK signes (purge
+  globale instantanee), ordre de transfert par priorite, EWMA de la
+  densite, plafond de resets anti-spam. Les beacons n'ont pas de cout
+  energetique propre (le moteur facture un courant de fond fixe) : `stats`
+  compte beacons, resets Trickle, connexions, spray et focus. Spec et
+  resultats dans `docs/ECO-SF.md`.
 
 ## Ajouter un nouvel algorithme de routage
 
