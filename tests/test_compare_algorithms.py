@@ -80,3 +80,30 @@ def test_geo_spray_focus_is_registered_in_both_scripts():
 
     assert "geo_spray_focus" in compare_algorithms.ALGORITHMS
     assert "geo_spray_focus" in main_module.ROUTING_FACTORIES
+
+
+def test_build_config_uses_the_default_area_unless_told_otherwise():
+    default = compare_algorithms.build_config(0, 1, 60.0, 10)
+    assert (default.area.width_m, default.area.height_m) == (700.0, 500.0)
+    resized = compare_algorithms.build_config(0, 1, 60.0, 10, area_width_m=1400.0, area_height_m=1000.0)
+    assert (resized.area.width_m, resized.area.height_m) == (1400.0, 1000.0)
+    only_width = compare_algorithms.build_config(0, 1, 60.0, 10, area_width_m=900.0)
+    assert (only_width.area.width_m, only_width.area.height_m) == (900.0, 500.0)
+
+
+def test_resized_area_moves_pois_with_it():
+    config = compare_algorithms.build_config(
+        4, 1, 60.0, 10, mobility="poi", area_width_m=1400.0, area_height_m=1000.0
+    )
+    assert max(poi.x for poi in config.mobility.points_of_interest) > 700.0
+
+
+def test_main_with_area_archives_the_resized_config(tmp_path):
+    archive_dir = tmp_path / "archives"
+    compare_algorithms.main(
+        ["--area-width", "300", "--area-height", "200", "--duration", "30", "--num-festivaliers", "10",
+         "--beacon-count", "2", "--workers", "1", "--archive-dir", str(archive_dir)]
+    )
+    csvs = list(archive_dir.glob("*_comparaison.csv"))
+    params = json.loads(csvs[0].with_suffix(".json").read_text(encoding="utf-8"))
+    assert params["config"]["area"] == {"width_m": 300.0, "height_m": 200.0}

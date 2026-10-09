@@ -107,8 +107,14 @@ def build_config(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    area_width_m: Optional[float] = None,
+    area_height_m: Optional[float] = None,
 ) -> SimulationConfig:
-    area = AreaConfig()
+    defaults = AreaConfig()
+    area = AreaConfig(
+        width_m=defaults.width_m if area_width_m is None else area_width_m,
+        height_m=defaults.height_m if area_height_m is None else area_height_m,
+    )
     pois = default_festival_pois(area) if mobility == "poi" else ()
     return SimulationConfig(
         duration_s=duration_s,
@@ -143,11 +149,13 @@ def _run_one(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    area_width_m: Optional[float] = None,
+    area_height_m: Optional[float] = None,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure,
+        followup_probability, gps_fix_failure, area_width_m, area_height_m,
     )
     label = run_label(algo_name, beacon_count)
     progress_callback = None
@@ -182,6 +190,8 @@ def run_matrix(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    area_width_m: Optional[float] = None,
+    area_height_m: Optional[float] = None,
 ) -> List[dict]:
     tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
@@ -193,7 +203,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure,
+                followup_probability, gps_fix_failure, area_width_m, area_height_m,
             ): index
             for index, (algo_name, count) in enumerate(tasks)
         }
@@ -258,6 +268,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--duration", type=float, default=3600.0)
     parser.add_argument("--num-festivaliers", type=int, default=200)
+    parser.add_argument(
+        "--area-width", type=float, default=None,
+        help="Largeur du site en metres (defaut : celle de AreaConfig)",
+    )
+    parser.add_argument(
+        "--area-height", type=float, default=None,
+        help="Hauteur du site en metres (defaut : celle de AreaConfig)",
+    )
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument("--mobility", choices=["random_waypoint", "poi"], default="random_waypoint")
     parser.add_argument(
@@ -291,7 +309,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         vars(args),
         build_config(
             args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            args.followup_probability, args.gps_fix_failure,
+            args.followup_probability, args.gps_fix_failure, args.area_width, args.area_height,
         ),
     )
     rows = run_matrix(
@@ -306,6 +324,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         reply_probability=args.reply_probability,
         followup_probability=args.followup_probability,
         gps_fix_failure=args.gps_fix_failure,
+        area_width_m=args.area_width,
+        area_height_m=args.area_height,
     )
     write_csv(rows, archive_csv)
     if args.csv:

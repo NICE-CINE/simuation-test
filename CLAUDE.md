@@ -23,6 +23,8 @@ pytest tests/test_network.py::test_network_engine_two_hop_relay_takes_two_interv
 # Compare every routing algo x {with, without beacons}, same seed, in parallel
 python scripts/compare_algorithms.py --seed 42 --duration 3600 \
     --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv out.csv]
+# --area-width/--area-height (m) resize the site (POIs and the beacon grid follow),
+# so density = --num-festivaliers / area.
 
 # Sweep fresh_spray's initial_tokens over seeds (per-token means at the end)
 python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \

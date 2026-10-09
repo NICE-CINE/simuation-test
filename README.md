@@ -56,6 +56,10 @@ beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
+`--area-width` et `--area-height` (metres, defaut 700 x 500) changent la
+taille du site ; les points d'interet et la grille de bornes suivent. La
+densite est `--num-festivaliers` divise par l'aire.
+
 `--workers N` (defaut 2) lance N simulations en parallele (un processus
 chacune) ; une ligne de statut affiche l'avancement de chaque run en
 direct. Chaque comparaison est archivee dans `archives/`
