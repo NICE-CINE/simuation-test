@@ -70,3 +70,29 @@ def _poi_position(config, index=0):
 
     poi = config.points_of_interest[index]
     return Position(poi.x, poi.y)
+
+
+def test_background_probability_defaults_to_none_and_keeps_old_behaviour():
+    assert MobilityConfig().background_probability is None
+
+
+def test_full_background_probability_spreads_targets_over_the_whole_area():
+    area = AreaConfig(width_m=200.0, height_m=200.0)
+    config = _config(background_probability=1.0)
+    mobility = PoiMobility(config, rng=random.Random(4))
+    xs = [mobility.initial_position(area).x for _ in range(200)]
+    assert max(xs) - min(xs) > 100.0
+
+
+def test_zero_background_probability_confines_initial_positions_to_points_of_interest():
+    area = AreaConfig(width_m=200.0, height_m=200.0)
+    config = _config(background_probability=0.0)
+    mobility = PoiMobility(config, rng=random.Random(5))
+    for _ in range(100):
+        pos = mobility.initial_position(area)
+        assert abs(pos.x - 50.0) <= 5.0 and abs(pos.y - 50.0) <= 5.0
+
+
+def test_background_probability_must_be_a_probability():
+    with pytest.raises(ValueError):
+        PoiMobility(_config(background_probability=1.5), rng=random.Random(1))

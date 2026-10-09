@@ -8,11 +8,10 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.config import (
-    AreaConfig, BeaconConfig, GpsConfig, MobilityConfig, SimulationConfig, TrafficConfig,
-)
+from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
-from festival_ble_sim.mobility.poi import PoiMobility, default_festival_pois
+from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -107,15 +106,15 @@ def build_config(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    size: Optional[str] = None,
 ) -> SimulationConfig:
-    area = AreaConfig()
-    pois = default_festival_pois(area) if mobility == "poi" else ()
+    num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     return SimulationConfig(
         duration_s=duration_s,
         num_festivaliers=num_festivaliers,
         random_seed=seed,
         area=area,
-        mobility=MobilityConfig(points_of_interest=pois),
+        mobility=mobility_config,
         beacons=BeaconConfig(count=beacon_count),
         traffic=TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability),
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
@@ -143,11 +142,12 @@ def _run_one(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    size: Optional[str] = None,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure,
+        followup_probability, gps_fix_failure, size,
     )
     label = run_label(algo_name, beacon_count)
     progress_callback = None
@@ -182,6 +182,7 @@ def run_matrix(
     reply_probability: float = 0.0,
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
+    size: Optional[str] = None,
 ) -> List[dict]:
     tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
@@ -193,7 +194,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure,
+                followup_probability, gps_fix_failure, size,
             ): index
             for index, (algo_name, count) in enumerate(tasks)
         }
@@ -257,9 +258,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Compare les algos de routing avec/sans bornes")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--duration", type=float, default=3600.0)
-    parser.add_argument("--num-festivaliers", type=int, default=200)
+    parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
-    parser.add_argument("--mobility", choices=["random_waypoint", "poi"], default="random_waypoint")
+    parser.add_argument(
+        "--mobility", choices=["random_waypoint", "poi"], default=None, help="random_waypoint par defaut, poi avec --size",
+    )
+    parser.add_argument(
+        "--size", choices=sorted(SITE_PRESETS), default=None,
+        help="Preset de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la surface)",
+    )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
         help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
@@ -281,6 +288,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
+    resolve_cli_args(args, 200, parser.error)
 
     stem = archive_stem(args.archive_dir, "comparaison")
     archive_csv = str(stem.with_suffix(".csv"))
@@ -291,7 +299,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         vars(args),
         build_config(
             args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            args.followup_probability, args.gps_fix_failure,
+            args.followup_probability, args.gps_fix_failure, args.size,
         ),
     )
     rows = run_matrix(
@@ -306,6 +314,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         reply_probability=args.reply_probability,
         followup_probability=args.followup_probability,
         gps_fix_failure=args.gps_fix_failure,
+        size=args.size,
     )
     write_csv(rows, archive_csv)
     if args.csv:

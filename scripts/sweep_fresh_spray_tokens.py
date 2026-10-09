@@ -10,6 +10,7 @@ from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from compare_algorithms import REPORT_FIELDS, STATUS_REFRESH_S, build_config, format_duration, render_status
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.presets import SITE_PRESETS, resolve_cli_args
 from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.simulation import run_simulation
 
@@ -36,9 +37,12 @@ def _run_one(
     beacon_count: int,
     mobility: str,
     reply_probability: float,
+    size: Optional[str] = None,
 ) -> Dict[str, Any]:
     progress = _worker_progress
-    config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
+    config = build_config(
+        beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, size=size
+    )
     label = run_label(tokens, seed)
     progress_callback = None
     if progress is not None:
@@ -69,6 +73,7 @@ def run_sweep(
     beacon_count: int,
     mobility: str = "random_waypoint",
     reply_probability: float = 0.0,
+    size: Optional[str] = None,
     workers: int = 1,
     show_progress: bool = False,
     csv_path: Optional[str] = None,
@@ -82,7 +87,7 @@ def run_sweep(
     try:
         futures: Dict[Future, int] = {
             executor.submit(
-                _run_one, tokens, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability
+                _run_one, tokens, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability, size
             ): index
             for index, (tokens, seed) in enumerate(tasks)
         }
@@ -149,9 +154,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--tokens", type=int, nargs="+", default=[4, 8, 16, 32])
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--duration", type=float, default=3600.0)
-    parser.add_argument("--num-festivaliers", type=int, default=200)
+    parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
-    parser.add_argument("--mobility", choices=["random_waypoint", "poi"], default="random_waypoint")
+    parser.add_argument(
+        "--mobility", choices=["random_waypoint", "poi"], default=None, help="random_waypoint par defaut, poi avec --size",
+    )
+    parser.add_argument(
+        "--size", choices=sorted(SITE_PRESETS), default=None,
+        help="Preset de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la surface)",
+    )
     parser.add_argument("--reply-probability", type=float, default=0.0)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR)
@@ -160,6 +171,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         parser.error("--workers doit etre >= 1")
     if min(args.tokens) < 1:
         parser.error("--tokens doit etre >= 1")
+    resolve_cli_args(args, 200, parser.error)
 
     stem = archive_stem(args.archive_dir, "sweep_fresh_spray_tokens")
     archive_csv = str(stem.with_suffix(".csv"))
@@ -167,11 +179,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     write_params(
         stem.with_suffix(".json"),
         vars(args),
-        build_config(args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability),
+        build_config(
+            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility,
+            args.reply_probability, size=args.size,
+        ),
     )
     rows = run_sweep(
         args.tokens, args.seeds, args.duration, args.num_festivaliers, args.beacon_count,
-        mobility=args.mobility, reply_probability=args.reply_probability,
+        mobility=args.mobility, reply_probability=args.reply_probability, size=args.size,
         workers=args.workers, show_progress=True, csv_path=archive_csv,
     )
     print_summary(summarize(rows))

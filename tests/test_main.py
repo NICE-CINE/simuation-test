@@ -3,6 +3,8 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import main as main_module  # noqa: E402
@@ -11,11 +13,12 @@ import main as main_module  # noqa: E402
 def test_build_arg_parser_defaults():
     args = main_module.build_arg_parser().parse_args([])
     assert args.routing == "epidemic"
-    assert args.mobility == "random_waypoint"
+    assert args.mobility is None
+    assert args.size is None
     assert args.beacons == 0
     assert args.beacon_placement == "grid"
     assert args.duration == 3600.0
-    assert args.num_festivaliers == 4000
+    assert args.num_festivaliers is None
     assert args.seed == 42
     assert args.output is None
     assert args.archive_dir == "archives"
@@ -151,3 +154,40 @@ def test_tide_g2_cli_wires_followups_and_fix_failures():
     assert config.traffic.followup_probability == 0.3
     assert config.gps.fix_failure_probability == 0.1
     assert main_module.ROUTING_FACTORIES["tide_g2"](args)._ack_hint
+
+
+def test_build_config_without_size_keeps_the_legacy_site():
+    args = main_module.build_arg_parser().parse_args([])
+    config = main_module.build_config(args)
+    assert config.num_festivaliers == 4000
+    assert (config.area.width_m, config.area.height_m) == (700.0, 500.0)
+    assert config.mobility.points_of_interest == ()
+    assert config.mobility.background_probability is None
+
+
+def test_size_sets_festivaliers_area_and_crowd_layout():
+    args = main_module.build_arg_parser().parse_args(["--size", "medium"])
+    config = main_module.build_config(args)
+    assert config.num_festivaliers == 10000
+    assert (config.area.width_m, config.area.height_m) == (205.0, 146.0)
+    assert len(config.mobility.points_of_interest) == 4
+    assert config.mobility.background_probability == pytest.approx(0.30 / 0.85)
+    assert args.mobility == "poi"
+
+
+def test_size_with_explicit_random_waypoint_only_changes_count_and_area():
+    args = main_module.build_arg_parser().parse_args(["--size", "small", "--mobility", "random_waypoint"])
+    config = main_module.build_config(args)
+    assert config.num_festivaliers == 4000
+    assert config.mobility.points_of_interest == ()
+
+
+def test_size_conflicts_with_a_different_num_festivaliers(capsys):
+    with pytest.raises(SystemExit):
+        main_module.main(["--size", "small", "--num-festivaliers", "10"])
+    assert "--size" in capsys.readouterr().err
+
+
+def test_size_rejects_unknown_names():
+    with pytest.raises(SystemExit):
+        main_module.build_arg_parser().parse_args(["--size", "gigantic"])
