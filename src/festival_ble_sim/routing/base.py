@@ -39,6 +39,16 @@ class RoutingAlgorithm(ABC):
         # remaining copy and the newly forwarded one (e.g. Spray & Wait).
         pass
 
+    def select_links(self, sender: "BaseNode", neighbors: List["BaseNode"], max_links: int) -> List["BaseNode"]:
+        # Which neighbors get the sender's limited concurrent links
+        # (BleConfig.max_concurrent_links). Real BLE stacks only sustain a
+        # handful of simultaneous GATT connections; by default the closest
+        # contacts (stronger link/RSSI proxy) win the slots. Squared distance
+        # sorts identically to real distance (sqrt is monotonic) without paying
+        # for the sqrt on every candidate.
+        ranked = sorted(neighbors, key=lambda n: sender.position.distance_squared_to(n.position))
+        return ranked[:max_links]
+
     def choose_eviction(self, node: "BaseNode", now: float) -> Optional[int]:
         # Called when a forwarded copy lands in a full buffer. None (or an id
         # not in the buffer) keeps BaseNode's default FIFO eviction.

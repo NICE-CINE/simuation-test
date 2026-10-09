@@ -106,13 +106,8 @@ def process_node_contacts(
     if neighbors is None:
         neighbors = grid.get_nearby(sender, sender.radio_range_m)
 
-    # Real BLE stacks only sustain a handful of simultaneous GATT
-    # connections; closer contacts (stronger link/RSSI proxy) win the slots.
     if ble_config is not None and ble_config.max_concurrent_links is not None:
-        # Squared distance sorts identically to real distance (sqrt is
-        # monotonic) without paying for the sqrt on every candidate.
-        neighbors = sorted(neighbors, key=lambda n: sender.position.distance_squared_to(n.position))
-        neighbors = neighbors[: ble_config.max_concurrent_links]
+        neighbors = routing_algorithm.select_links(sender, neighbors, ble_config.max_concurrent_links)
 
     congestion_loss_prob = 0.0
     if ble_config is not None and neighbors:

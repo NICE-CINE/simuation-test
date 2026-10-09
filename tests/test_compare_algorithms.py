@@ -85,6 +85,14 @@ def test_geo_spray_focus_is_registered_in_both_scripts():
         assert name in main_module.ROUTING_FACTORIES
 
 
+def test_band_fanout_is_registered_in_both_scripts():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import main as main_module
+
+    assert "band_fanout" in compare_algorithms.ALGORITHMS
+    assert "band_fanout" in main_module.ROUTING_FACTORIES
+
+
 def test_build_config_size_sets_site_and_crowd():
     config = compare_algorithms.build_config(0, 1, 60.0, 200, "poi", size="small")
     assert config.num_festivaliers == 4000

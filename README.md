@@ -25,7 +25,11 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus` ou `eco_sf` (un seul choix a la fois, pas de `|`)
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf` ou `band_fanout` (un seul choix a la fois, pas de `|`).
+  `band_fanout` n'a pas d'option dediee : `main.py` le lance avec ses
+  defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
+  `--seed` pour le tirage des relais ; pour faire varier ses parametres,
+  voir "Balayer les variantes de band_fanout"
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
 - `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
@@ -61,7 +65,7 @@ Options disponibles :
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -73,6 +77,35 @@ du meme nom (arguments CLI et `SimulationConfig` complete, dans sa
 variante avec bornes). Chaque ligne du CSV est ecrite des que son run se
 termine, donc un run interrompu garde les resultats deja obtenus.
 `--csv CHEMIN` ecrit en plus une copie du CSV.
+
+## Balayer les variantes de band_fanout
+
+    python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 \
+        --num-festivaliers 500 --beacon-count 6 --workers 12 \
+        --mobility poi --reply-probability 0.5 [--variant "fanout=2,max_hops=4" ...]
+
+Compare plusieurs configurations de `BandFanoutRouting` (avec
+`--beacon-count` bornes) sur plusieurs graines, dans un seul pool de processus, puis
+affiche la moyenne par variante (livraison, latence moyenne et p95,
+overhead, energie).
+
+- `--variant "cle=val,cle=val"` : une variante, option repetable ;
+  `--variant ""` = les defauts. Cles : `fanout` (entier), `max_hops`
+  (entier), `band_low` et `band_high` (flottants, fractions de la portee),
+  `purge_delivered` (`0` ou `1`). Une cle inconnue ou une valeur invalide
+  arrete le script avant de lancer quoi que ce soit.
+- Sans `--variant`, le script teste 7 variantes : les defauts,
+  `purge_delivered=0`, `band_low=0,band_high=1` (pas de bande), `fanout=2`,
+  `fanout=4`, `max_hops=3` et `max_hops=5`.
+- `--seeds` (defaut `1 2 3`), `--duration` (defaut 3600), `--num-festivaliers`
+  (defaut 200), `--beacon-count` (defaut 6), `--mobility`
+  (`random_waypoint` par defaut ou `poi`), `--reply-probability` (defaut 0),
+  `--workers` (defaut 2), `--archive-dir` (defaut `archives`). Pas d'option
+  `--size`, `--followup-probability` ni `--gps-fix-failure` ici.
+- Archive : `<date>_<heure>_sweep_band_fanout.csv` (une ligne par variante et
+  par graine, ecrite des que le run se termine, avec `wall_s`) + `.json` du
+  meme nom ; les chaines de variantes ne sont que dans les arguments CLI du
+  `.json`.
 
 ## Trafic
 
@@ -364,6 +397,30 @@ Forces et faiblesses detaillees : un fichier par algorithme dans `docs/algorithm
   energetique propre (le moteur facture un courant de fond fixe) : `stats`
   compte beacons, resets Trickle, connexions, spray et focus. Spec et
   resultats dans `docs/ECO-SF.md`.
+- `band_fanout` (`routing/band_fanout.py`) — relais a eventail borne :
+  chaque copie peut etre relayee `fanout` fois (3 par defaut), la copie
+  relayee repart avec un budget neuf, puis il ne reste que la livraison
+  directe. Les relais sont tires au hasard (graine `seed`) parmi les
+  voisins dont la distance GPS vaut 40 a 60 % de la portee (`band`, soit
+  12 a 18 m, environ 6 a 11 dB de marge de liaison) : assez loin pour
+  etendre la diffusion, pas au bord de portee ou le shadowing fait perdre
+  des paquets. Si la bande compte moins de `fanout` voisins, complete avec
+  ceux qui en sont les plus proches. Le classement porte sur tous les
+  voisins ; le plafond `max_concurrent_links` (6) reste applique, mais
+  l'algo choisit lui-meme ses liaisons via le hook `select_links` (relais
+  retenus d'abord, puis les plus proches), sinon la bande serait hors
+  d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Un
+  message livre est purge de tous les buffers au tick suivant
+  (`purge_delivered=True`) ; l'ACK est instantane et global, aucun temps
+  radio n'est facture. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
+  continue d'etre transmis apres la livraison. Pas d'eviction dediee.
+  `scripts/sweep_band_fanout.py` (options : voir "Balayer les variantes de
+  band_fanout") compare des variantes (`--variant
+  "fanout=2,max_hops=4"`, cles : `fanout`, `max_hops`, `band_low`,
+  `band_high`, `purge_delivered`) sur plusieurs graines ;
+  sans `--variant`, il teste les defauts, l'absence de purge, la bande
+  0-100 %, `fanout` 2 et 4, `max_hops` 3 et 5. Resultats et diagramme dans
+  `docs/algorithmes/band_fanout.md`.
 
 ## Ajouter un nouvel algorithme de routage
 
