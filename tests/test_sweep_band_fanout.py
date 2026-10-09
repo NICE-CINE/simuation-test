@@ -72,3 +72,10 @@ def test_main_archives_csv_and_json_in_given_dir(tmp_path, capsys):
     assert any(n.endswith("_sweep_band_fanout.csv") for n in names)
     assert any(n.endswith("_sweep_band_fanout.json") for n in names)
     assert "fanout=2" in capsys.readouterr().out
+
+
+def test_run_sweep_runs_duplicate_variants_once(tmp_path):
+    rows = sweep.run_sweep(
+        ["fanout=2", "fanout=2"], [1], duration_s=30.0, num_festivaliers=10, beacon_count=2, workers=1,
+    )
+    assert [row["variant"] for row in rows] == ["fanout=2"]

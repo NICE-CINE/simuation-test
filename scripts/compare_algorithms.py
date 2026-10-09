@@ -92,8 +92,8 @@ def render_status(
     return "\r" + line[:width].ljust(width)
 
 
-def append_csv_row(row: dict, path: str, write_header: bool) -> None:
-    headers = ["algorithm", "beacons"] + REPORT_FIELDS
+def append_csv_row(row: dict, path: str, write_header: bool, headers: Optional[List[str]] = None) -> None:
+    headers = headers or ["algorithm", "beacons"] + REPORT_FIELDS
     with open(path, "w" if write_header else "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=headers)
         if write_header:

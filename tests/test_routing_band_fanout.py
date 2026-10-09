@@ -23,11 +23,13 @@ def _node(node_id, distance_m=0.0):
     )
 
 
-def _msg(dst_id=99, fanout_left=None, hops=0):
-    message = Message(msg_id=1, src_id=1, dst_id=dst_id, size_bytes=10, creation_time=0.0, ttl_s=1000.0, hops=hops)
-    if fanout_left is not None:
-        message.routing_state["fanout_left"] = fanout_left
-    return message
+def _msg(dst_id=99, hops=0):
+    return Message(msg_id=1, src_id=1, dst_id=dst_id, size_bytes=10, creation_time=0.0, ttl_s=1000.0, hops=hops)
+
+
+def _spend(algo, holder, contact, times):
+    for _ in range(times):
+        algo.on_forward(_msg(), holder, contact, _msg())
 
 
 def _world(algo, distances):
@@ -171,27 +173,72 @@ def test_ignores_when_fanout_budget_is_spent():
     algo = BandFanoutRouting(fanout=3)
     holder, contacts = _world(algo, [15.0])
     _tick(algo, holder, contacts)
-    assert _selected(algo, holder, contacts, _msg(fanout_left=0)) == set()
+    _spend(algo, holder, contacts[0], 2)
+    assert _selected(algo, holder, contacts) == {contacts[0].id}
+    _spend(algo, holder, contacts[0], 1)
+    assert _selected(algo, holder, contacts) == set()
 
 
-def test_on_forward_spends_one_relay_and_gives_the_copy_a_fresh_budget():
-    algo = BandFanoutRouting(fanout=3)
-    holder, contacts = _world(algo, [15.0])
-    original = _msg(fanout_left=2)
-    forwarded = _msg(fanout_left=2)
-    algo.on_forward(original, holder, contacts[0], forwarded)
-    assert original.routing_state["fanout_left"] == 1
-    assert forwarded.routing_state["fanout_left"] == 3
-
-
-def test_fresh_message_uses_the_configured_fanout_as_budget():
+def test_each_relay_costs_one_unit_of_the_holders_budget_and_the_copy_starts_fresh():
     algo = BandFanoutRouting(fanout=4)
     holder, contacts = _world(algo, [15.0])
-    original = _msg()
-    forwarded = _msg()
-    algo.on_forward(original, holder, contacts[0], forwarded)
-    assert original.routing_state["fanout_left"] == 3
-    assert forwarded.routing_state["fanout_left"] == 4
+    _spend(algo, holder, contacts[0], 1)
+    assert algo._relayed[holder.id][1] == 1
+    assert contacts[0].id not in algo._relayed or 1 not in algo._relayed[contacts[0].id]
+
+
+def test_copy_cloned_elsewhere_starts_with_a_fresh_budget():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _world(algo, [5.0, 20.0])
+    _spend(algo, holder, contacts[0], 1)
+    clone_holder, neighbor = contacts
+    clone_holder.store_message(_msg())
+    algo.on_tick(0.0, {clone_holder.id: [neighbor]})
+    assert algo.decide(_msg(), clone_holder, neighbor, now=0.0) is RoutingDecision.FORWARD
+
+
+def test_exhausted_holder_gets_no_selection():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _world(algo, [15.0])
+    holder.store_message(_msg())
+    _spend(algo, holder, contacts[0], 1)
+    algo.on_tick(0.0, {holder.id: list(contacts)})
+    assert algo._selected == {}
+
+
+def test_spent_budget_is_forgotten_once_the_message_leaves_the_buffer():
+    algo = BandFanoutRouting(fanout=2)
+    holder, contacts = _world(algo, [15.0])
+    holder.store_message(_msg())
+    _spend(algo, holder, contacts[0], 1)
+    holder.buffer.clear()
+    algo.on_tick(0.0, {holder.id: list(contacts)})
+    assert algo._relayed[holder.id] == {}
+
+
+def test_selection_skips_contacts_that_cannot_use_a_relay():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _world(algo, [15.0, 15.5])
+    contacts[0].store_message(_msg())
+    _tick(algo, holder, contacts)
+    assert algo._selected[holder.id] == {contacts[1].id}
+
+
+def test_destination_is_not_drawn_as_a_relay_for_its_own_message():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _world(algo, [15.0])
+    holder.store_message(_msg(dst_id=contacts[0].id))
+    algo.on_tick(0.0, {holder.id: list(contacts)})
+    assert algo._selected[holder.id] == set()
+
+
+def test_select_links_gives_a_link_to_the_destination_first():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _world(algo, [1.0, 2.0, 3.0, 15.0, 25.0])
+    holder.store_message(_msg(dst_id=contacts[4].id))
+    algo.on_tick(0.0, {holder.id: list(contacts)})
+    kept = algo.select_links(holder, contacts, 2)
+    assert [c.id for c in kept] == [contacts[4].id, contacts[3].id]
 
 
 def _engine_world(algo, distances):
@@ -223,8 +270,8 @@ def test_engine_integration_relays_to_fanout_contacts_then_waits():
     _run_tick(algo, holder, contacts, grid, now=1.0)
     holders = [c for c in contacts if c.has_message(1)]
     assert len(holders) == 2
-    assert holder.buffer[1].routing_state["fanout_left"] == 0
-    assert all(c.buffer[1].routing_state["fanout_left"] == 2 for c in holders)
+    assert algo._relayed[holder.id][1] == 2
+    assert all(1 not in algo._relayed.get(c.id, {}) for c in holders)
     assert all(c.buffer[1].hops == 1 for c in holders)
 
     _run_tick(algo, holder, contacts, grid, now=2.0)
@@ -235,7 +282,8 @@ def test_engine_integration_still_delivers_to_destination_after_budget_is_spent(
     algo = BandFanoutRouting(fanout=1)
     holder, contacts, grid = _engine_world(algo, [3.0])
     destination = contacts[0]
-    holder.store_message(_msg(dst_id=destination.id, fanout_left=0))
+    holder.store_message(_msg(dst_id=destination.id))
+    _spend(algo, holder, destination, 1)
     _run_tick(algo, holder, contacts, grid, now=1.0)
     assert destination.has_message(1)
 

@@ -13,19 +13,24 @@ de portee ou le shadowing fait perdre des paquets.
    un buffer non vide, on classe ses voisins par `distance GPS bruitee /
    portee radio`. Ceux dont le ratio tombe dans `band` (defaut 0.4-0.6, soit
    12 a 18 m pour 30 m de portee, environ 6 a 11 dB de marge de liaison)
-   sont candidats ; on en tire `fanout` (defaut 3) au hasard (graine `seed`).
+   sont candidats (on ecarte d'abord les voisins qui ont deja tous les
+   messages en attente ou qui en sont la destination) ; on en tire `fanout` (defaut 3) au hasard (graine `seed`).
    S'il y en a moins que `fanout`, on complete avec les voisins les plus
    proches de la bande.
 2. **Eventail borne** : chaque copie peut etre relayee `fanout` fois
-   (`routing_state["fanout_left"]`). La copie relayee repart avec un budget
-   neuf ; l'originale decremente le sien. Budget epuise : il ne reste que la
+   (compteur tenu par couple porteur/message dans l'algorithme, pas dans
+   `routing_state`). La copie relayee repart avec un budget neuf, y compris
+   une copie clonee par le backhaul des beacons ; l'originale decremente le
+   sien. Un porteur sans aucun message relayable ne calcule pas de selection. Budget epuise : il ne reste que la
    livraison directe (gestion moteur, hors `decide`).
 3. **Plafond de sauts** : `max_hops` (defaut 4), en plus du TTL du moteur.
 4. **Liaisons** : le moteur limite chaque emetteur a `max_concurrent_links`
    (6) voisins. Par defaut les plus proches gagnent, ce qui rendrait la bande
    inatteignable en foule dense. `band_fanout` surcharge `select_links` :
-   les relais choisis passent d'abord (les plus proches parmi eux si le
-   plafond coupe), puis les plus proches du reste. Le plafond reste respecte.
+   les destinataires des messages portes passent en premier (la livraison
+   directe contourne `decide` mais a besoin d'un lien), puis les relais
+   choisis (les plus proches parmi eux si le plafond coupe), puis les plus
+   proches du reste. Le plafond reste respecte.
 5. **Purge globale** (`purge_delivered=True`) : a la livraison, le message
    est marque livre ; a chaque tick il est supprime du buffer de tous les
    noeuds actifs, et `decide` l'ignore.

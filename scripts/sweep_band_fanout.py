@@ -1,13 +1,14 @@
 from __future__ import annotations
 import argparse
-import csv
 import multiprocessing
 import statistics
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
-from compare_algorithms import REPORT_FIELDS, STATUS_REFRESH_S, build_config, format_duration, render_status
+from compare_algorithms import (
+    REPORT_FIELDS, STATUS_REFRESH_S, append_csv_row, build_config, format_duration, render_status,
+)
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.routing.band_fanout import BandFanoutRouting
@@ -122,7 +123,7 @@ def run_sweep(
     show_progress: bool = False,
     csv_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    tasks: List[Tuple[str, int]] = [(variant, seed) for variant in variants for seed in seeds]
+    tasks: List[Tuple[str, int]] = [(variant, seed) for variant in dict.fromkeys(variants) for seed in seeds]
     results: Dict[int, Dict[str, Any]] = {}
     sweep_start = time.monotonic()
     manager = multiprocessing.Manager() if show_progress else None
@@ -143,11 +144,7 @@ def run_sweep(
                 row = future.result()
                 results[index] = row
                 if csv_path:
-                    with open(csv_path, "w" if len(results) == 1 else "a", newline="", encoding="utf-8") as f:
-                        writer = csv.DictWriter(f, fieldnames=HEADERS)
-                        if len(results) == 1:
-                            writer.writeheader()
-                        writer.writerow(row)
+                    append_csv_row(row, csv_path, write_header=len(results) == 1, headers=HEADERS)
                 if progress is not None:
                     label = run_label(*tasks[index])
                     progress.pop(label, None)
@@ -213,6 +210,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         parser.error("--workers doit etre >= 1")
     if args.variant is None:
         args.variant = list(DEFAULT_VARIANTS)
+    args.variant = list(dict.fromkeys(args.variant))
     for text in args.variant:
         try:
             build_algorithm(parse_variant(text), seed=0)
