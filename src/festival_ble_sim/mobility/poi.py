@@ -14,6 +14,9 @@ class PoiMobility(MobilityModel):
         self._weights = [max(0.0, poi.weight) for poi in config.points_of_interest]
         if sum(self._weights) <= 0:
             raise ValueError("at least one point of interest must have a positive weight")
+        bg = config.background_probability
+        if bg is not None and not 0.0 <= bg <= 1.0:
+            raise ValueError("background_probability must be between 0 and 1")
         self._config = config
         self._rng = rng or random.Random()
         self._target: Optional[Position] = None
@@ -21,20 +24,34 @@ class PoiMobility(MobilityModel):
         self._pause_until: float = 0.0
         self._elapsed_s: float = 0.0
 
-    def initial_position(self, area: AreaConfig) -> Position:
+    def _uniform_position(self, area: AreaConfig) -> Position:
         return Position(
             x=self._rng.uniform(0.0, area.width_m),
             y=self._rng.uniform(0.0, area.height_m),
         )
 
-    def _pick_new_target(self, area: AreaConfig) -> None:
+    def _poi_position(self, area: AreaConfig) -> Position:
         poi = self._rng.choices(self._config.points_of_interest, weights=self._weights, k=1)[0]
         offset_x = self._rng.uniform(-poi.radius_m, poi.radius_m)
         offset_y = self._rng.uniform(-poi.radius_m, poi.radius_m)
-        self._target = Position(
+        return Position(
             x=min(max(poi.x + offset_x, 0.0), area.width_m),
             y=min(max(poi.y + offset_y, 0.0), area.height_m),
         )
+
+    def _crowd_position(self, area: AreaConfig) -> Position:
+        bg = self._config.background_probability
+        if bg is not None and self._rng.random() < bg:
+            return self._uniform_position(area)
+        return self._poi_position(area)
+
+    def initial_position(self, area: AreaConfig) -> Position:
+        if self._config.background_probability is None:
+            return self._uniform_position(area)
+        return self._crowd_position(area)
+
+    def _pick_new_target(self, area: AreaConfig) -> None:
+        self._target = self._crowd_position(area)
         self._speed_mps = self._rng.uniform(self._config.speed_min_mps, self._config.speed_max_mps)
 
     def step(self, current: Position, dt: float, area: AreaConfig) -> Position:

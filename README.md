@@ -28,6 +28,15 @@ Options disponibles :
   `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray` ou `geo_spray_focus` (un seul choix a la fois, pas de `|`)
 - `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
   se repartissent entre scenes, bars et entree, voir plus bas)
+- `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
+  30 000 / 60 000 festivaliers sur 12 000 / 30 000 / 90 000 / 180 000 m2,
+  soit ~3 m2 par personne, ratio 1,4:1). Fixe aussi la repartition de la
+  foule (70 % du public cible 15 % de la surface, voir `presets.py`) et
+  active `--mobility poi` par defaut ; refuse un `--num-festivaliers`
+  different. Disponible aussi dans `compare_algorithms.py` et
+  `sweep_fresh_spray_tokens.py`. Sans `--size`, le site reste 700x500 m,
+  4 000 festivaliers. La part mesuree dans la zone dense est un peu sous
+  70 % (~67 % small, ~63 % large) : les gens en transit sont hors zone dense.
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
 - `--beacon-placement` : `grid` (defaut) ou `manual`
 - `--duration`, `--num-festivaliers`, `--seed`

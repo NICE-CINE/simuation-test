@@ -117,6 +117,10 @@ class MobilityConfig:
     # Only consumed by mobility.poi.PoiMobility (opt-in via mobility_factory);
     # RandomWaypointMobility ignores this field entirely.
     points_of_interest: Tuple[PointOfInterest, ...] = ()
+    # Also PoiMobility-only. None keeps the original behaviour (uniform start,
+    # POI-only targets); a probability makes initial positions and each new
+    # target uniform over the whole area with that probability, POI otherwise.
+    background_probability: Optional[float] = None
 
 
 @dataclass(frozen=True)

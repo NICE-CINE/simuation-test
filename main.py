@@ -4,18 +4,17 @@ import random
 from typing import Callable, Dict, List, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import (
-    AreaConfig,
     BeaconConfig,
     ChurnConfig,
     GpsConfig,
-    MobilityConfig,
     SimulationConfig,
     TrafficConfig,
 )
 from festival_ble_sim.metrics import format_report
 from festival_ble_sim.mobility.base import MobilityModel
-from festival_ble_sim.mobility.poi import PoiMobility, default_festival_pois
+from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
+from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
 from festival_ble_sim.routing.base import RoutingAlgorithm
 from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
 from festival_ble_sim.routing.bubble_f import BubbleFRouting
@@ -32,6 +31,8 @@ from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
+
+DEFAULT_NUM_FESTIVALIERS = 4000
 
 ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] = {
     "epidemic": lambda args: EpidemicRouting(),
@@ -61,11 +62,18 @@ MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Rand
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulateur de messagerie BLE mesh en festival")
     parser.add_argument("--routing", choices=sorted(ROUTING_FACTORIES), default="epidemic")
-    parser.add_argument("--mobility", choices=sorted(MOBILITY_FACTORIES), default="random_waypoint")
+    parser.add_argument(
+        "--mobility", choices=sorted(MOBILITY_FACTORIES), default=None,
+        help="random_waypoint par defaut, poi avec --size",
+    )
+    parser.add_argument(
+        "--size", choices=sorted(SITE_PRESETS), default=None,
+        help="Preset de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la surface)",
+    )
     parser.add_argument("--beacons", type=int, default=0, help="Nombre de bornes (0 = desactivees)")
     parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
-    parser.add_argument("--num-festivaliers", type=int, default=4000)
+    parser.add_argument("--num-festivaliers", type=int, default=None, help="4000 par defaut, fixe par --size")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default=None, help="Copie optionnelle du rapport, en plus de l'archive")
     parser.add_argument(
@@ -103,10 +111,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def build_config(args: argparse.Namespace) -> SimulationConfig:
-    area = AreaConfig()
-    mobility = MobilityConfig()
-    if args.mobility == "poi":
-        mobility = MobilityConfig(points_of_interest=default_festival_pois(area))
+    resolve_cli_args(args, DEFAULT_NUM_FESTIVALIERS, _raise_value_error)
+    num_festivaliers, area, mobility = build_site(args.size, args.num_festivaliers, args.mobility)
     churn = ChurnConfig(
         enabled=args.churn,
         arrival_window_s=tuple(args.churn_arrival_window_s),
@@ -114,7 +120,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     )
     return SimulationConfig(
         duration_s=args.duration,
-        num_festivaliers=args.num_festivaliers,
+        num_festivaliers=num_festivaliers,
         random_seed=args.seed,
         area=area,
         mobility=mobility,
@@ -127,8 +133,14 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     )
 
 
+def _raise_value_error(message: str) -> None:
+    raise ValueError(message)
+
+
 def main(argv: Optional[List[str]] = None) -> None:
-    args = build_arg_parser().parse_args(argv)
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    resolve_cli_args(args, DEFAULT_NUM_FESTIVALIERS, parser.error)
     config = build_config(args)
     routing_algorithm = ROUTING_FACTORIES[args.routing](args)
     mobility_factory = MOBILITY_FACTORIES[args.mobility](config)

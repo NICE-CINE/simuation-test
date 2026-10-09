@@ -3,6 +3,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import compare_algorithms  # noqa: E402
 
@@ -80,3 +82,17 @@ def test_geo_spray_focus_is_registered_in_both_scripts():
 
     assert "geo_spray_focus" in compare_algorithms.ALGORITHMS
     assert "geo_spray_focus" in main_module.ROUTING_FACTORIES
+
+
+def test_build_config_size_sets_site_and_crowd():
+    config = compare_algorithms.build_config(0, 1, 60.0, 200, "poi", size="small")
+    assert config.num_festivaliers == 4000
+    assert (config.area.width_m, config.area.height_m) == (130.0, 93.0)
+    assert config.mobility.background_probability is not None
+
+
+def test_main_rejects_size_with_a_different_num_festivaliers(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        compare_algorithms.main(["--size", "small", "--num-festivaliers", "10", "--archive-dir", str(tmp_path)])
+    assert list(tmp_path.iterdir()) == []
+    assert "--size" in capsys.readouterr().err
