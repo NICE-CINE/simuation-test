@@ -337,18 +337,22 @@ a 4 000 festivaliers. Programmatiquement :
 
 ## Modeles de mobilite disponibles
 
+Principe, diagramme, plans de site, ordres de grandeur, forces et
+faiblesses : un fichier par modele dans `docs/mobilite/`.
+
 - `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
-  uniforme sur toute la zone.
-- `poi` (`mobility/poi.py`) — les noeuds alternent pause/deplacement vers
+  uniforme sur toute la zone, puis pause (70 % de chances, 5 a 45 min).
+  Voir `docs/mobilite/random_waypoint.md`.
+- `poi` (`mobility/poi.py`) — meme alternance marche/pause, mais vers
   des points d'interet ponderes (`MobilityConfig.points_of_interest`,
   liste de `PointOfInterest(x, y, radius_m, weight)`), pour representer
-  une foule qui converge vers des scenes/stands plutot qu'un mouvement
-  brownien uniforme. Le CLI (`--mobility poi`) l'utilise avec un plan de
-  festival par defaut (`main._default_festival_pois`) : grande scene
-  (poids 4), bars/restauration (3), deuxieme scene (2), entree/toilettes
-  (1) ; pour plusieurs points d'interet ponderes, construis directement
-  un `MobilityConfig(points_of_interest=(...))` et passe-le a
-  `SimulationConfig(mobility=...)`.
+  une foule qui converge vers des scenes/stands. Le CLI (`--mobility poi`)
+  l'utilise avec le plan `mobility.poi.default_festival_pois` : grande
+  scene (poids 4), bars/restauration (3), deuxieme scene (2),
+  entree/toilettes (1) ; `--size` le remplace par une zone dense
+  (`presets.crowd_mobility_config`). Pour un autre plan, construis un
+  `MobilityConfig(points_of_interest=(...))` et passe-le a
+  `SimulationConfig(mobility=...)`. Voir `docs/mobilite/poi.md`.
 
 ## Algorithmes de routage disponibles
 
