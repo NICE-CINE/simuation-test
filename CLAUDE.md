@@ -84,6 +84,10 @@ viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
 
 Each `MobileNode` gets its own `traffic.traffic_process` with a fixed personal rate drawn once from `TrafficConfig.messages_per_hour_range` (default `(0.0, 4.0)`; a node drawing 0 never sends). Total load therefore scales with `num_festivaliers` — there is no network-wide `mean_interval_s` anymore. Destination is a uniformly random active *friend* (`TrafficConfig.friends_only`, default `True`; `False` restores a uniformly random other active node). Friend groups come from one shared graph, `social.assign_friend_groups` driven by `SimulationConfig.social`, set on each `MobileNode.friends` before `on_simulation_start` — `bubble_f` reads it from there rather than generating its own. Friendless people (`no_friend_fraction`, default 20 %) send nothing. `TrafficConfig.reply_probability` (default 0, `--reply-probability` in both scripts) makes a delivered message spawn a reply from its destination after `reply_delay_range_s`, via `network_engine`'s `on_delivery` callback; its RNG is only drawn when > 0, so runs without replies are unchanged. `TrafficConfig.followup_probability` (default 0, `--followup-probability`) adds bursts: after each spontaneous message the sender writes again to the same destination (geometric chain, delay from `followup_delay_range_s`), from its own `random.Random(f"{seed}-followup")` that exists only when > 0.
 
+### Measurement window
+
+`SimulationConfig.cooldown_s` (default 0; `--cooldown` in `main.py`/`compare_algorithms.py`, defaulting to the message TTL there and in the sweeps via `compare_algorithms.build_config`) runs the simulation `duration_s + cooldown_s`, traffic included, while `MetricsCollector(measure_until=duration_s)` only counts creations, deliveries, transmissions and losses of messages created before `duration_s`. Engine `metrics.record_*` calls must pass the message so this filter works. Energy, dead nodes and evictions cover the whole run.
+
 ### GPS
 
 Engine-provided, so position-unaware algorithms are unaffected:

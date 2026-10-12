@@ -10,7 +10,7 @@ import compare_algorithms  # noqa: E402
 
 
 def test_run_matrix_covers_every_algorithm_with_and_without_beacons():
-    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2)
+    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
     combos = {(row["algorithm"], row["beacons"] > 0) for row in rows}
     expected = {(name, with_beacons) for name in compare_algorithms.ALGORITHMS for with_beacons in (False, True)}
@@ -20,15 +20,15 @@ def test_run_matrix_covers_every_algorithm_with_and_without_beacons():
 
 
 def test_run_matrix_parallel_workers_match_sequential_results():
-    sequential = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, workers=1)
-    parallel = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, workers=2)
+    sequential = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=1)
+    parallel = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2)
     assert parallel == sequential
 
 
 def test_run_matrix_writes_csv_incrementally(tmp_path):
     csv_path = tmp_path / "incremental.csv"
     rows = compare_algorithms.run_matrix(
-        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, workers=2, csv_path=str(csv_path)
+        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2, csv_path=str(csv_path)
     )
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = list(csv.DictReader(f))
@@ -36,7 +36,7 @@ def test_run_matrix_writes_csv_incrementally(tmp_path):
 
 
 def test_write_csv_produces_a_valid_file(tmp_path):
-    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2)
+    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
     csv_path = tmp_path / "comparison.csv"
     compare_algorithms.write_csv(rows, str(csv_path))
     with open(csv_path, newline="", encoding="utf-8") as f:
@@ -58,11 +58,12 @@ def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
     params = json.loads(csvs[0].with_suffix(".json").read_text(encoding="utf-8"))
     assert params["cli"]["num_festivaliers"] == 10
     assert params["config"]["duration_s"] == 30.0
+    assert params["config"]["cooldown_s"] == params["config"]["traffic"]["message_ttl_s"]
 
 
 def test_run_matrix_with_poi_mobility_and_replies():
     rows = compare_algorithms.run_matrix(
-        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, mobility="poi", reply_probability=0.5
+        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, mobility="poi", reply_probability=0.5
     )
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
 

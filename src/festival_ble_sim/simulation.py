@@ -77,7 +77,7 @@ def run_simulation(
     if mobility_factory is None:
         mobility_factory = lambda node_rng: RandomWaypointMobility(config.mobility, rng=node_rng)
     energy_model = EnergyModel(config.energy)
-    metrics = MetricsCollector()
+    metrics = MetricsCollector(measure_until=config.duration_s)
     env = simpy.Environment()
 
     phone_range_m = max_range_m(config.ble.phone_radio)
@@ -136,7 +136,7 @@ def run_simulation(
         if config.churn.enabled:
             arrival_time_s = rng.uniform(*config.churn.arrival_window_s)
             departure_time_s = arrival_time_s + rng.uniform(*config.churn.session_duration_range_s)
-            if arrival_time_s > 0 or departure_time_s < config.duration_s:
+            if arrival_time_s > 0 or departure_time_s < config.duration_s + config.cooldown_s:
                 env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
 
         traffic_rng = random.Random(rng.randrange(1 << 30))
@@ -185,9 +185,10 @@ def run_simulation(
     if progress_callback is not None:
         env.process(_progress_reporter(env, progress_callback, progress_interval_s))
 
-    env.run(until=config.duration_s)
+    end_s = config.duration_s + config.cooldown_s
+    env.run(until=end_s)
     if progress_callback is not None:
-        progress_callback(config.duration_s)
+        progress_callback(end_s)
 
     energy_samples = [n.energy_consumed_mah for n in nodes.values() if n.initial_battery_mah != math.inf]
     dead_count = sum(1 for n in nodes.values() if n.battery_depleted)

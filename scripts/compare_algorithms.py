@@ -111,16 +111,20 @@ def build_config(
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
+    cooldown_s: Optional[float] = None,
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
+    traffic = TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability)
     return SimulationConfig(
         duration_s=duration_s,
+        # Default: the message TTL, so every counted message gets its full lifetime.
+        cooldown_s=cooldown_s if cooldown_s is not None else traffic.message_ttl_s,
         num_festivaliers=num_festivaliers,
         random_seed=seed,
         area=area,
         mobility=mobility_config,
         beacons=BeaconConfig(count=beacon_count),
-        traffic=TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability),
+        traffic=traffic,
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
     )
 
@@ -147,19 +151,21 @@ def _run_one(
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
+    cooldown_s: Optional[float] = None,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure, size,
+        followup_probability, gps_fix_failure, size, cooldown_s,
     )
+    total_s = config.duration_s + config.cooldown_s
     label = run_label(algo_name, beacon_count)
     progress_callback = None
     if progress is not None:
         progress[label] = 0.0
 
         def progress_callback(sim_now: float) -> None:
-            progress[label] = min(sim_now / duration_s, 1.0) if duration_s > 0 else 1.0
+            progress[label] = min(sim_now / total_s, 1.0) if total_s > 0 else 1.0
 
     start = time.monotonic()
     report: SimulationReport = run_simulation(
@@ -167,7 +173,7 @@ def _run_one(
         routing_algorithm=ALGORITHMS[algo_name](),
         mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
         progress_callback=progress_callback,
-        progress_interval_s=max(duration_s / 1000, 1.0),
+        progress_interval_s=max(total_s / 1000, 1.0),
     )
     row: Dict[str, Any] = {"algorithm": algo_name, "beacons": beacon_count}
     row.update({field: getattr(report, field) for field in REPORT_FIELDS})
@@ -187,6 +193,7 @@ def run_matrix(
     followup_probability: float = 0.0,
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
+    cooldown_s: Optional[float] = None,
 ) -> List[dict]:
     tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
@@ -198,7 +205,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure, size,
+                followup_probability, gps_fix_failure, size, cooldown_s,
             ): index
             for index, (algo_name, count) in enumerate(tasks)
         }
@@ -262,6 +269,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Compare les algos de routing avec/sans bornes")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--duration", type=float, default=3600.0)
+    parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument(
@@ -303,7 +311,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         vars(args),
         build_config(
             args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            args.followup_probability, args.gps_fix_failure, args.size,
+            args.followup_probability, args.gps_fix_failure, args.size, args.cooldown,
         ),
     )
     rows = run_matrix(
@@ -319,6 +327,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         followup_probability=args.followup_probability,
         gps_fix_failure=args.gps_fix_failure,
         size=args.size,
+        cooldown_s=args.cooldown,
     )
     write_csv(rows, archive_csv)
     if args.csv:

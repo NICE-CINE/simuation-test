@@ -89,13 +89,14 @@ def _run_one(
 ) -> Dict[str, Any]:
     progress = _worker_progress
     config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
+    total_s = config.duration_s + config.cooldown_s
     label = run_label(variant, seed)
     progress_callback = None
     if progress is not None:
         progress[label] = 0.0
 
         def progress_callback(sim_now: float) -> None:
-            progress[label] = min(sim_now / duration_s, 1.0) if duration_s > 0 else 1.0
+            progress[label] = min(sim_now / total_s, 1.0) if total_s > 0 else 1.0
 
     start = time.monotonic()
     report = run_simulation(
@@ -103,7 +104,7 @@ def _run_one(
         routing_algorithm=build_algorithm(parse_variant(variant), seed),
         mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
         progress_callback=progress_callback,
-        progress_interval_s=max(duration_s / 1000, 1.0),
+        progress_interval_s=max(total_s / 1000, 1.0),
     )
     row: Dict[str, Any] = {"variant": variant_label(variant), "seed": seed, "beacons": beacon_count}
     row.update({field: getattr(report, field) for field in REPORT_FIELDS})

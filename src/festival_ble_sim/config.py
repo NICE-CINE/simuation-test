@@ -227,7 +227,12 @@ class ChurnConfig:
 
 @dataclass
 class SimulationConfig:
+    # Measured window: only messages created during [0, duration_s) count in
+    # the report. The run then goes on for cooldown_s more seconds (traffic
+    # included, so the load stays steady) to let those messages arrive.
+    # message_ttl_s is the exact bound; 0 keeps the old cut-off at duration_s.
     duration_s: float = 3600.0
+    cooldown_s: float = 0.0
     num_festivaliers: int = 4000
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
@@ -242,6 +247,8 @@ class SimulationConfig:
     gps: GpsConfig = field(default_factory=GpsConfig)
 
     def __post_init__(self) -> None:
+        if self.cooldown_s < 0:
+            raise ValueError("cooldown_s must be >= 0")
         if self.area.width_m <= 0 or self.area.height_m <= 0:
             raise ValueError("area dimensions must be positive")
         if self.num_festivaliers < 2:

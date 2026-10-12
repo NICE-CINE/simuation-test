@@ -195,3 +195,10 @@ def test_size_conflicts_with_a_different_num_festivaliers(capsys):
 def test_size_rejects_unknown_names():
     with pytest.raises(SystemExit):
         main_module.build_arg_parser().parse_args(["--size", "gigantic"])
+
+
+def test_cooldown_defaults_to_the_message_ttl_and_can_be_turned_off():
+    parser = main_module.build_arg_parser()
+    config = main_module.build_config(parser.parse_args([]))
+    assert config.cooldown_s == config.traffic.message_ttl_s
+    assert main_module.build_config(parser.parse_args(["--cooldown", "0"])).cooldown_s == 0.0
