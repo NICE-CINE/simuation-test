@@ -141,3 +141,18 @@ def test_traffic_process_unknown_dst_position_is_none():
     _run_traffic(nodes, TrafficConfig(**_FAST))
     assert nodes[1].buffer
     assert all(m.dst_position is None for m in nodes[1].buffer.values())
+
+
+def test_replies_are_flagged_and_followups_are_not():
+    from festival_ble_sim.traffic import followup_process, reply_process
+
+    env = simpy.Environment()
+    src, dst = (BaseNode(i, Position(0.0, 0.0), 20.0, 50, 100.0) for i in (1, 2))
+    nodes = {1: src, 2: dst}
+    config = TrafficConfig(followup_probability=0.99)
+    ids = itertools.count(1)
+    env.process(reply_process(env, dst, 1, 1.0, nodes, config, MetricsCollector(), ids, random.Random(0)))
+    env.process(followup_process(env, src, 2, nodes, config, MetricsCollector(), ids, random.Random(1)))
+    env.run(until=1000.0)
+    assert [m.is_reply for m in dst.buffer.values()] == [True]
+    assert src.buffer and not any(m.is_reply for m in src.buffer.values())

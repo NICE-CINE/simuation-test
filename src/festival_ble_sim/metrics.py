@@ -23,12 +23,16 @@ class SimulationReport:
     backhaul_transmissions: int = 0
     backoff_count: int = 0
     backhaul_loss_count: int = 0
+    replies_created: int = 0
+    replies_delivered: int = 0
+    reply_delivery_ratio: float = 0.0
 
 
 @dataclass
 class _DeliveryRecord:
     latency_s: float
     hops: int
+    is_reply: bool = False
 
 
 class MetricsCollector:
@@ -38,6 +42,7 @@ class MetricsCollector:
     def __init__(self, measure_until: Optional[float] = None) -> None:
         self._measure_until = measure_until
         self._messages_created = 0
+        self._replies_created = 0
         self._deliveries: List[_DeliveryRecord] = []
         self._delivered_msg_ids: Set[int] = set()
         self._total_transmissions = 0
@@ -50,7 +55,11 @@ class MetricsCollector:
         return self._measure_until is None or message is None or message.creation_time < self._measure_until
 
     def record_creation(self, message: Message) -> None:
-        if self._measured(message):
+        if not self._measured(message):
+            return
+        if message.is_reply:
+            self._replies_created += 1
+        else:
             self._messages_created += 1
 
     def record_transmission(self, message: Optional[Message] = None) -> None:
@@ -76,7 +85,9 @@ class MetricsCollector:
         if not self._measured(message) or message.msg_id in self._delivered_msg_ids:
             return
         self._delivered_msg_ids.add(message.msg_id)
-        self._deliveries.append(_DeliveryRecord(latency_s=delivered_at - message.creation_time, hops=message.hops))
+        self._deliveries.append(
+            _DeliveryRecord(latency_s=delivered_at - message.creation_time, hops=message.hops, is_reply=message.is_reply)
+        )
 
     def build_report(
         self,
@@ -84,15 +95,20 @@ class MetricsCollector:
         dead_node_count: int,
         buffer_eviction_count: int = 0,
     ) -> SimulationReport:
-        delivered = len(self._deliveries)
+        # Delivery, latency and hops: spontaneous messages only, the same set
+        # for every algorithm at a given seed. Overhead covers all traffic.
+        spontaneous = [d for d in self._deliveries if not d.is_reply]
+        delivered = len(spontaneous)
+        replies_delivered = len(self._deliveries) - delivered
         delivery_ratio = delivered / self._messages_created if self._messages_created else 0.0
-        latencies = sorted(d.latency_s for d in self._deliveries)
+        latencies = sorted(d.latency_s for d in spontaneous)
         avg_latency = sum(latencies) / delivered if delivered else 0.0
         p95_latency = latencies[math.ceil(0.95 * delivered) - 1] if delivered else 0.0
-        avg_hops = sum(d.hops for d in self._deliveries) / delivered if delivered else 0.0
+        avg_hops = sum(d.hops for d in spontaneous) / delivered if delivered else 0.0
         # Extra transmissions per delivered message, as in The ONE: a
         # single-hop delivery with no other copy scores 0.
-        overhead = (self._total_transmissions - delivered) / delivered if delivered else 0.0
+        all_delivered = len(self._deliveries)
+        overhead = (self._total_transmissions - all_delivered) / all_delivered if all_delivered else 0.0
         total_energy = sum(node_energy_consumed_mah)
         avg_energy = total_energy / len(node_energy_consumed_mah) if node_energy_consumed_mah else 0.0
         return SimulationReport(
@@ -112,6 +128,9 @@ class MetricsCollector:
             backhaul_transmissions=self._backhaul_transmissions,
             backoff_count=self._backoff_count,
             backhaul_loss_count=self._backhaul_loss_count,
+            replies_created=self._replies_created,
+            replies_delivered=replies_delivered,
+            reply_delivery_ratio=replies_delivered / self._replies_created if self._replies_created else 0.0,
         )
 
 
@@ -120,12 +139,14 @@ def format_report(report: SimulationReport) -> str:
         "===================================================================\n"
         "              RAPPORT DE SIMULATION RESEAU FESTIVAL\n"
         "===================================================================\n"
-        f"Messages crees            : {report.messages_created}\n"
+        f"Messages crees (spontanes): {report.messages_created}\n"
         f"Messages livres           : {report.messages_delivered}\n"
         f"Taux de livraison         : {report.delivery_ratio * 100:.2f} %\n"
         f"Latence moyenne           : {report.avg_latency_s:.1f} s\n"
         f"Latence p95               : {report.p95_latency_s:.1f} s\n"
         f"Nombre moyen de sauts     : {report.avg_hops:.2f}\n"
+        f"Reponses creees / livrees : {report.replies_created} / {report.replies_delivered}"
+        f" ({report.reply_delivery_ratio * 100:.2f} %)\n"
         f"Surcharge (overhead)      : {report.overhead:.2f}\n"
         f"Transmissions totales     : {report.total_transmissions}\n"
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"

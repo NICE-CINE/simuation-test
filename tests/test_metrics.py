@@ -78,3 +78,23 @@ def test_messages_created_after_the_measured_window_are_ignored():
     report = collector.build_report([], 0)
     assert (report.messages_created, report.messages_delivered) == (1, 1)
     assert (report.total_transmissions, report.packet_loss_count) == (1, 1)
+
+
+def test_replies_are_reported_apart_from_spontaneous_messages():
+    collector = MetricsCollector()
+    spontaneous = Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=0.0, ttl_s=500.0)
+    reply = Message(msg_id=2, src_id=2, dst_id=1, size_bytes=10, creation_time=50.0, ttl_s=500.0, is_reply=True)
+    unanswered = Message(msg_id=3, src_id=2, dst_id=1, size_bytes=10, creation_time=60.0, ttl_s=500.0, is_reply=True)
+    for message in (spontaneous, reply, unanswered):
+        collector.record_creation(message)
+    collector.record_delivery(spontaneous, 10.0)
+    collector.record_delivery(reply, 150.0)
+    for _ in range(4):
+        collector.record_transmission(spontaneous)
+    report = collector.build_report([], 0)
+    assert (report.messages_created, report.messages_delivered, report.delivery_ratio) == (1, 1, 1.0)
+    assert report.avg_latency_s == pytest.approx(10.0)
+    assert (report.replies_created, report.replies_delivered) == (2, 1)
+    assert report.reply_delivery_ratio == pytest.approx(0.5)
+    assert report.overhead == pytest.approx((4 - 2) / 2)
+    assert "Reponses creees / livrees : 2 / 1" in format_report(report)

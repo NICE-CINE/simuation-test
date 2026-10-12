@@ -42,6 +42,9 @@ class Message:
     src_position: Optional[Position] = None
     dst_position: Optional[Position] = None
     dst_position_time: Optional[float] = None
+    # Only created because an earlier message was delivered, so how many
+    # exist depends on the routing algorithm: kept out of the main metrics.
+    is_reply: bool = False
 
     def is_expired(self, now: float) -> bool:
         return (now - self.creation_time) > self.ttl_s
