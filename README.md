@@ -202,7 +202,7 @@ colonnes du CSV :
 
 | Champ | Definition |
 |---|---|
-| Taux de livraison (`delivery_ratio`) | messages livres / messages crees (reponses et relances comprises) ; un message encore en route a la fin du run compte comme non livre |
+| Taux de livraison (`delivery_ratio`) | messages livres / messages crees (reponses et relances comprises), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier |
 | Surcharge (`overhead`) | transmissions BLE reussies (relais et livraisons) / messages livres. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
