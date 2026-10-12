@@ -46,10 +46,8 @@ def test_build_config_churn_disabled_by_default():
 
 def test_routing_factories_cover_every_cli_choice():
     args = main_module.build_arg_parser().parse_args([])
-    for name in sorted(main_module.ROUTING_FACTORIES):
-        args.routing = name
-        algo = main_module.ROUTING_FACTORIES[name](args)
-        assert algo is not None
+    for name in main_module.ROUTING_NAMES:
+        assert main_module.build_routing(name, args.seed, args.spray_initial_copies) is not None
 
 
 def test_mobility_factories_cover_every_cli_choice():
@@ -157,7 +155,7 @@ def test_tide_g2_cli_wires_followups_and_fix_failures():
     config = main_module.build_config(args)
     assert config.traffic.followup_probability == 0.3
     assert config.gps.fix_failure_probability == 0.1
-    assert main_module.ROUTING_FACTORIES["tide_g2"](args)._ack_hint
+    assert main_module.build_routing(args.routing, args.seed)._ack_hint
 
 
 def test_build_config_without_size_keeps_the_legacy_site():

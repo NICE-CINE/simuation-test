@@ -8,46 +8,16 @@ import statistics
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
+from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
-from festival_ble_sim.routing.band_fanout import BandFanoutRouting
-from festival_ble_sim.routing.base import RoutingAlgorithm
-from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
-from festival_ble_sim.routing.bubble_f import BubbleFRouting
-from festival_ble_sim.routing.dasfv import DasfVRouting
-from festival_ble_sim.routing.eco_sf import EcoSfRouting
-from festival_ble_sim.routing.epidemic import EpidemicRouting
-from festival_ble_sim.routing.geo_spray_focus import GeoSprayFocusRouting
-from festival_ble_sim.routing.gossip_a import GossipARouting
-from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
-from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
-from festival_ble_sim.routing.prophet import ProphetRouting
-from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
-from festival_ble_sim.routing.tide import TideRouting
-from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
+from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 
-ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
-    "epidemic": EpidemicRouting,
-    "spray_wait": SprayAndWaitRouting,
-    "prophet": ProphetRouting,
-    "beacon_priority": BeaconPriorityRouting,
-    "dasfv": DasfVRouting,
-    "gossip_a": GossipARouting,
-    "bubble_f": BubbleFRouting,
-    "managed_flood": ManagedFloodRouting,
-    "tide": TideRouting,
-    "tide_g": TideGRouting,
-    "tide_g2": lambda: TideGRouting(**TIDE_G2_KWARGS),
-    "fresh_spray": FreshSprayRouting,
-    "geo_spray_focus": GeoSprayFocusRouting,
-    "eco_sf": EcoSfRouting,
-    "band_fanout": BandFanoutRouting,
-}
+ALGORITHMS = ROUTING_NAMES
 
 REPORT_FIELDS = [
     "messages_created",
@@ -184,7 +154,7 @@ def _run_one(
     start = time.monotonic()
     report: SimulationReport = run_simulation(
         config,
-        routing_algorithm=ALGORITHMS[algo_name](),
+        routing_algorithm=build_routing(algo_name, seed),
         mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
         progress_callback=progress_callback,
         progress_interval_s=max(total_s / 1000, 1.0),
