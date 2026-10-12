@@ -3,6 +3,7 @@ from typing import Callable, Dict, Tuple
 from .band_fanout import BandFanoutRouting
 from .base import RoutingAlgorithm
 from .beacon_priority import BeaconPriorityRouting
+from .bitchat import BitchatRouting
 from .bubble_f import BubbleFRouting
 from .dasfv import DasfVRouting
 from .eco_sf import EcoSfRouting
@@ -35,6 +36,7 @@ _FACTORIES: Dict[str, Callable[[int, int], RoutingAlgorithm]] = {
     "geo_spray_focus": lambda seed, copies: GeoSprayFocusRouting(),
     "eco_sf": lambda seed, copies: EcoSfRouting(seed=seed),
     "band_fanout": lambda seed, copies: BandFanoutRouting(seed=seed),
+    "bitchat": lambda seed, copies: BitchatRouting(),
 }
 
 ROUTING_NAMES: Tuple[str, ...] = tuple(_FACTORIES)
