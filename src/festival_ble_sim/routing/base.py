@@ -17,6 +17,10 @@ class RoutingDecision(Enum):
 class RoutingAlgorithm(ABC):
     @abstractmethod
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
+        # FORWARD is only an intention: the engine may still drop the copy
+        # (link budget, packet loss) without calling on_forward. Anything
+        # that assumes the copy arrived (token splits, "reached X" flags,
+        # dropping the holder's copy) belongs in on_forward/on_delivered.
         # >>> POINT D'INJECTION : tes propres algos de routage
         # (Spray & Wait, PRoPHET, scoring base sur les bornes...)
         ...

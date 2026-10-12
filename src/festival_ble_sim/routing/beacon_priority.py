@@ -17,10 +17,6 @@ class BeaconPriorityRouting(RoutingAlgorithm):
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
         if getattr(contact, "is_beacon", False):
-            # Mutating holder's own message here is safe: network.py copies
-            # routing_state into the forwarded copy right after this call
-            # returns FORWARD, so the flag propagates to both sides.
-            message.routing_state[_REACHED_BEACON] = True
             return RoutingDecision.FORWARD
         if message.routing_state.get(_REACHED_BEACON, False):
             # Infrastructure (backhaul + future beacon<->phone contacts)
@@ -28,3 +24,11 @@ class BeaconPriorityRouting(RoutingAlgorithm):
             # flooding once the message is infrastructure-carried.
             return RoutingDecision.IGNORE
         return RoutingDecision.FORWARD
+
+    def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
+        # Here, not in decide(): the engine can still drop the copy after a
+        # FORWARD (link budget, packet loss), and an unsent copy must not
+        # stop the phone-to-phone flooding.
+        if getattr(contact, "is_beacon", False):
+            message.routing_state[_REACHED_BEACON] = True
+            forwarded_copy.routing_state[_REACHED_BEACON] = True
