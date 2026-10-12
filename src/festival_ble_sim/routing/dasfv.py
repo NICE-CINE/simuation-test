@@ -189,10 +189,10 @@ class DasfVRouting(RoutingAlgorithm):
 
     @staticmethod
     def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
+        capacity = node.battery_capacity_mah
+        if capacity == math.inf or capacity <= 0:
             return 1.0
-        return node.battery_mah / initial
+        return node.battery_mah / capacity
 
     def _turnover(self, node_id: int) -> float:
         current = self._prev_window_contacts.get(node_id)

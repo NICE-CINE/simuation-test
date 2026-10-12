@@ -7,7 +7,7 @@ class _Node:
     def __init__(self, node_id, is_beacon=False, battery=100.0):
         self.id = node_id
         self.is_beacon = is_beacon
-        self.initial_battery_mah = 100.0
+        self.battery_capacity_mah = 100.0
         self.battery_mah = battery
         self.buffer = {}
 

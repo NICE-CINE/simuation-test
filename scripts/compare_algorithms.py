@@ -10,10 +10,10 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
+from festival_ble_sim.config import BeaconConfig, EnergyConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
-from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.presets import FESTIVAL_CHARGE_BINS, SITE_PRESETS, build_site, resolve_cli_args
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 
@@ -96,6 +96,7 @@ def build_config(
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
+    random_charge: bool = False,
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     traffic = TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability)
@@ -110,6 +111,7 @@ def build_config(
         beacons=BeaconConfig(count=beacon_count),
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
+        energy=EnergyConfig(initial_charge_bins=FESTIVAL_CHARGE_BINS) if random_charge else EnergyConfig(),
     )
 
 
@@ -136,11 +138,12 @@ def _run_one(
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
+    random_charge: bool = False,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure, size, cooldown_s,
+        followup_probability, gps_fix_failure, size, cooldown_s, random_charge,
     )
     total_s = config.duration_s + config.cooldown_s
     label = run_label(algo_name, beacon_count, seed)
@@ -179,6 +182,7 @@ def run_matrix(
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
     algorithms: Optional[List[str]] = None,
+    random_charge: bool = False,
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
@@ -192,7 +196,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure, size, cooldown_s,
+                followup_probability, gps_fix_failure, size, cooldown_s, random_charge,
             ): index
             for index, (algo_name, count, seed) in enumerate(tasks)
         }
@@ -300,6 +304,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
     parser.add_argument(
+        "--random-charge", action="store_true",
+        help="Charge de depart tiree par telephone (graine du run) au lieu de 100 %%: 50 %% des gens entre 80 et 100 %%, 30 %% entre 50 et 80, 12 %% entre 30 et 50, 8 %% entre 5 et 30",
+    )
+    parser.add_argument(
         "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
         help="Sous-ensemble d'algos a lancer (defaut : tous)",
     )
@@ -323,7 +331,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         vars(args),
         build_config(
             args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            args.followup_probability, args.gps_fix_failure, args.size, args.cooldown,
+            args.followup_probability, args.gps_fix_failure, args.size, args.cooldown, args.random_charge,
         ),
     )
     rows = run_matrix(
@@ -341,6 +349,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         size=args.size,
         cooldown_s=args.cooldown,
         algorithms=args.algorithms,
+        random_charge=args.random_charge,
     )
     write_csv(rows, archive_csv)
     if args.csv:

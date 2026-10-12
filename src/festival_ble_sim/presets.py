@@ -7,6 +7,8 @@ from .mobility.poi import default_festival_pois
 
 DENSE_AREA_FRACTION = 0.15
 DENSE_POPULATION_SHARE = 0.70
+# --random-charge: (share of phones, lo, hi) of their battery capacity.
+FESTIVAL_CHARGE_BINS = ((0.50, 0.80, 1.00), (0.30, 0.50, 0.80), (0.12, 0.30, 0.50), (0.08, 0.05, 0.30))
 
 # Layout of mobility.poi.default_festival_pois: (x/w, y/h, weight).
 _POI_LAYOUT = ((0.25, 0.75, 4.0), (0.80, 0.70, 2.0), (0.55, 0.35, 3.0), (0.50, 0.05, 1.0))

@@ -176,20 +176,29 @@ class GpsConfig:
 
 @dataclass(frozen=True)
 class EnergyConfig:
-    # ~4500 mAh phone arriving about two thirds charged.
-    initial_battery_mah: float = 3000.0
-    # A phone's BLE radio draws ~10 mA while active, about the same in TX and
-    # RX: ~5 ms of airtime per PDU exchange (event) and 0.1 ms per byte at
-    # BleConfig.transfer_rate_bytes_per_s = 10 kB/s. The old 0.02 mAh/event
-    # and 1e-4 mAh/byte implied a 3.6 A radio at full rate.
-    tx_cost_mah_per_event: float = 1.4e-5
-    tx_cost_mah_per_byte: float = 2.8e-7
-    rx_cost_mah_per_event: float = 1.4e-5
-    rx_cost_mah_per_byte: float = 2.8e-7
-    # Average current of BLE scanning + advertising, paid every second a
-    # phone is active whether or not it sends anything. Starting guess, to
-    # recalibrate on real devices.
-    background_current_ma: float = 2.0
+    # Sources and derivations: docs/energie/consommation.md (Nice Mesh radio
+    # bench, 12 Oct 2026: Nearby Connections P2P_CLUSTER on an Honor 8X and
+    # a Galaxy A56).
+    battery_capacity_mah: float = 4500.0
+    # (share of phones, lo, hi): each phone picks a bin by share, then starts
+    # at uniform(lo, hi) x capacity, from a "<seed>-charge" RNG. The default
+    # single fixed bin = everyone full and no draw.
+    initial_charge_bins: Tuple[Tuple[float, float, float], ...] = ((1.0, 1.0, 1.0),)
+    # Measured incremental cost over "Nearby active": TX 0.25-0.6 uJ/bit,
+    # RX 0.07-0.16 uJ/bit (mid-range values). Per event: ~5 ms of airtime at
+    # the measured +21 mA (TX) / +12 mA (RX) — the per-event term itself
+    # was not measured.
+    tx_cost_mah_per_event: float = 2.9e-5
+    tx_cost_mah_per_byte: float = 2.4e-7
+    rx_cost_mah_per_event: float = 1.7e-5
+    rx_cost_mah_per_byte: float = 6.3e-8
+    # Being reachable: "Nearby active, connected, no traffic" measured at
+    # +29 to +34 mA over the phone's own idle.
+    background_current_ma: float = 31.0
+    # The phone's own draw, mesh off: 38 mA measured screen-off idle (mean
+    # of 27 and 49) + screen on 20 % of the time at ~300 mA (estimate, not
+    # measured). 0 = count only the mesh.
+    phone_current_ma: float = 98.0
 
 
 @dataclass(frozen=True)
@@ -270,8 +279,15 @@ class SimulationConfig:
         followup_lo, followup_hi = self.traffic.followup_delay_range_s
         if followup_lo < 0 or followup_hi < followup_lo:
             raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")
-        if self.energy.background_current_ma < 0:
-            raise ValueError("background_current_ma must be >= 0")
+        if self.energy.background_current_ma < 0 or self.energy.phone_current_ma < 0:
+            raise ValueError("background_current_ma and phone_current_ma must be >= 0")
+        if self.energy.battery_capacity_mah <= 0:
+            raise ValueError("battery_capacity_mah must be positive")
+        if not self.energy.initial_charge_bins:
+            raise ValueError("initial_charge_bins must not be empty")
+        for share, charge_lo, charge_hi in self.energy.initial_charge_bins:
+            if share <= 0 or not 0.0 < charge_lo <= charge_hi <= 1.0:
+                raise ValueError("initial_charge_bins entries must satisfy share > 0 and 0 < lo <= hi <= 1")
         if self.ble.transfer_rate_bytes_per_s <= 0:
             raise ValueError("transfer_rate_bytes_per_s must be positive")
         if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:

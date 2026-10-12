@@ -8,7 +8,7 @@ class _Node:
         self.id = node_id
         self.is_beacon = False
         self.is_active = True
-        self.initial_battery_mah = 100.0
+        self.battery_capacity_mah = 100.0
         self.battery_mah = battery
         self.buffer = {}
 

@@ -58,10 +58,10 @@ class FreshSprayRouting(RoutingAlgorithm):
 
     @staticmethod
     def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
+        capacity = node.battery_capacity_mah
+        if capacity == math.inf or capacity <= 0:
             return 1.0
-        return node.battery_mah / initial
+        return node.battery_mah / capacity
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         if message.msg_id in self._delivered:

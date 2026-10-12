@@ -104,10 +104,10 @@ class TideRouting(RoutingAlgorithm):
 
     @staticmethod
     def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
+        capacity = node.battery_capacity_mah
+        if capacity == math.inf or capacity <= 0:
             return 1.0
-        return node.battery_mah / initial
+        return node.battery_mah / capacity
 
     def _energy(self, node: "BaseNode") -> float:
         if not self._energy_factor_on:

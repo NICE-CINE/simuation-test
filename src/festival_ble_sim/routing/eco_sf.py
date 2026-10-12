@@ -111,10 +111,10 @@ class EcoSfRouting(RoutingAlgorithm):
 
     @staticmethod
     def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
+        capacity = node.battery_capacity_mah
+        if capacity == math.inf or capacity <= 0:
             return 1.0
-        return node.battery_mah / initial
+        return node.battery_mah / capacity
 
     def _node_i_max(self, node: "BaseNode") -> float:
         pct = self._battery_pct(node)
