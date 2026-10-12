@@ -86,9 +86,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--spray-initial-copies", type=int, default=8, help="Nombre de copies initiales (Spray & Wait)")
     parser.add_argument(
-        "--replay-html", default=None,
-        help="Ecrit un replay HTML autonome (positions + evenements) vers ce chemin. "
-        "Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        "--replay-html", action="store_true",
+        help="Ecrit un replay HTML autonome (positions + evenements) dans le dossier d'archive, "
+        "sous <date>_<algo>.html. Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -149,7 +149,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     routing_algorithm = ROUTING_FACTORIES[args.routing](args)
     mobility_factory = MOBILITY_FACTORIES[args.mobility](config)
     history = None
-    if args.replay_html is not None:
+    if args.replay_html:
         history = SimulationHistory(
             area_width_m=config.area.width_m,
             area_height_m=config.area.height_m,
@@ -168,8 +168,9 @@ def main(argv: Optional[List[str]] = None) -> None:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(text)
     if history is not None:
-        render_replay_html(history, args.replay_html, title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
-        print(f"Replay HTML ecrit dans {args.replay_html}")
+        replay_path = stem.with_suffix(".html")
+        render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
+        print(f"Replay HTML ecrit dans {replay_path}")
 
 
 if __name__ == "__main__":

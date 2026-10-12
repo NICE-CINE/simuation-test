@@ -47,8 +47,8 @@ Options disponibles :
 - `--archive-dir DOSSIER` : dossier d'archive (defaut `archives`)
 - `--output CHEMIN` : copie optionnelle du rapport, en plus de l'archive
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
-- `--replay-html CHEMIN` : ecrit un replay HTML autonome de la simulation
-  (voir "Visualisation / replay" plus bas)
+- `--replay-html` : ecrit un replay HTML autonome de la simulation dans
+  le dossier d'archive, sous `<date>_<algo>.html` (voir "Visualisation / replay" plus bas)
 - `--reply-probability P` : probabilite qu'un message livre recoive une
   reponse du destinataire apres 20 a 180 s (defaut 0, pas de reponses) ;
   necessaire pour que `tide_g` ait des indices de position
@@ -312,14 +312,23 @@ les departs de churn.
 
 ## Visualisation / replay
 
-`--replay-html CHEMIN` enregistre les positions (un instantane par tick
+`--replay-html` enregistre les positions (un instantane par tick
 de mobilite) et les evenements de relais/livraison pendant le run, puis
-ecrit un fichier HTML autonome (Canvas + JS, aucune dependance externe)
+ecrit `archives/<date>_<algo>.html`, un fichier HTML autonome (Canvas + JS, aucune dependance externe)
 avec lecture/pause et curseur temporel — telephones et bornes en points,
 liens de relais/livraison du tick courant en traits. Cout memoire
 proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
 modestes (quelques dizaines/centaines de noeuds), pas au run par defaut
-a 4 000 festivaliers. Programmatiquement :
+a 4 000 festivaliers.
+
+Le panneau "Suivre un message" liste les messages relayes (livres en
+premier, plus de sauts d'abord). En choisir un grise le reste et affiche
+sa source, son destinataire, les porteurs de copies, chaque relais avec
+son numero de saut (chemin livre en vert, backhaul des bornes en
+pointille orange) et une chronologie cliquable ; "Suivre depuis la
+creation" lance la lecture au bon moment. Les copies purgees ou evincees
+ne sont pas enregistrees : un porteur reste affiche jusqu'a la fin.
+Programmatiquement :
 
     from festival_ble_sim.config import SimulationConfig
     from festival_ble_sim.simulation import run_simulation
