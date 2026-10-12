@@ -7,9 +7,13 @@ class _Node:
     def __init__(self, node_id, is_beacon=False, battery=100.0):
         self.id = node_id
         self.is_beacon = is_beacon
-        self.initial_battery_mah = 100.0
+        self.battery_capacity_mah = 100.0
         self.battery_mah = battery
         self.buffer = {}
+
+    @property
+    def battery_fraction(self):
+        return self.battery_mah / self.battery_capacity_mah
 
     def has_message(self, msg_id):
         return msg_id in self.buffer

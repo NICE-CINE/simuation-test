@@ -55,6 +55,9 @@ Options disponibles :
 - `--followup-probability P` : probabilite qu'un message soit suivi d'une
   relance au meme destinataire apres 10 a 120 s (defaut 0, pas de rafales)
 - `--gps-fix-failure P` : probabilite qu'un fix GPS echoue (defaut 0)
+- `--random-charge` : charge de depart tiree par telephone (graine du run)
+  au lieu de 100 % : 50 % des gens entre 80 et 100 %, 30 % entre 50 et 80,
+  12 % entre 30 et 50, 8 % entre 5 et 30 (voir `docs/energie/consommation.md`)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -62,7 +65,8 @@ Options disponibles :
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
-        [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
+        [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
+        [--random-charge]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat} x {avec/sans bornes} avec le meme seed pour chaque run
@@ -111,7 +115,7 @@ overhead, energie).
   (defaut 200), `--beacon-count` (defaut 6), `--mobility`
   (`random_waypoint` par defaut ou `poi`), `--reply-probability` (defaut 0),
   `--workers` (defaut 2), `--archive-dir` (defaut `archives`). Pas d'option
-  `--size`, `--followup-probability` ni `--gps-fix-failure` ici.
+  `--size`, `--followup-probability`, `--gps-fix-failure` ni `--random-charge` ici.
 - Archive : `<date>_<heure>_sweep_band_fanout.csv` (une ligne par variante et
   par graine, ecrite des que le run se termine, avec `wall_s`) + `.json` du
   meme nom ; les chaines de variantes ne sont que dans les arguments CLI du
@@ -129,8 +133,8 @@ affiche la moyenne par valeur de jetons (livraison, latence moyenne et
 p95, surcharge, energie). Memes options que `compare_algorithms.py` pour
 le scenario (`--duration` defaut 3600, `--num-festivaliers` defaut 200,
 `--beacon-count` defaut 6, `--mobility`, `--size`, `--reply-probability`,
-`--workers`, `--archive-dir`), sans `--followup-probability` ni
-`--gps-fix-failure`. Archive :
+`--workers`, `--archive-dir`), sans `--followup-probability`,
+`--gps-fix-failure` ni `--random-charge`. Archive :
 `<date>_<heure>_sweep_fresh_spray_tokens.csv` + `.json` ; la liste des
 jetons n'est que dans les arguments CLI du `.json`. Resultats a 5 000
 festivaliers : `docs/algorithmes/fresh_spray.md`.
@@ -218,7 +222,8 @@ colonnes du CSV :
 | Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
 | Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
-| Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |
+| Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
+| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 98 mA du telephone etant identiques pour tous |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
@@ -233,8 +238,13 @@ moyenne :
 - **Mobilite** : marche en foule a 0,3-1,2 m/s ; a chaque destination,
   70 % de chances de s'arreter 5 a 45 min (un concert, une file au bar).
 - **Trafic** : 0 a 4 messages/heure par personne (2 en moyenne).
-- **Batterie** : 3 000 mAh au depart (telephone ~4 500 mAh charge aux
-  deux tiers).
+- **Batterie** : 4 500 mAh, tout le monde charge a 100 % (`--random-charge`
+  pour une charge de depart realiste, de 5 a 100 %).
+- **Consommation** (mesuree sur deux telephones, banc radio du 12 oct. 2026) :
+  31 mA pour rester joignable (mesh actif) + 98 mA pour le telephone lui-meme
+  (veille + ecran, ecran estime), soit ~35 h d'autonomie a pleine charge ;
+  emission ~0,42 µJ/bit, reception ~0,11 µJ/bit. Detail et sources :
+  `docs/energie/consommation.md`.
 - **Churn** (si active) : arrivees etalees sur les 30 premieres minutes,
   presence de 30 min a 3 h.
 
@@ -260,10 +270,14 @@ sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
 "moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
 retrouve le modele deterministe (equivalent a un cercle fixe).
 
-**Cout radio de fond** (`EnergyConfig.background_current_ma`, 2 mA par
-defaut, a calibrer sur appareils) : chaque telephone actif paie a chaque
-seconde le courant moyen du scan et des annonces BLE, qu'il envoie ou non
-des messages ; s'ajoute aux couts par emission/reception.
+**Courant de fond** : chaque telephone actif paie a chaque seconde
+`EnergyConfig.background_current_ma` (31 mA, mesh joignable, mesure) +
+`phone_current_ma` (98 mA, le telephone lui-meme ecran compris ; 0 pour ne
+compter que le mesh), qu'il envoie ou non des messages ; s'ajoute aux couts
+par emission/reception. C'est plus de 95 % de la consommation d'un run.
+Les pourcentages de batterie des algorithmes se lisent par rapport a la
+capacite (`battery_capacity_mah`), l'energie consommee par rapport a la
+charge de depart. Voir `docs/energie/consommation.md`.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :

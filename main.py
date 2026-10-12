@@ -15,7 +15,7 @@ from festival_ble_sim.metrics import format_report
 from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
-from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
@@ -72,6 +72,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--gps-fix-failure", type=float, default=0.0,
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
+    add_random_charge_argument(parser)
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -104,6 +105,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         churn=churn,
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=args.gps_fix_failure),
+        energy=energy_config(args.random_charge),
     )
 
 

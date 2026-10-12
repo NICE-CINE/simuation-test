@@ -15,9 +15,9 @@ def test_cost_of_rx():
     assert model.cost_of_rx(200) == pytest.approx(0.01 + 200 * 0.00005)
 
 
-def test_default_costs_imply_a_plausible_ble_radio_current():
-    from festival_ble_sim.config import BleConfig
-    energy, ble = EnergyConfig(), BleConfig()
-    for per_byte in (energy.tx_cost_mah_per_byte, energy.rx_cost_mah_per_byte):
-        current_ma = per_byte * ble.transfer_rate_bytes_per_s * 3600.0
-        assert 1.0 <= current_ma <= 30.0
+def test_default_per_byte_costs_match_the_measured_bench_ranges():
+    # docs/energie/consommation.md: TX 0.25-0.6 uJ/bit, RX 0.07-0.16 uJ/bit, phones at ~3.84-4.04 V.
+    energy = EnergyConfig()
+    for per_byte, (lo, hi) in ((energy.tx_cost_mah_per_byte, (0.25, 0.6)), (energy.rx_cost_mah_per_byte, (0.07, 0.16))):
+        uj_per_bit = per_byte * 3.6 * 3.94 * 1e6 / 8
+        assert lo <= uj_per_bit <= hi

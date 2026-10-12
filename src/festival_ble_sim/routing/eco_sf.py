@@ -109,15 +109,8 @@ class EcoSfRouting(RoutingAlgorithm):
     def on_simulation_start(self, nodes: Dict[int, "BaseNode"]) -> None:
         self._nodes = nodes
 
-    @staticmethod
-    def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
-            return 1.0
-        return node.battery_mah / initial
-
     def _node_i_max(self, node: "BaseNode") -> float:
-        pct = self._battery_pct(node)
+        pct = node.battery_fraction
         if pct < self._battery_relay:
             return self._i_max_low
         if pct < self._battery_mid:
@@ -204,7 +197,7 @@ class EcoSfRouting(RoutingAlgorithm):
                     self._buffer_changed(node_id, now)
             if now >= state.tx_at:
                 state.tx_at = math.inf
-                silent = self._battery_pct(node) < self._battery_silent and not any(
+                silent = node.battery_fraction < self._battery_silent and not any(
                     m.src_id == node_id for m in node.buffer.values()
                 )
                 if state.heard < self._k and not silent:
@@ -229,7 +222,7 @@ class EcoSfRouting(RoutingAlgorithm):
         return False
 
     def _should_connect(self, holder: "BaseNode", peer: "BaseNode", now: float) -> bool:
-        if self._battery_pct(peer) < self._battery_silent:
+        if peer.battery_fraction < self._battery_silent:
             return False
         if not self._discovered(holder.id, peer.id, now):
             return False
@@ -290,7 +283,7 @@ class EcoSfRouting(RoutingAlgorithm):
         # which the engine delivers without asking decide().
         if now - message.creation_time > self._late_after:
             return RoutingDecision.IGNORE
-        if self._battery_pct(contact) < self._battery_relay:
+        if contact.battery_fraction < self._battery_relay:
             return RoutingDecision.IGNORE
         views = self._connection(holder, contact, now)
         if views is None:

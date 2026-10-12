@@ -2,7 +2,7 @@ from __future__ import annotations
 import itertools
 import math
 import random
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 import simpy
 from .beacons import place_beacons
 from .config import SimulationConfig
@@ -21,7 +21,14 @@ from .traffic import reply_process, traffic_process
 from .viz.history import SimulationHistory
 
 
+def draw_charge_fraction(bins, weights: List[float], rng: random.Random) -> float:
+    _, lo, hi = rng.choices(bins, weights=weights)[0]
+    return rng.uniform(lo, hi)
+
+
 def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: SpatialGrid):
+    mesh_mah_per_tick = config.energy.background_current_ma * config.mobility.tick_interval_s / 3600.0
+    phone_mah_per_tick = config.energy.phone_current_ma * config.mobility.tick_interval_s / 3600.0
     while True:
         yield env.timeout(config.mobility.tick_interval_s)
         if not node.is_active:
@@ -29,7 +36,8 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
             # battery-dead: frozen in place rather than wandering while it
             # can't participate in BLE anyway.
             continue
-        node.consume_energy(config.energy.background_current_ma * config.mobility.tick_interval_s / 3600.0)
+        node.consume_energy(mesh_mah_per_tick)
+        node.consume_energy(phone_mah_per_tick, mesh=False)
         old_x, old_y = node.position.x, node.position.y
         node.move(config.mobility.tick_interval_s, config.area)
         grid.update(node, old_x, old_y)
@@ -102,7 +110,7 @@ def run_simulation(
             radio_range_m=beacon_range_m,
             buffer_capacity=config.node_buffer_capacity,
             unlimited_power=config.beacons.unlimited_power,
-            battery_mah=config.energy.initial_battery_mah,
+            battery_mah=config.energy.battery_capacity_mah,
         )
         nodes[node_id] = beacon
         grid.insert(beacon)
@@ -116,6 +124,11 @@ def run_simulation(
     followup_rng = (
         random.Random(f"{config.random_seed}-followup") if config.traffic.followup_probability > 0 else None
     )
+    charge_bins = config.energy.initial_charge_bins
+    charge_weights = [share for share, _, _ in charge_bins]
+    # Seeded apart too; with the default single (1.0, 1.0, 1.0) bin every
+    # draw is exactly 1.0.
+    charge_rng = random.Random(f"{config.random_seed}-charge")
     for _ in range(config.num_festivaliers):
         node_id = next(id_counter)
         node_rng = random.Random(rng.randrange(1 << 30))
@@ -125,8 +138,9 @@ def run_simulation(
             mobility=mobility,
             radio_range_m=phone_range_m,
             buffer_capacity=config.node_buffer_capacity,
-            battery_mah=config.energy.initial_battery_mah,
+            battery_mah=config.energy.battery_capacity_mah,
             area=config.area,
+            charge_fraction=draw_charge_fraction(charge_bins, charge_weights, charge_rng),
         )
         nodes[node_id] = mobile
         mobile_nodes[node_id] = mobile
@@ -190,7 +204,10 @@ def run_simulation(
     if progress_callback is not None:
         progress_callback(end_s)
 
-    energy_samples = [n.energy_consumed_mah for n in nodes.values() if n.initial_battery_mah != math.inf]
+    phones = [n for n in nodes.values() if n.battery_capacity_mah != math.inf]
+    energy_samples = [n.energy_consumed_mah for n in phones]
     dead_count = sum(1 for n in nodes.values() if n.battery_depleted)
     buffer_evictions = sum(n.buffer_evictions for n in nodes.values())
-    return metrics.build_report(energy_samples, dead_count, buffer_evictions)
+    return metrics.build_report(
+        energy_samples, dead_count, buffer_evictions, [n.mesh_energy_consumed_mah for n in phones]
+    )

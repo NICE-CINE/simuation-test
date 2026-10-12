@@ -56,13 +56,6 @@ class FreshSprayRouting(RoutingAlgorithm):
     def _seen(self, node_id: int, other_id: int) -> float:
         return self._last_seen.get(node_id, {}).get(other_id, -math.inf)
 
-    @staticmethod
-    def _battery_pct(node: "BaseNode") -> float:
-        initial = node.initial_battery_mah
-        if initial == math.inf or initial <= 0:
-            return 1.0
-        return node.battery_mah / initial
-
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         if message.msg_id in self._delivered:
             holder.buffer.pop(message.msg_id, None)
@@ -75,7 +68,7 @@ class FreshSprayRouting(RoutingAlgorithm):
                 return RoutingDecision.IGNORE
             state[_REASON] = "beacon"
             return RoutingDecision.FORWARD
-        if self._battery_pct(contact) < self._battery_low_pct:
+        if contact.battery_fraction < self._battery_low_pct:
             return RoutingDecision.IGNORE
         dst = message.dst_id
         if now - self._seen(contact.id, dst) <= self._met_dst_window:

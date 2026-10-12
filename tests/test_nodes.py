@@ -1,4 +1,5 @@
 import math
+import pytest
 from festival_ble_sim.config import AreaConfig
 from festival_ble_sim.models import Message, Position
 from festival_ble_sim.nodes import BaseNode, MobileNode, BeaconNode
@@ -55,6 +56,19 @@ def test_consume_energy_never_goes_negative():
     node = BaseNode(node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=5, battery_mah=1.0)
     node.consume_energy(10.0)
     assert node.battery_mah == 0.0
+
+
+def test_partial_charge_counts_energy_from_the_starting_charge():
+    node = BaseNode(
+        node_id=1, position=Position(0, 0), radio_range_m=10.0, buffer_capacity=5, battery_mah=100.0, charge_fraction=0.6
+    )
+    assert node.battery_capacity_mah == 100.0
+    assert node.battery_mah == pytest.approx(60.0)
+    node.consume_energy(10.0)
+    node.consume_energy(5.0, mesh=False)
+    assert node.energy_consumed_mah == pytest.approx(15.0)
+    assert node.mesh_energy_consumed_mah == pytest.approx(10.0)
+    assert node.battery_fraction == pytest.approx(0.45)
 
 
 def test_unlimited_power_node_never_deactivates():

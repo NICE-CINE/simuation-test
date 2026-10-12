@@ -127,7 +127,7 @@ Quand la source repasse sur sa propre copie (copie fantôme, réinjections), ell
 Le GPS est le coût principal de TIDE-G.
 
 - Seuls les relais élus et les porteurs d'un message à indice prennent des fixes. En foule dense, l'élection limite les relais à environ 7 % des téléphones. En zone clairsemée, tout le monde est relais.
-- Le simulateur facture `gps_current_ma × gps_period / 3600` mAh par fix. La valeur de départ de 10 mA est **une hypothèse à mesurer** sur appareils, comme les 2 mA de fond déjà dans `EnergyConfig`.
+- Le simulateur facture `gps_current_ma × gps_period / 3600` mAh par fix. La valeur de départ de 10 mA est **une hypothèse à mesurer** sur appareils, comme l'était le courant de fond d'`EnergyConfig` avant son recalage sur le banc radio (`docs/energie/consommation.md`).
 - Variante d'ablation `gps_for_relays=False` : seuls les porteurs de messages à indice prennent des fixes. C'est moins cher, mais les voisins ont rarement un fix frais.
 
 ### 3.8 Vie privée

@@ -15,13 +15,18 @@ class BaseNode:
         radio_range_m: float,
         buffer_capacity: int,
         battery_mah: float,
+        charge_fraction: float = 1.0,
     ) -> None:
         self.id = node_id
         self.position = position
         self.radio_range_m = radio_range_m
         self.buffer_capacity = buffer_capacity
-        self.initial_battery_mah = battery_mah
-        self.battery_mah = battery_mah
+        # battery_mah is the capacity (100 %): battery-aware routing reads
+        # percentages against it, the energy report against the starting charge.
+        self.battery_capacity_mah = battery_mah
+        self.battery_mah = battery_mah * charge_fraction
+        self.initial_charge_mah = self.battery_mah
+        self.mesh_energy_consumed_mah = 0.0
         self.is_active = True
         # Distinct from is_active=False, which also covers a churned-out/
         # not-yet-arrived node (see simulation._churn_process): only this
@@ -80,19 +85,28 @@ class BaseNode:
         self.delivered_ids.add(msg_id)
         self.buffer.pop(msg_id, None)
 
-    def consume_energy(self, mah: float) -> None:
+    def consume_energy(self, mah: float, mesh: bool = True) -> None:
         if self.battery_mah == math.inf:
             return
-        self.battery_mah = max(0.0, self.battery_mah - mah)
+        spent = min(mah, self.battery_mah)
+        self.battery_mah -= spent
+        if mesh:
+            self.mesh_energy_consumed_mah += spent
         if self.battery_mah <= 0.0:
             self.is_active = False
             self.battery_depleted = True
 
     @property
+    def battery_fraction(self) -> float:
+        if self.battery_capacity_mah == math.inf or self.battery_capacity_mah <= 0:
+            return 1.0
+        return self.battery_mah / self.battery_capacity_mah
+
+    @property
     def energy_consumed_mah(self) -> float:
-        if self.initial_battery_mah == math.inf:
+        if self.battery_capacity_mah == math.inf:
             return 0.0
-        return self.initial_battery_mah - self.battery_mah
+        return self.initial_charge_mah - self.battery_mah
 
 
 class MobileNode(BaseNode):
@@ -104,9 +118,10 @@ class MobileNode(BaseNode):
         buffer_capacity: int,
         battery_mah: float,
         area: AreaConfig,
+        charge_fraction: float = 1.0,
     ) -> None:
         position = mobility.initial_position(area)
-        super().__init__(node_id, position, radio_range_m, buffer_capacity, battery_mah)
+        super().__init__(node_id, position, radio_range_m, buffer_capacity, battery_mah, charge_fraction)
         self.mobility = mobility
 
     def move(self, dt: float, area: AreaConfig) -> None:

@@ -26,6 +26,10 @@ class SimulationReport:
     replies_created: int = 0
     replies_delivered: int = 0
     reply_delivery_ratio: float = 0.0
+    # Mesh share of the energy above: being reachable + tx/rx + algorithm
+    # extras, without EnergyConfig.phone_current_ma (identical for every algorithm).
+    total_mesh_energy_consumed_mah: float = 0.0
+    avg_mesh_energy_consumed_mah: float = 0.0
 
 
 @dataclass
@@ -94,6 +98,7 @@ class MetricsCollector:
         node_energy_consumed_mah: List[float],
         dead_node_count: int,
         buffer_eviction_count: int = 0,
+        node_mesh_energy_consumed_mah: Optional[List[float]] = None,
     ) -> SimulationReport:
         # Delivery, latency and hops: spontaneous messages only, the same set
         # for every algorithm at a given seed. Overhead covers all traffic.
@@ -111,6 +116,8 @@ class MetricsCollector:
         overhead = (self._total_transmissions - all_delivered) / all_delivered if all_delivered else 0.0
         total_energy = sum(node_energy_consumed_mah)
         avg_energy = total_energy / len(node_energy_consumed_mah) if node_energy_consumed_mah else 0.0
+        mesh = node_mesh_energy_consumed_mah or []
+        total_mesh = sum(mesh)
         return SimulationReport(
             messages_created=self._messages_created,
             messages_delivered=delivered,
@@ -131,6 +138,8 @@ class MetricsCollector:
             replies_created=self._replies_created,
             replies_delivered=replies_delivered,
             reply_delivery_ratio=replies_delivered / self._replies_created if self._replies_created else 0.0,
+            total_mesh_energy_consumed_mah=total_mesh,
+            avg_mesh_energy_consumed_mah=total_mesh / len(mesh) if mesh else 0.0,
         )
 
 
@@ -151,6 +160,7 @@ def format_report(report: SimulationReport) -> str:
         f"Transmissions totales     : {report.total_transmissions}\n"
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
+        f"  dont mesh (totale / moy): {report.total_mesh_energy_consumed_mah:.2f} / {report.avg_mesh_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
         f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
         f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
