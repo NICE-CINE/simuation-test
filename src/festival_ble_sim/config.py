@@ -177,10 +177,14 @@ class GpsConfig:
 class EnergyConfig:
     # ~4500 mAh phone arriving about two thirds charged.
     initial_battery_mah: float = 3000.0
-    tx_cost_mah_per_event: float = 0.02
-    tx_cost_mah_per_byte: float = 1e-4
-    rx_cost_mah_per_event: float = 0.01
-    rx_cost_mah_per_byte: float = 5e-5
+    # A phone's BLE radio draws ~10 mA while active, about the same in TX and
+    # RX: ~5 ms of airtime per PDU exchange (event) and 0.1 ms per byte at
+    # BleConfig.transfer_rate_bytes_per_s = 10 kB/s. The old 0.02 mAh/event
+    # and 1e-4 mAh/byte implied a 3.6 A radio at full rate.
+    tx_cost_mah_per_event: float = 1.4e-5
+    tx_cost_mah_per_byte: float = 2.8e-7
+    rx_cost_mah_per_event: float = 1.4e-5
+    rx_cost_mah_per_byte: float = 2.8e-7
     # Average current of BLE scanning + advertising, paid every second a
     # phone is active whether or not it sends anything. Starting guess, to
     # recalibrate on real devices.

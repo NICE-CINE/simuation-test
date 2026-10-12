@@ -55,9 +55,9 @@ class ManagedFloodRouting(RoutingAlgorithm):
         self._acknowledged = acknowledged
         self._ack_timeout_s = ack_timeout_s
         self._max_retransmissions = max_source_retransmissions
-        energy_model = EnergyModel(energy if energy is not None else EnergyConfig())
-        self._ack_tx_mah = energy_model.cost_of_tx(ack_size_bytes)
-        self._ack_rx_mah = energy_model.cost_of_rx(ack_size_bytes)
+        self._ack_size_bytes = ack_size_bytes
+        self._explicit_energy = energy is not None
+        self._set_ack_costs(EnergyModel(energy if energy is not None else EnergyConfig()))
 
         self._nodes: Dict[int, "BaseNode"] = {}
         # Per node, insertion-ordered: the oldest entry is the first evicted
@@ -72,6 +72,14 @@ class ManagedFloodRouting(RoutingAlgorithm):
 
     def on_simulation_start(self, nodes: Dict[int, "BaseNode"]) -> None:
         self._nodes = nodes
+
+    def on_energy_model(self, energy_model: EnergyModel) -> None:
+        if not self._explicit_energy:
+            self._set_ack_costs(energy_model)
+
+    def _set_ack_costs(self, energy_model: EnergyModel) -> None:
+        self._ack_tx_mah = energy_model.cost_of_tx(self._ack_size_bytes)
+        self._ack_rx_mah = energy_model.cost_of_rx(self._ack_size_bytes)
 
     def _remember(self, node_id: int, key: _CacheKey, now: float) -> float:
         cache = self._cache.setdefault(node_id, OrderedDict())
