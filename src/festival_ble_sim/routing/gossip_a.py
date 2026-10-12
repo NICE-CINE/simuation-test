@@ -87,6 +87,13 @@ class GossipARouting(RoutingAlgorithm):
         self._now = 0.0
         self._last_prune = 0.0
 
+    def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        # Density from every in-range pair: decide() only runs where the
+        # holder has something to offer, which undercounts neighbours.
+        for node_id, neighbors in neighbors_by_node.items():
+            for neighbor in neighbors:
+                self._record_encounter(node_id, neighbor.id, now)
+
     def _record_encounter(self, a: int, b: int, now: float) -> None:
         if self._last_seen.get(a, {}).get(b) == now:
             return
@@ -192,7 +199,6 @@ class GossipARouting(RoutingAlgorithm):
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now
         self._prune(now)
-        self._record_encounter(holder.id, contact.id, now)
         self._sync_purges(holder, contact, now)
         if message.msg_id not in holder.buffer:
             return RoutingDecision.IGNORE

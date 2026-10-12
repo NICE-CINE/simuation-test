@@ -250,3 +250,10 @@ def test_end_to_end_run_delivers_messages():
     report = run_simulation(config, routing_algorithm=GossipARouting())
     assert 0.0 <= report.delivery_ratio <= 1.0
     assert report.messages_delivered > 0
+
+
+def test_density_counts_every_on_tick_neighbour_not_only_those_decide_sees():
+    algo = GossipARouting(density_ewma_alpha=1.0)
+    holder = _node(1)
+    algo.on_tick(0.0, {1: [_node(100 + i) for i in range(12)]})
+    assert algo.density(holder.id, now=0.0) == pytest.approx(12.0)
