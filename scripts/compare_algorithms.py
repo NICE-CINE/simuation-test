@@ -178,9 +178,11 @@ def run_matrix(
     gps_fix_failure: float = 0.0,
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
+    algorithms: Optional[List[str]] = None,
 ) -> List[dict]:
+    names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
-    tasks = [(algo_name, count, seed) for seed in seeds for algo_name in ALGORITHMS for count in (0, beacon_count)]
+    tasks = [(algo_name, count, seed) for seed in seeds for algo_name in names for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
     matrix_start = time.monotonic()
     manager = multiprocessing.Manager() if show_progress else None
@@ -297,6 +299,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--gps-fix-failure", type=float, default=0.0,
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
+    parser.add_argument(
+        "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
+        help="Sous-ensemble d'algos a lancer (defaut : tous)",
+    )
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele")
     parser.add_argument("--csv", default=None, help="Copie optionnelle du CSV, en plus de l'archive")
     parser.add_argument(
@@ -334,6 +340,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         gps_fix_failure=args.gps_fix_failure,
         size=args.size,
         cooldown_s=args.cooldown,
+        algorithms=args.algorithms,
     )
     write_csv(rows, archive_csv)
     if args.csv:

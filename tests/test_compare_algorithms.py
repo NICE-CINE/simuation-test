@@ -134,3 +134,21 @@ def test_main_with_several_seeds_writes_paired_runs_and_a_summary(tmp_path):
         summary = list(csv.DictReader(f))
     assert len(summary) == 2 * len(compare_algorithms.ALGORITHMS)
     assert {row["runs"] for row in summary} == {"2"}
+
+
+def test_algorithms_option_runs_only_the_chosen_subset(tmp_path):
+    compare_algorithms.main(
+        ["--algorithms", "epidemic", "tide", "--seeds", "1", "--duration", "30", "--cooldown", "0",
+         "--num-festivaliers", "10", "--beacon-count", "2", "--workers", "1", "--archive-dir", str(tmp_path)]
+    )
+    (runs_csv,) = tmp_path.glob("*_comparaison.csv")
+    with open(runs_csv, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [(row["algorithm"], row["beacons"]) for row in rows] == [
+        ("epidemic", "0"), ("epidemic", "2"), ("tide", "0"), ("tide", "2"),
+    ]
+
+
+def test_unknown_algorithm_is_rejected():
+    with pytest.raises(SystemExit):
+        compare_algorithms.main(["--algorithms", "nope"])
