@@ -16,44 +16,12 @@ from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.presets import SITE_PRESETS, build_site, resolve_cli_args
-from festival_ble_sim.routing.band_fanout import BandFanoutRouting
-from festival_ble_sim.routing.base import RoutingAlgorithm
-from festival_ble_sim.routing.beacon_priority import BeaconPriorityRouting
-from festival_ble_sim.routing.bubble_f import BubbleFRouting
-from festival_ble_sim.routing.dasfv import DasfVRouting
-from festival_ble_sim.routing.eco_sf import EcoSfRouting
-from festival_ble_sim.routing.epidemic import EpidemicRouting
-from festival_ble_sim.routing.geo_spray_focus import GeoSprayFocusRouting
-from festival_ble_sim.routing.gossip_a import GossipARouting
-from festival_ble_sim.routing.managed_flood import ManagedFloodRouting
-from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
-from festival_ble_sim.routing.prophet import ProphetRouting
-from festival_ble_sim.routing.spray_and_wait import SprayAndWaitRouting
-from festival_ble_sim.routing.tide import TideRouting
-from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
+from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
 
 DEFAULT_NUM_FESTIVALIERS = 4000
-
-ROUTING_FACTORIES: Dict[str, Callable[[argparse.Namespace], RoutingAlgorithm]] = {
-    "epidemic": lambda args: EpidemicRouting(),
-    "spray_wait": lambda args: SprayAndWaitRouting(initial_copies=args.spray_initial_copies),
-    "prophet": lambda args: ProphetRouting(),
-    "beacon_priority": lambda args: BeaconPriorityRouting(),
-    "dasfv": lambda args: DasfVRouting(),
-    "gossip_a": lambda args: GossipARouting(seed=args.seed),
-    "bubble_f": lambda args: BubbleFRouting(),
-    "managed_flood": lambda args: ManagedFloodRouting(),
-    "tide": lambda args: TideRouting(seed=args.seed),
-    "tide_g": lambda args: TideGRouting(seed=args.seed),
-    "tide_g2": lambda args: TideGRouting(seed=args.seed, **TIDE_G2_KWARGS),
-    "fresh_spray": lambda args: FreshSprayRouting(),
-    "geo_spray_focus": lambda args: GeoSprayFocusRouting(),
-    "eco_sf": lambda args: EcoSfRouting(seed=args.seed),
-    "band_fanout": lambda args: BandFanoutRouting(seed=args.seed),
-}
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
 # festival layout (see default_festival_pois) since the mobility_factory
@@ -66,7 +34,7 @@ MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Rand
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulateur de messagerie BLE mesh en festival")
-    parser.add_argument("--routing", choices=sorted(ROUTING_FACTORIES), default="epidemic")
+    parser.add_argument("--routing", choices=sorted(ROUTING_NAMES), default="epidemic")
     parser.add_argument(
         "--mobility", choices=sorted(MOBILITY_FACTORIES), default=None,
         help="random_waypoint par defaut, poi avec --size",
@@ -147,7 +115,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = parser.parse_args(argv)
     resolve_cli_args(args, DEFAULT_NUM_FESTIVALIERS, parser.error)
     config = build_config(args)
-    routing_algorithm = ROUTING_FACTORIES[args.routing](args)
+    routing_algorithm = build_routing(args.routing, args.seed, args.spray_initial_copies)
     mobility_factory = MOBILITY_FACTORIES[args.mobility](config)
     history = None
     if args.replay_html:

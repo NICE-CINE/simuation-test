@@ -76,21 +76,21 @@ def test_build_config_wires_followups_and_fix_failures():
     assert "tide_g2" in compare_algorithms.ALGORITHMS
 
 
-def test_geo_spray_focus_is_registered_in_both_scripts():
+def test_both_entry_points_build_from_the_shared_registry():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     import main as main_module
+    from festival_ble_sim.routing import registry
 
-    for name in ("geo_spray_focus", "eco_sf"):
-        assert name in compare_algorithms.ALGORITHMS
-        assert name in main_module.ROUTING_FACTORIES
+    assert compare_algorithms.ALGORITHMS == registry.ROUTING_NAMES
+    assert main_module.build_routing is registry.build_routing is compare_algorithms.build_routing
 
 
-def test_band_fanout_is_registered_in_both_scripts():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import main as main_module
+def test_seeded_algorithms_receive_the_run_seed():
+    from festival_ble_sim.routing.registry import build_routing
 
-    assert "band_fanout" in compare_algorithms.ALGORITHMS
-    assert "band_fanout" in main_module.ROUTING_FACTORIES
+    for name in ("gossip_a", "tide", "tide_g", "tide_g2", "eco_sf", "band_fanout"):
+        draws = {build_routing(name, seed)._rng.random() for seed in (1, 2)}
+        assert len(draws) == 2, name
 
 
 def test_build_config_size_sets_site_and_crowd():
