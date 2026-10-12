@@ -86,6 +86,14 @@ class GossipARouting(RoutingAlgorithm):
         self._sync_tick: Optional[float] = None
         self._now = 0.0
         self._last_prune = 0.0
+        self._ctx_holder = -1
+        self._ctx_contact = -1
+        self._ctx_now = -math.inf
+        self._ctx_holder_seen: Optional[Dict[int, Dict[int, float]]] = None
+        self._ctx_contact_seen: Optional[Dict[int, Dict[int, float]]] = None
+        self._ctx_session: Optional[List[float]] = None
+        self._ctx_pair: _Pair = (-1, -1)
+        self._ctx_refused: Optional[Dict[int, float]] = None
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
         # Density from every in-range pair: decide() only runs where the
@@ -198,27 +206,64 @@ class GossipARouting(RoutingAlgorithm):
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now
-        self._prune(now)
-        self._sync_purges(holder, contact, now)
-        if message.msg_id not in holder.buffer:
+        if now - self._last_prune >= self._session_cooldown_s:
+            self._prune(now)
+        holder_id = holder.id
+        contact_id = contact.id
+        # _sync_purges is idempotent for a given (holder, contact, now), and the
+        # engine walks every buffered message for one contact in a row.
+        if holder_id != self._ctx_holder or contact_id != self._ctx_contact or now != self._ctx_now:
+            self._ctx_holder = holder_id
+            self._ctx_contact = contact_id
+            self._ctx_now = now
+            self._ctx_holder_seen = None
+            self._ctx_contact_seen = None
+            self._ctx_session = None
+            self._sync_purges(holder, contact, now)
+        msg_id = message.msg_id
+        if msg_id not in holder.buffer:
             return RoutingDecision.IGNORE
 
-        if message.msg_id in contact.buffer:
-            self._note_holder(holder.id, message.msg_id, contact.id, now)
-            self._note_holder(contact.id, message.msg_id, holder.id, now)
+        if msg_id in contact.buffer:
+            # The per-node dicts are never replaced, only mutated, so they can
+            # be kept for the whole context; they are fetched lazily to leave
+            # the same state behind as the original setdefault chain.
+            holder_seen = self._ctx_holder_seen
+            if holder_seen is None:
+                holder_seen = self._ctx_holder_seen = self._seen_holders.setdefault(holder_id, {})
+            contact_seen = self._ctx_contact_seen
+            if contact_seen is None:
+                contact_seen = self._ctx_contact_seen = self._seen_holders.setdefault(contact_id, {})
+            holders = holder_seen.get(msg_id)
+            if holders is None:
+                holders = holder_seen[msg_id] = {}
+            holders[contact_id] = now
+            holders = contact_seen.get(msg_id)
+            if holders is None:
+                holders = contact_seen[msg_id] = {}
+            holders[holder_id] = now
             return RoutingDecision.IGNORE
-        if contact.has_message(message.msg_id):
+        if msg_id in contact.delivered_ids:
             return RoutingDecision.IGNORE
 
-        pair = (holder.id, contact.id)
-        session = self._session(pair, now)
+        # _session is a no-op after its first call for a (pair, now), and
+        # nothing replaces the session or its refused dict within one tick
+        # (_prune only runs on the first decide of a tick), so both are kept
+        # for the whole context. They are fetched lazily because _session
+        # creates the session, which must not happen for a context that only
+        # ever sees messages the contact already holds.
+        session = self._ctx_session
+        if session is None:
+            pair = self._ctx_pair = (holder_id, contact_id)
+            session = self._ctx_session = self._session(pair, now)
+            self._ctx_refused = self._refused.get(pair)
         if self._session_budget_bytes is not None and session[1] + message.size_bytes > self._session_budget_bytes:
             return RoutingDecision.IGNORE
         if self._max_bundles_per_peer is not None and session[2] >= self._max_bundles_per_peer:
             return RoutingDecision.IGNORE
 
-        refused = self._refused.get(pair)
-        if refused is not None and message.msg_id in refused:
+        refused = self._ctx_refused
+        if refused is not None and msg_id in refused:
             return RoutingDecision.IGNORE
 
         p = self.forward_probability(message, holder, now)
@@ -226,7 +271,9 @@ class GossipARouting(RoutingAlgorithm):
         # already holds this message; gossip redundancy is meant to absorb it.
         false_positive = self._rng.random() < self._bloom_false_positive(len(contact.buffer))
         if false_positive or p <= 0.0 or self._rng.random() >= p:
-            self._refused.setdefault(pair, {})[message.msg_id] = now
+            if refused is None:
+                refused = self._ctx_refused = self._refused.setdefault(self._ctx_pair, {})
+            refused[msg_id] = now
             return RoutingDecision.IGNORE
         return RoutingDecision.FORWARD
 

@@ -69,6 +69,9 @@ beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
+`--algorithms tide fresh_spray ...` ne lance qu'un sous-ensemble de la
+matrice (defaut : tous les algos).
+
 `--seeds 1 2 3 4 5` (alias `--seed`) repete la matrice sur plusieurs seeds :
 tous les algos tournent sur les memes seeds (runs apparies), le CSV a une
 ligne par run (colonne `seed`) et un `<...>_comparaison_resume.csv` donne,

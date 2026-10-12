@@ -26,6 +26,8 @@ python scripts/compare_algorithms.py --seed 42 --duration 3600 \
 
 # Same matrix over several paired seeds: one CSV row per run + a <...>_comparaison_resume.csv (mean, Student 95 % CI half-width per metric)
 python scripts/compare_algorithms.py --seeds 1 2 3 4 5 --duration 3600 --num-festivaliers 200 --workers 12
+# ... or only some algorithms
+python scripts/compare_algorithms.py --algorithms tide fresh_spray spray_wait --seeds 1 2 3 4 5
 
 # Sweep fresh_spray's initial_tokens over seeds (per-token means at the end)
 python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
