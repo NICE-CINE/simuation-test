@@ -104,7 +104,7 @@ def test_main_runs_end_to_end_and_writes_report(tmp_path, capsys):
 
 def test_main_writes_replay_html_when_requested(tmp_path, capsys):
     output_path = tmp_path / "report.txt"
-    replay_path = tmp_path / "replay.html"
+    archive_dir = tmp_path / "archives"
     main_module.main(
         [
             "--routing", "epidemic",
@@ -112,12 +112,15 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
             "--num-festivaliers", "10",
             "--seed", "1",
             "--output", str(output_path),
-            "--replay-html", str(replay_path),
-            "--archive-dir", str(tmp_path / "archives"),
+            "--replay-html",
+            "--archive-dir", str(archive_dir),
         ]
     )
-    assert replay_path.exists()
-    assert "<canvas" in replay_path.read_text(encoding="utf-8")
+    replays = list(archive_dir.glob("*_epidemic.html"))
+    assert len(replays) == 1
+    assert replays[0].name[:10].count("-") == 2
+    assert replays[0].with_suffix(".txt").exists()
+    assert "<canvas" in replays[0].read_text(encoding="utf-8")
     assert "Replay HTML ecrit" in capsys.readouterr().out
 
 
@@ -127,7 +130,7 @@ def test_main_does_not_write_replay_html_by_default(tmp_path):
         ["--duration", "30", "--num-festivaliers", "10", "--seed", "1", "--output", str(output_path),
          "--archive-dir", str(tmp_path / "archives")]
     )
-    assert list(tmp_path.glob("*.html")) == []
+    assert list(tmp_path.rglob("*.html")) == []
 
 
 def test_main_archives_report_and_params_named_after_date_and_algo(tmp_path):

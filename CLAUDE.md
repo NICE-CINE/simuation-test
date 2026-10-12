@@ -35,7 +35,7 @@ python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 --num-festival
     [--variant "fanout=2,max_hops=4" ...]
 ```
 
-Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args *and* the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run). `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
+Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `<...>.html` for `main.py --replay-html`, `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args *and* the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run). `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
 
 No lint/format tooling is configured (no ruff/black/mypy config in `pyproject.toml`).
 
@@ -76,7 +76,7 @@ viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
 
 `radio.py` holds the log-distance path-loss model (`max_range_m`, `received_power_dbm`, `link_margin_db`) that both `simulation.py` (to size `SpatialGrid` and each node's `radio_range_m` from `BleConfig.phone_radio`/`beacon_radio`) and `network.py` (to derive the weak-signal/shadowing component of packet loss from each sender/contact pair's link margin) build on. `RadioParams.shadowing_std_db` makes `received_power_dbm`/`link_margin_db` stochastic per call when given an `rng` — 0.0 (the dataclass default, though not `BleConfig`'s actual phone/beacon radio defaults) reproduces the old deterministic behavior.
 
-`main.py` is a thin CLI: build a `SimulationConfig`, call `run_simulation`, `format_report`, print + archive it (see above), optionally `render_replay_html` when `--replay-html` is set. Algorithms are selected via its `ROUTING_FACTORIES` dict (`--routing`).
+`main.py` is a thin CLI: build a `SimulationConfig`, call `run_simulation`, `format_report`, print + archive it (see above), optionally `render_replay_html` when the `--replay-html` flag is set (written next to the report as `<stem>.html`). Algorithms are selected via its `ROUTING_FACTORIES` dict (`--routing`).
 
 `scripts/compare_algorithms.py` runs the {algorithm} x {with/without beacons} matrix through a `ProcessPoolExecutor` (`--workers`), using `run_simulation`'s `progress_callback` for a live status line, and appends each finished row to the CSV as it completes. It has its own `ALGORITHMS` dict (no-arg constructors) separate from `main.py`'s.
 

@@ -47,8 +47,8 @@ Options disponibles :
 - `--archive-dir DOSSIER` : dossier d'archive (defaut `archives`)
 - `--output CHEMIN` : copie optionnelle du rapport, en plus de l'archive
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
-- `--replay-html CHEMIN` : ecrit un replay HTML autonome de la simulation
-  (voir "Visualisation / replay" plus bas)
+- `--replay-html` : ecrit un replay HTML autonome de la simulation dans
+  le dossier d'archive, sous `<date>_<algo>.html` (voir "Visualisation / replay" plus bas)
 - `--reply-probability P` : probabilite qu'un message livre recoive une
   reponse du destinataire apres 20 a 180 s (defaut 0, pas de reponses) ;
   necessaire pour que `tide_g` ait des indices de position
@@ -214,9 +214,9 @@ les departs de churn.
 
 ## Visualisation / replay
 
-`--replay-html CHEMIN` enregistre les positions (un instantane par tick
+`--replay-html` enregistre les positions (un instantane par tick
 de mobilite) et les evenements de relais/livraison pendant le run, puis
-ecrit un fichier HTML autonome (Canvas + JS, aucune dependance externe)
+ecrit `archives/<date>_<algo>.html`, un fichier HTML autonome (Canvas + JS, aucune dependance externe)
 avec lecture/pause et curseur temporel — telephones et bornes en points,
 liens de relais/livraison du tick courant en traits. Cout memoire
 proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
