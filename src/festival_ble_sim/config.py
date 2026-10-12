@@ -62,7 +62,8 @@ def _default_beacon_radio() -> RadioParams:
 class BleConfig:
     phone_radio: RadioParams = field(default_factory=_default_phone_radio)
     beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
-    # Bytes exchangeable per tick per link (sender<->contact): real effective
+    # Bytes each radio can send + receive per tick, shared by all its links
+    # (network_engine tracks it per node for the whole tick): real effective
     # GATT throughput in a dense opportunistic-mesh deployment, well below
     # BLE's raw PHY rate once ATT/connection overhead and 2.4GHz contention
     # from thousands of nearby devices are accounted for.

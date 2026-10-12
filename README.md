@@ -256,9 +256,11 @@ des messages ; s'ajoute aux couts par emission/reception.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
-- un **debit limite par lien et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
-  un message qui ne rentre pas dans le budget reste en buffer et retente
-  au tick suivant ;
+- un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
+  emissions et receptions d'un noeud partagent ce budget sur tous ses liens ;
+  un message qui ne rentre pas dans le budget de l'emetteur ou du recepteur
+  reste en buffer et retente au tick suivant (les emetteurs sont traites dans
+  un ordre tire au hasard a chaque tick) ;
 - une **limite de connexions BLE simultanees** (`max_concurrent_links`,
   defaut 6, realiste pour un smartphone) — au-dela, les contacts les plus
   proches sont prioritaires ;

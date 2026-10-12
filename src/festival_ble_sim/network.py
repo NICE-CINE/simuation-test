@@ -82,6 +82,7 @@ def process_node_contacts(
     event_log: Optional[List[Dict[str, Any]]] = None,
     neighbors: Optional[List[BaseNode]] = None,
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
+    airtime_left: Optional[Dict[int, float]] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -127,9 +128,14 @@ def process_node_contacts(
     if ble_config is not None:
         radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
 
-    link_budget_bytes = None
+    # Per radio, not per link: one node's sends and receives this tick all
+    # share its airtime. network_engine passes one dict for the whole tick so
+    # a receiver busy with one sender has less left for the others.
+    radio_budget_bytes = None
     if ble_config is not None:
-        link_budget_bytes = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+        radio_budget_bytes = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+    if airtime_left is None:
+        airtime_left = {}
 
     for contact in neighbors:
         if not contact.is_active:
@@ -168,8 +174,6 @@ def process_node_contacts(
                     congestion_loss_prob + weak_signal_loss_prob + collision_loss_prob,
                 )
 
-        remaining_budget = link_budget_bytes
-
         for message in messages:
             if message.msg_id not in sender.buffer:
                 continue
@@ -194,11 +198,14 @@ def process_node_contacts(
             # Budget and loss only apply once something is actually sent: a
             # message the routing would ignore (or the contact already has)
             # costs neither airtime nor energy.
-            if remaining_budget is not None and message.size_bytes > remaining_budget:
-                # Doesn't fit this tick's link budget; stays queued, retried next tick.
-                continue
-            if remaining_budget is not None:
-                remaining_budget -= message.size_bytes
+            if radio_budget_bytes is not None:
+                sender_left = airtime_left.get(sender.id, radio_budget_bytes)
+                contact_left = airtime_left.get(contact.id, radio_budget_bytes)
+                if message.size_bytes > min(sender_left, contact_left):
+                    # Doesn't fit either radio's airtime left this tick; stays queued, retried next tick.
+                    continue
+                airtime_left[sender.id] = sender_left - message.size_bytes
+                airtime_left[contact.id] = contact_left - message.size_bytes
 
             if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
                 sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
@@ -323,7 +330,13 @@ def network_engine(
         contention_counts = (
             _compute_contention_counts(nodes, neighbors_by_node, snapshot) if ble_config is not None else None
         )
-        for node_id, sender in list(nodes.items()):
+        airtime_left: Dict[int, float] = {}
+        # Senders compete for receivers' airtime, so a fixed order would let
+        # the lowest ids (the beacons) always win it.
+        order = list(nodes.items())
+        if rng is not None:
+            rng.shuffle(order)
+        for node_id, sender in order:
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
@@ -333,4 +346,5 @@ def network_engine(
                 event_log=event_log,
                 neighbors=neighbors_by_node.get(node_id) if neighbors_by_node is not None else None,
                 on_delivery=on_delivery,
+                airtime_left=airtime_left,
             )
