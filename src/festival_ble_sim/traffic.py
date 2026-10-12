@@ -24,6 +24,7 @@ def generate_message(
     rng: random.Random,
     src_position: Optional[Position] = None,
     dst_known: Optional[Tuple[Position, float]] = None,
+    is_reply: bool = False,
 ) -> Message:
     lo, hi = config.payload_size_range_bytes
     size_bytes = rng.randint(lo, hi)
@@ -38,6 +39,7 @@ def generate_message(
         src_position=src_position,
         dst_position=dst_known[0] if dst_known is not None else None,
         dst_position_time=dst_known[1] if dst_known is not None else None,
+        is_reply=is_reply,
     )
 
 
@@ -90,7 +92,9 @@ def followup_process(
 ):
     while rng.random() < config.followup_probability:
         delay_s = rng.uniform(*config.followup_delay_range_s)
-        yield from reply_process(env, node, dst_id, delay_s, nodes, config, metrics, id_generator, rng)
+        yield from reply_process(
+            env, node, dst_id, delay_s, nodes, config, metrics, id_generator, rng, is_reply=False
+        )
         target = nodes.get(dst_id)
         if not node.is_active or target is None or not target.is_active:
             return
@@ -106,6 +110,7 @@ def reply_process(
     metrics: MetricsCollector,
     id_generator: Iterator[int],
     rng: random.Random,
+    is_reply: bool = True,
 ):
     yield env.timeout(delay_s)
     target = nodes.get(dst_id)
@@ -115,6 +120,7 @@ def reply_process(
         next(id_generator), env.now, node.id, dst_id, config, rng,
         src_position=node.gps_fix(),
         dst_known=node.known_positions.get(dst_id),
+        is_reply=is_reply,
     )
     node.store_message(message)
     metrics.record_creation(message)

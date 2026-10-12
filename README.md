@@ -202,9 +202,10 @@ colonnes du CSV :
 
 | Champ | Definition |
 |---|---|
-| Taux de livraison (`delivery_ratio`) | messages livres / messages crees (reponses et relances comprises), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
-| Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages livres seulement |
-| Sauts moyens (`avg_hops`) | sauts de la copie livree en premier |
+| Taux de livraison (`delivery_ratio`) | messages spontanes livres / messages spontanes crees (relances comprises, **reponses exclues** : leur nombre depend de ce que l'algo a deja livre), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
+| Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages spontanes livres seulement |
+| Sauts moyens (`avg_hops`) | sauts de la copie livree en premier (messages spontanes) |
+| Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
 | Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |

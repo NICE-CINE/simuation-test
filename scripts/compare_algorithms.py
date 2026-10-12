@@ -48,6 +48,7 @@ ALGORITHMS: Dict[str, Callable[[], RoutingAlgorithm]] = {
 }
 
 REPORT_FIELDS = [
+    "messages_created",
     "delivery_ratio",
     "avg_latency_s",
     "p95_latency_s",
@@ -57,6 +58,8 @@ REPORT_FIELDS = [
     "buffer_eviction_count",
     "packet_loss_count",
     "backhaul_transmissions",
+    "replies_created",
+    "reply_delivery_ratio",
 ]
 
 MINI_BAR_WIDTH = 10
