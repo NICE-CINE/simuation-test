@@ -34,7 +34,7 @@ from festival_ble_sim.routing.tide import TideRouting
 from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
-from festival_ble_sim.viz.replay import render_replay_html
+from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
 
 DEFAULT_NUM_FESTIVALIERS = 4000
 
@@ -90,7 +90,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replay-html", action="store_true",
         help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
-        "sous <YYYY-MM-DD>_<algo>.html (suffixe _2, _3... si le fichier existe deja). Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        "sous <YYYY-MM-DD>_<algo>.html (suffixe _2, _3... si le fichier existe deja) et regenere index.html a la racine, qui les liste tous. Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -180,6 +180,9 @@ def main(argv: Optional[List[str]] = None) -> None:
             n += 1
         render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
         print(f"Replay HTML ecrit dans {replay_path}")
+        index_path = Path(args.archive_dir).parent / "index.html"
+        write_replay_index(str(replay_dir), str(index_path))
+        print(f"Index des replays mis a jour : {index_path}")
 
 
 if __name__ == "__main__":

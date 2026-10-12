@@ -125,6 +125,9 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
     main_module.main(["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10",
                       "--seed", "1", "--replay-html", "--archive-dir", str(archive_dir)])
     assert (archive_dir / "replay" / f"{replays[0].stem}_2.html").exists()
+    index = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert f'href="archives/replay/{replays[0].name}"' in index
+    assert f'href="archives/replay/{replays[0].stem}_2.html"' in index
 
 
 def test_main_does_not_write_replay_html_by_default(tmp_path):
