@@ -216,7 +216,7 @@ colonnes du CSV :
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages spontanes livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier (messages spontanes) |
 | Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
-| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
+| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |

@@ -78,6 +78,8 @@ Ceux de `managed_flood` : la livraison crée un ACK inondé (TTL 7, un saut par 
 |---|---|
 | Jitter 10–220 ms, annulation d'un relais programmé sur doublon | Relais au tick suivant |
 | Annonces réelles, perdues ou non | Joignabilité calculée sur le graphe des voisins, sans perte |
+| À la création, destination joignable si une annonce a été entendue dans les 60 s | À la création, seul le graphe du tick compte ; la rétention de 60 s ne s'applique qu'ensuite |
+| Relais lié au destinataire : envoi sur ce seul lien, perdu ou non | Si le destinataire est son seul voisin, le relais ne voit aucun autre lien et met le paquet en spool : une livraison perdue est retentée (une livraison réussie le purge par l'ACK) |
 | Favoris mutuels, pairs « vérifiés » (annonce signée) | Amis réciproques du graphe social ; tout autre pair mobile est « vérifié » |
 | ACK de livraison = message privé vers l'émetteur | ACK inondés de `managed_flood`, qui purgent aussi les copies |
 | Courier plein : éviction des plus anciens, non-amis d'abord | Refus du dépôt |
