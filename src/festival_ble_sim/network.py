@@ -218,13 +218,13 @@ def process_node_contacts(
 
             if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
                 sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
-                metrics.record_packet_loss()
+                metrics.record_packet_loss(message)
                 continue
 
             copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
             sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
             contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
-            metrics.record_transmission()
+            metrics.record_transmission(message)
             if is_delivery:
                 contact.mark_delivered(copy.msg_id)
                 if copy.src_position is not None:
@@ -298,11 +298,11 @@ def beacon_backhaul_relay(
                 if rng is not None and attempt_prob < 1.0 and rng.random() >= attempt_prob:
                     continue
                 if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
-                    metrics.record_backhaul_loss()
+                    metrics.record_backhaul_loss(message)
                     continue
                 relayed = replace(message, routing_state=dict(message.routing_state))
                 target.store_message(relayed)
-                metrics.record_backhaul_transmission()
+                metrics.record_backhaul_transmission(message)
                 if event_log is not None:
                     event_log.append(_relay_event(now, src_id, dst_id, relayed, False, backhaul=True))
 

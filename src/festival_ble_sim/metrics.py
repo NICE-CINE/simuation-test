@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 from dataclasses import dataclass
-from typing import List, Set
+from typing import List, Optional, Set
 from .models import Message
 
 
@@ -32,7 +32,11 @@ class _DeliveryRecord:
 
 
 class MetricsCollector:
-    def __init__(self) -> None:
+    # measure_until: only messages created before it count (creations,
+    # deliveries, transmissions, losses). The run continues past it for the
+    # cooldown so late messages get their chance instead of counting as lost.
+    def __init__(self, measure_until: Optional[float] = None) -> None:
+        self._measure_until = measure_until
         self._messages_created = 0
         self._deliveries: List[_DeliveryRecord] = []
         self._delivered_msg_ids: Set[int] = set()
@@ -42,26 +46,34 @@ class MetricsCollector:
         self._backoff_count = 0
         self._backhaul_loss_count = 0
 
+    def _measured(self, message: Optional[Message]) -> bool:
+        return self._measure_until is None or message is None or message.creation_time < self._measure_until
+
     def record_creation(self, message: Message) -> None:
-        self._messages_created += 1
+        if self._measured(message):
+            self._messages_created += 1
 
-    def record_transmission(self) -> None:
-        self._total_transmissions += 1
+    def record_transmission(self, message: Optional[Message] = None) -> None:
+        if self._measured(message):
+            self._total_transmissions += 1
 
-    def record_packet_loss(self) -> None:
-        self._packet_loss_count += 1
+    def record_packet_loss(self, message: Optional[Message] = None) -> None:
+        if self._measured(message):
+            self._packet_loss_count += 1
 
-    def record_backhaul_transmission(self) -> None:
-        self._backhaul_transmissions += 1
+    def record_backhaul_transmission(self, message: Optional[Message] = None) -> None:
+        if self._measured(message):
+            self._backhaul_transmissions += 1
 
     def record_backoff(self) -> None:
         self._backoff_count += 1
 
-    def record_backhaul_loss(self) -> None:
-        self._backhaul_loss_count += 1
+    def record_backhaul_loss(self, message: Optional[Message] = None) -> None:
+        if self._measured(message):
+            self._backhaul_loss_count += 1
 
     def record_delivery(self, message: Message, delivered_at: float) -> None:
-        if message.msg_id in self._delivered_msg_ids:
+        if not self._measured(message) or message.msg_id in self._delivered_msg_ids:
             return
         self._delivered_msg_ids.add(message.msg_id)
         self._deliveries.append(_DeliveryRecord(latency_s=delivered_at - message.creation_time, hops=message.hops))

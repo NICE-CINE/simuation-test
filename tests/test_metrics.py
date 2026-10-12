@@ -64,3 +64,17 @@ def test_format_report_includes_key_numbers():
     text = format_report(report)
     assert "100.00" in text
     assert "5.0" in text
+
+
+def test_messages_created_after_the_measured_window_are_ignored():
+    collector = MetricsCollector(measure_until=100.0)
+    early = Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=99.0, ttl_s=500.0)
+    late = Message(msg_id=2, src_id=1, dst_id=2, size_bytes=10, creation_time=100.0, ttl_s=500.0)
+    for message in (early, late):
+        collector.record_creation(message)
+        collector.record_transmission(message)
+        collector.record_packet_loss(message)
+        collector.record_delivery(message, 150.0)
+    report = collector.build_report([], 0)
+    assert (report.messages_created, report.messages_delivered) == (1, 1)
+    assert (report.total_transmissions, report.packet_loss_count) == (1, 1)

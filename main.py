@@ -78,6 +78,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--beacons", type=int, default=0, help="Nombre de bornes (0 = desactivees)")
     parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
+    parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
     parser.add_argument("--num-festivaliers", type=int, default=None, help="4000 par defaut, fixe par --size")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default=None, help="Copie optionnelle du rapport, en plus de l'archive")
@@ -123,17 +124,17 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         arrival_window_s=tuple(args.churn_arrival_window_s),
         session_duration_range_s=tuple(args.churn_session_duration_s),
     )
+    traffic = TrafficConfig(reply_probability=args.reply_probability, followup_probability=args.followup_probability)
     return SimulationConfig(
         duration_s=args.duration,
+        cooldown_s=args.cooldown if args.cooldown is not None else traffic.message_ttl_s,
         num_festivaliers=num_festivaliers,
         random_seed=args.seed,
         area=area,
         mobility=mobility,
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
         churn=churn,
-        traffic=TrafficConfig(
-            reply_probability=args.reply_probability, followup_probability=args.followup_probability
-        ),
+        traffic=traffic,
         gps=GpsConfig(fix_failure_probability=args.gps_fix_failure),
     )
 
