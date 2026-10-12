@@ -118,16 +118,11 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
     )
     replays = list((archive_dir / "replay").glob("*_epidemic.html"))
     assert len(replays) == 1
-    assert len(replays[0].stem) == len("YYYY-MM-DD_epidemic")
-    assert list(archive_dir.glob("*_epidemic.txt"))
+    assert (archive_dir / f"{replays[0].stem}.txt").exists()
     assert "<canvas" in replays[0].read_text(encoding="utf-8")
     assert "Replay HTML ecrit" in capsys.readouterr().out
-    main_module.main(["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10",
-                      "--seed", "1", "--replay-html", "--archive-dir", str(archive_dir)])
-    assert (archive_dir / "replay" / f"{replays[0].stem}_2.html").exists()
-    index = (tmp_path / "index.html").read_text(encoding="utf-8")
-    assert f'href="archives/replay/{replays[0].name}"' in index
-    assert f'href="archives/replay/{replays[0].stem}_2.html"' in index
+    assert f'href="replay/{replays[0].name}"' in (archive_dir / "index.html").read_text(encoding="utf-8")
+    assert not (tmp_path / "index.html").exists()
 
 
 def test_main_does_not_write_replay_html_by_default(tmp_path):

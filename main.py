@@ -1,7 +1,6 @@
 from __future__ import annotations
 import argparse
 import random
-from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
@@ -90,7 +89,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replay-html", action="store_true",
         help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
-        "sous <YYYY-MM-DD>_<algo>.html (suffixe _2, _3... si le fichier existe deja) et regenere index.html a la racine, qui les liste tous. Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html), et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir). Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -172,15 +171,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     if history is not None:
         replay_dir = Path(args.archive_dir) / "replay"
         replay_dir.mkdir(parents=True, exist_ok=True)
-        base = f"{datetime.now().strftime('%Y-%m-%d')}_{args.routing}"
-        replay_path = replay_dir / f"{base}.html"
-        n = 2
-        while replay_path.exists():
-            replay_path = replay_dir / f"{base}_{n}.html"
-            n += 1
+        replay_path = replay_dir / f"{stem.name}.html"
         render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
         print(f"Replay HTML ecrit dans {replay_path}")
-        index_path = Path(args.archive_dir).parent / "index.html"
+        # Only the default archive dir owns the repo root's index.html; a custom one
+        # could share its parent with unrelated files or other archive dirs.
+        index_dir = Path(".") if args.archive_dir == DEFAULT_ARCHIVE_DIR else Path(args.archive_dir)
+        index_path = index_dir / "index.html"
         write_replay_index(str(replay_dir), str(index_path))
         print(f"Index des replays mis a jour : {index_path}")
 

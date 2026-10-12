@@ -3,6 +3,7 @@ import json
 import os
 from html import escape
 from pathlib import Path
+from urllib.parse import quote
 from .history import SimulationHistory
 
 _MESSAGE_FIELDS = ("src", "dst", "created")
@@ -460,7 +461,7 @@ _INDEX_TEMPLATE = """<!DOCTYPE html>
 <body>
 <h1>Replays (__COUNT__)</h1>
 <table>
-<tr><th>Date</th><th>Algo</th><th>Taille</th></tr>
+<tr><th>Date</th><th>Heure</th><th>Algo</th><th>Taille</th></tr>
 __ROWS__
 </table>
 </body>
@@ -470,13 +471,18 @@ __ROWS__
 
 def write_replay_index(replay_dir: str, index_path: str) -> None:
     index = Path(index_path)
-    replays = sorted(Path(replay_dir).glob("*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Sort by name, not mtime: names start with the run timestamp, mtimes are reset by git clone.
+    replays = sorted(Path(replay_dir).glob("*.html"), reverse=True)
     rows = []
     for replay in replays:
-        date, _, algo = replay.stem.partition("_")
-        href = escape(Path(os.path.relpath(replay, index.parent)).as_posix())
+        date, _, rest = replay.stem.partition("_")
+        time, _, algo = rest.partition("_")
+        href = escape(quote(Path(os.path.relpath(replay, index.parent)).as_posix()))
         size_mb = replay.stat().st_size / 1e6
-        rows.append(f'<tr><td>{escape(date)}</td><td><a href="{href}">{escape(algo)}</a></td><td>{size_mb:.1f} Mo</td></tr>')
+        rows.append(
+            f'<tr><td>{escape(date)}</td><td>{escape(time.replace("-", ":"))}</td>'
+            f'<td><a href="{href}">{escape(algo)}</a></td><td>{size_mb:.1f} Mo</td></tr>'
+        )
     index.write_text(
         _INDEX_TEMPLATE.replace("__COUNT__", str(len(replays))).replace("__ROWS__", "\n".join(rows)),
         encoding="utf-8",
