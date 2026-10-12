@@ -205,11 +205,11 @@ colonnes du CSV :
 | Taux de livraison (`delivery_ratio`) | messages livres / messages crees (reponses et relances comprises), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier |
-| Surcharge (`overhead`) | transmissions BLE reussies (relais et livraisons) / messages livres. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
-| Transmissions totales | numerateur de la surcharge |
+| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
+| Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
-| Messages perdus (buffer) | evictions de buffer plein |
+| Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
 | Transmissions / pertes backhaul | copies entre bornes par le reseau filaire, et celles perdues |
 | Backoffs | tours sautes par un emetteur a cause de la contention |
@@ -293,7 +293,7 @@ la portee radio :
   et une perte possible — par defaut proche de l'instantane/fiable
   d'origine, a durcir via la config pour un backbone plus realiste.
 
-Ces effets sont visibles dans le rapport via `Messages perdus (buffer)`,
+Ces effets sont visibles dans le rapport via `Copies evincees (buffer)`,
 `Paquets perdus (radio)`, `Transmissions backhaul`,
 `Backoffs (contention)` et `Paquets perdus (backhaul)`.
 

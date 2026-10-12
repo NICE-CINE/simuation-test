@@ -90,7 +90,9 @@ class MetricsCollector:
         avg_latency = sum(latencies) / delivered if delivered else 0.0
         p95_latency = latencies[math.ceil(0.95 * delivered) - 1] if delivered else 0.0
         avg_hops = sum(d.hops for d in self._deliveries) / delivered if delivered else 0.0
-        overhead = self._total_transmissions / delivered if delivered else 0.0
+        # Extra transmissions per delivered message, as in The ONE: a
+        # single-hop delivery with no other copy scores 0.
+        overhead = (self._total_transmissions - delivered) / delivered if delivered else 0.0
         total_energy = sum(node_energy_consumed_mah)
         avg_energy = total_energy / len(node_energy_consumed_mah) if node_energy_consumed_mah else 0.0
         return SimulationReport(
@@ -129,7 +131,7 @@ def format_report(report: SimulationReport) -> str:
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
-        f"Messages perdus (buffer)  : {report.buffer_eviction_count}\n"
+        f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
         f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
         f"Transmissions backhaul    : {report.backhaul_transmissions}\n"
         f"Backoffs (contention)     : {report.backoff_count}\n"

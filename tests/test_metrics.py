@@ -30,7 +30,7 @@ def test_build_report_computes_delivery_ratio_and_latency():
     assert report.avg_latency_s == pytest.approx((10.0 + 20.0) / 2)
     assert report.p95_latency_s == pytest.approx(20.0)
     assert report.avg_hops == pytest.approx((1 + 2) / 2)
-    assert report.overhead == pytest.approx(3 / 2)
+    assert report.overhead == pytest.approx((3 - 2) / 2)
     assert report.total_transmissions == 3
     assert report.total_energy_consumed_mah == pytest.approx(4.0)
     assert report.avg_energy_consumed_mah == pytest.approx(2.0)
