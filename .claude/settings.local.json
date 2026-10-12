@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Agent",
-      "Bash(gh pr merge:*)"
-    ]
-  }
-}
