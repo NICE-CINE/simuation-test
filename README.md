@@ -69,6 +69,13 @@ beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
+`--seeds 1 2 3 4 5` (alias `--seed`) repete la matrice sur plusieurs seeds :
+tous les algos tournent sur les memes seeds (runs apparies), le CSV a une
+ligne par run (colonne `seed`) et un `<...>_comparaison_resume.csv` donne,
+par algo x bornes, la moyenne et la demi-largeur de l'IC 95 % (Student) de
+chaque metrique (`<metrique>_ci95`). Une seule seed ne dit rien de la
+variance : viser au moins 5 seeds avant de classer des algos.
+
 `--workers N` (defaut 2) lance N simulations en parallele (un processus
 chacune) ; une ligne de statut affiche l'avancement de chaque run en
 direct. Chaque comparaison est archivee dans `archives/`

@@ -24,6 +24,9 @@ pytest tests/test_network.py::test_network_engine_two_hop_relay_takes_two_interv
 python scripts/compare_algorithms.py --seed 42 --duration 3600 \
     --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv out.csv]
 
+# Same matrix over several paired seeds: one CSV row per run + a <...>_comparaison_resume.csv (mean, Student 95 % CI half-width per metric)
+python scripts/compare_algorithms.py --seeds 1 2 3 4 5 --duration 3600 --num-festivaliers 200 --workers 12
+
 # Sweep fresh_spray's initial_tokens over seeds (per-token means at the end)
 python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
     --duration 10800 --num-festivaliers 5000 --beacon-count 6 --workers 12 \
