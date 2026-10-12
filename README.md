@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf` ou `band_fanout` (un seul choix a la fois, pas de `|`).
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf`, `band_fanout` ou `bitchat` (un seul choix a la fois, pas de `|`).
   `band_fanout` n'a pas d'option dediee : `main.py` le lance avec ses
   defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
   `--seed` pour le tirage des relais ; pour faire varier ses parametres,
@@ -65,7 +65,7 @@ Options disponibles :
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -216,7 +216,7 @@ colonnes du CSV :
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages spontanes livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier (messages spontanes) |
 | Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
-| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` n'y sont pas |
+| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues) |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
@@ -442,6 +442,16 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
   le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
+- `bitchat` (`routing/bitchat.py`) — messages prives de bitchat (code iOS
+  `permissionlesstech/bitchat`, constantes par defaut), sous-classe de
+  `managed_flood` : inondation dirigee TTL 7 avec dedup 1000 ids / 300 s,
+  envoi au seul destinataire s'il est voisin, spool 60 s chez un relais
+  isole ; la source n'inonde que si la destination est joignable (annonce
+  sur 7 sauts, 5 en zone dense, retenue 60 s) et reemet a chaque retour,
+  8 envois max ; sinon elle confie le message a 3 couriers max (amis
+  d'abord, spray-and-wait 4 copies) qui livrent au contact ou relancent une
+  inondation quand ils entendent la destination. Spec :
+  `docs/algorithmes/specs/BITCHAT.md`.
 - `tide` (`routing/tide.py`) — TIDE (Tokens, Islands, Density, Energy),
   candidat NICE : jetons initiaux `L0 = clamp(round(16 sqrt(10/rho)), 2, 16)`
   partages au prorata de l'utilite `U = e * [w P + (1-w) exp(-dt/tau)]`,

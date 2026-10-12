@@ -119,10 +119,13 @@ class ManagedFloodRouting(RoutingAlgorithm):
         first_seen = self._remember(node.id, (message.msg_id, attempt), now)
         if now - first_seen <= self._relay_window_s:
             return True
-        node.buffer.pop(message.msg_id, None)
+        self._relay_window_over(node, message)
         if self._acknowledged and node.id == message.src_id:
             self._pending.setdefault(message.msg_id, (node, message, first_seen))
         return False
+
+    def _relay_window_over(self, node: "BaseNode", message: Message) -> None:
+        node.buffer.pop(message.msg_id, None)
 
     def _retransmit_unacked(self, now: float) -> None:
         for msg_id, (source, message, sent_at) in list(self._pending.items()):
