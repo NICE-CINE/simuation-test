@@ -242,3 +242,20 @@ def test_fewer_transmissions_than_epidemic_in_mobile_run():
     epidemic = run_simulation(config, routing_algorithm=EpidemicRouting())
     assert flood.messages_delivered > 0
     assert flood.total_transmissions < epidemic.total_transmissions
+
+
+def test_ack_costs_follow_the_simulation_energy_config():
+    from festival_ble_sim.config import SimulationConfig
+    from festival_ble_sim.energy import EnergyModel as _Model
+    algo = ManagedFloodRouting(ack_size_bytes=16)
+    energy = EnergyConfig(tx_cost_mah_per_event=1.0, rx_cost_mah_per_event=2.0)
+    run_simulation(SimulationConfig(duration_s=1.0, num_festivaliers=2, energy=energy), routing_algorithm=algo)
+    assert algo._ack_tx_mah == pytest.approx(_Model(energy).cost_of_tx(16))
+    assert algo._ack_rx_mah == pytest.approx(_Model(energy).cost_of_rx(16))
+
+
+def test_explicit_ack_energy_wins_over_the_simulation_one():
+    explicit = EnergyConfig(tx_cost_mah_per_event=5.0)
+    algo = ManagedFloodRouting(energy=explicit)
+    algo.on_energy_model(EnergyModel(EnergyConfig(tx_cost_mah_per_event=1.0)))
+    assert algo._ack_tx_mah == pytest.approx(EnergyModel(explicit).cost_of_tx(16))

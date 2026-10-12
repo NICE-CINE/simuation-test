@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 from ..models import Message
 
 if TYPE_CHECKING:
+    from ..energy import EnergyModel
     from ..nodes import BaseNode
 
 
@@ -21,6 +22,11 @@ class RoutingAlgorithm(ABC):
         ...
 
     def on_simulation_start(self, nodes: Dict[int, "BaseNode"]) -> None:
+        pass
+
+    def on_energy_model(self, energy_model: "EnergyModel") -> None:
+        # The run's own costs, for algorithms that bill extra traffic (acks,
+        # beacons) themselves instead of letting the engine charge it.
         pass
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:

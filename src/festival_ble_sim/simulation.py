@@ -156,6 +156,7 @@ def run_simulation(
         env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
 
     routing_algorithm.on_simulation_start(nodes)
+    routing_algorithm.on_energy_model(energy_model)
     network_rng = random.Random(rng.randrange(1 << 30))
     on_delivery = None
     if config.traffic.reply_probability > 0:
