@@ -20,13 +20,16 @@ Les interrupteurs `adaptive`, `suppression` et
 
 ## Diagramme
 
+La densite est mesuree a chaque tick (`on_tick`) sur tous les voisins a
+portee, pas seulement ceux a qui le porteur a quelque chose a offrir.
+
 Decision prise pour chaque message du porteur a chaque contact :
 
 ```mermaid
 flowchart TD
     A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
     B -- oui --> L["Livraison (moteur) puis jeton de purge"]
-    B -- non --> O["Observation : rencontre, densite, echange des jetons de purge"]
+    B -- non --> O["Echange des jetons de purge"]
     O --> P{"Message purge chez le porteur ?"}
     P -- oui --> I["IGNORE"]
     P -- non --> C{"Voisin a deja le message ?"}

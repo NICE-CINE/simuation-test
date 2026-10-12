@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Dict, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingAlgorithm, RoutingDecision
 
@@ -92,6 +92,7 @@ class DasfVRouting(RoutingAlgorithm):
         # (the spec's own ACK gossip is cheap/epidemic) rather than
         # simulating bloom-filter dissemination over BLE.
         self._delivered_ids: Set[int] = set()
+        self._prev_tick: Optional[float] = None
 
     def _decayed(self, a: int, b: int, now: float) -> float:
         p = self._predictability.get(a, {}).get(b, 0.0)
@@ -124,14 +125,27 @@ class DasfVRouting(RoutingAlgorithm):
         self._window_contacts = {}
         self._window_id = window_id
 
+    def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        # Every in-range pair feeds density, the 2-hop check and turnover:
+        # decide() only sees contacts the holder has something to offer.
+        for node_id, neighbors in neighbors_by_node.items():
+            for neighbor in neighbors:
+                self._touch_encounter(node_id, neighbor.id, now)
+                self._observe_motion(neighbor, now)
+        self._prev_tick = now
+
     def _touch_encounter(self, a: int, b: int, now: float) -> bool:
-        if self._last_seen.get(a, {}).get(b) == now:
+        seen = self._last_seen.get(a, {}).get(b)
+        if seen == now:
             return False  # this pair was already recorded this tick
+        # A contact spanning several ticks is one PRoPHET encounter.
+        new_contact = seen is None or seen != self._prev_tick
         for x, y in ((a, b), (b, a)):
-            p_old = self._decayed(x, y, now)
-            self._set_utility(x, y, p_old + (1 - p_old) * self._p_encounter_init, now)
+            if new_contact:
+                p_old = self._decayed(x, y, now)
+                self._set_utility(x, y, p_old + (1 - p_old) * self._p_encounter_init, now)
             self._last_seen.setdefault(x, {})[y] = now
-        if self._enable_transitivity:
+        if new_contact and self._enable_transitivity:
             self._apply_transitivity(a, b, now)
         self._maybe_rotate_window(now)
         for x, y in ((a, b), (b, a)):
@@ -203,12 +217,6 @@ class DasfVRouting(RoutingAlgorithm):
         if message.msg_id in self._delivered_ids:
             holder.buffer.pop(message.msg_id, None)
             return RoutingDecision.IGNORE
-
-        # Recorded before the has_message check so that neighbours already
-        # holding this message still count toward density and utility.
-        if self._touch_encounter(holder.id, contact.id, now):
-            self._observe_motion(holder, now)
-            self._observe_motion(contact, now)
 
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE

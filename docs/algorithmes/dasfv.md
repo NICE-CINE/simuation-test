@@ -19,6 +19,11 @@ voir l'en-tete du fichier) :
 
 ## Diagramme
 
+Observation a chaque tick (`on_tick`), pour toutes les paires a portee,
+qu'elles aient ou non quelque chose a s'envoyer : densite, vue a 2 sauts,
+rotation des fenetres de contacts (mule) et vitesse. Une rencontre PRoPHET
+compte une fois par contact, pas a chaque tick ou il dure.
+
 Decision prise pour chaque message du porteur a chaque contact :
 
 ```mermaid
@@ -27,8 +32,7 @@ flowchart TD
     B -- oui --> L["Livraison (moteur) puis purge reseau-large"]
     B -- non --> P{"Message deja livre ?"}
     P -- oui --> X["Purge de la copie locale, IGNORE"]
-    P -- non --> O["Observation : rencontre, densite, utilite PRoPHET, mobilite"]
-    O --> C{"Voisin a deja le message ?"}
+    P -- non --> C{"Voisin a deja le message ?"}
     C -- oui --> I["IGNORE"]
     C -- non --> T["Jetons initiaux selon la densite locale (premier passage)"]
     T --> BAT{"Batterie du voisin critique ?"}

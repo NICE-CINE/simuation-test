@@ -22,6 +22,10 @@ def _msg(msg_id=1, src_id=1, dst_id=99, ttl_s=100.0):
     return Message(msg_id=msg_id, src_id=src_id, dst_id=dst_id, size_bytes=10, creation_time=0.0, ttl_s=ttl_s)
 
 
+def _meet(algo, a, b, now):
+    algo.on_tick(now, {a.id: [b], b.id: [a]})
+
+
 def _make_mule(algo, node):
     algo._prev_window_contacts[node.id] = {5, 6, 7}
     algo._prev2_window_contacts[node.id] = {1, 2, 3}
@@ -71,7 +75,7 @@ def test_lazy_token_budget_shrinks_when_holder_is_in_a_dense_area():
     algo = DasfVRouting(l_base=8, k_min=2, l_max=32, d_ref=20.0)
     holder = _node(1)
     for i in range(20):
-        algo.decide(_msg(msg_id=100 + i), holder, _node(1000 + i), now=0.0)
+        _meet(algo, holder, _node(1000 + i), 0.0)
     real_contact = _node(2)
     msg = _msg()
     holder.store_message(msg)
@@ -116,7 +120,7 @@ def test_two_hop_relay_forwards_even_in_wait_phase_and_moves_the_last_copy():
     msg = _msg()
     msg.routing_state["tokens"] = 1
     holder.store_message(msg)
-    algo.decide(_msg(msg_id=2, src_id=2, dst_id=1), contact, dst, now=0.0)
+    _meet(algo, contact, dst, 0.0)
     assert algo.decide(msg, holder, contact, now=2.0) is RoutingDecision.FORWARD
     forwarded = replace(msg, hops=msg.hops + 1, routing_state=dict(msg.routing_state))
     algo.on_forward(msg, holder, contact, forwarded)
@@ -132,7 +136,7 @@ def test_two_hop_relay_keeps_holders_spare_copies_when_it_has_more_than_one():
     msg = _msg()
     msg.routing_state["tokens"] = 5
     holder.store_message(msg)
-    algo.decide(_msg(msg_id=2, src_id=2, dst_id=1), contact, dst, now=0.0)
+    _meet(algo, contact, dst, 0.0)
     assert algo.decide(msg, holder, contact, now=2.0) is RoutingDecision.FORWARD
     forwarded = replace(msg, hops=msg.hops + 1, routing_state=dict(msg.routing_state))
     algo.on_forward(msg, holder, contact, forwarded)
@@ -161,7 +165,7 @@ def test_focus_moves_single_copy_to_a_materially_better_carrier():
     holder.store_message(msg)
     # Contact met the destination long enough ago that the 2-hop freshness
     # window has expired, but its PRoPHET utility (30 s aging) has barely decayed.
-    algo.decide(_msg(msg_id=2, src_id=2, dst_id=99), contact, dst, now=0.0)
+    _meet(algo, contact, dst, 0.0)
     assert algo.decide(msg, holder, contact, now=10.0) is RoutingDecision.FORWARD
     forwarded = replace(msg, hops=msg.hops + 1, routing_state=dict(msg.routing_state))
     algo.on_forward(msg, holder, contact, forwarded)
@@ -181,7 +185,7 @@ def test_low_battery_holder_relaxes_focus_hysteresis_to_evacuate():
     holder.store_message(msg)
     # A tiny, long-decayed utility edge for contact: not enough to clear the
     # normal DELTA hysteresis, but the evacuating holder accepts any edge.
-    algo.decide(_msg(msg_id=2, src_id=2, dst_id=99), contact, dst, now=0.0)
+    _meet(algo, contact, dst, 0.0)
     assert algo.decide(msg, holder, contact, now=5000.0) is RoutingDecision.FORWARD
     forwarded = replace(msg, hops=msg.hops + 1, routing_state=dict(msg.routing_state))
     algo.on_forward(msg, holder, contact, forwarded)
@@ -197,7 +201,7 @@ def test_healthy_battery_holder_keeps_the_same_tiny_edge_ignored():
     msg = _msg()
     msg.routing_state["tokens"] = 1
     holder.store_message(msg)
-    algo.decide(_msg(msg_id=2, src_id=2, dst_id=99), contact, dst, now=0.0)
+    _meet(algo, contact, dst, 0.0)
     assert algo.decide(msg, holder, contact, now=5000.0) is RoutingDecision.IGNORE
 
 
@@ -261,25 +265,32 @@ def test_engine_integration_spray_splits_tokens_between_holder_and_contact():
 def test_transitive_utility_update_is_not_mistaken_for_a_real_sighting():
     algo = DasfVRouting(enable_transitivity=True, two_hop_freshness_s=5.0)
     a, b, c = _node(1), _node(2), _node(3)
-    algo.decide(_msg(msg_id=10), b, c, now=0.0)
-    algo.decide(_msg(msg_id=11), a, b, now=1.0)
+    _meet(algo, b, c, 0.0)
+    _meet(algo, a, b, 1.0)
     assert algo._decayed(a.id, c.id, 1.0) > 0.0
     assert not algo._recently_seen(a.id, c.id, 1.0)
     assert algo._density(a.id, 1.0) == 1
 
 
-def test_contacts_already_holding_the_message_still_count_toward_density():
+def test_density_counts_every_on_tick_neighbour_not_only_those_decide_sees():
     algo = DasfVRouting(l_base=8, k_min=2, l_max=32, d_ref=20.0)
     holder = _node(1)
-    shared = _msg(msg_id=50)
-    for i in range(20):
-        neighbour = _node(1000 + i)
-        neighbour.store_message(_msg(msg_id=50))
-        algo.decide(shared, holder, neighbour, now=0.0)
+    algo.on_tick(0.0, {holder.id: [_node(1000 + i) for i in range(20)]})
     msg = _msg()
     holder.store_message(msg)
     algo.decide(msg, holder, _node(2), now=0.0)
     assert msg.routing_state["tokens"] == 8
+
+
+def test_a_contact_spanning_several_ticks_is_one_encounter():
+    algo = DasfVRouting(p_encounter_init=0.5)
+    a, b = _node(1), _node(2)
+    for t in (0.0, 1.0, 2.0):
+        _meet(algo, a, b, t)
+    assert algo._predictability[a.id][b.id] == pytest.approx(0.5)
+    algo.on_tick(5.0, {})  # apart for a tick
+    _meet(algo, a, b, 10.0)
+    assert algo._predictability[a.id][b.id] > 0.5
 
 
 def test_stable_neighbourhood_has_no_turnover_right_after_a_window_rotation():
@@ -288,9 +299,9 @@ def test_stable_neighbourhood_has_no_turnover_right_after_a_window_rotation():
     neighbours = [_node(10 + i) for i in range(5)]
     for t in (0.0, 5.0):
         for n in neighbours:
-            algo.decide(_msg(msg_id=int(t) * 100 + n.id), node, n, now=t)
+            _meet(algo, node, n, t)
     # First tick of a fresh window: only one neighbour re-seen so far.
-    algo.decide(_msg(msg_id=999), node, neighbours[0], now=10.0)
+    _meet(algo, node, neighbours[0], 10.0)
     assert algo._turnover(node.id) == 0.0
 
 
@@ -298,10 +309,10 @@ def test_turnover_is_unknown_after_a_gap_in_observations():
     algo = DasfVRouting(window_rotation_s=5.0)
     node = _node(1)
     for i in range(5):
-        algo.decide(_msg(msg_id=i), node, _node(10 + i), now=0.0)
+        _meet(algo, node, _node(10 + i), 0.0)
     for i in range(5):
-        algo.decide(_msg(msg_id=100 + i), node, _node(20 + i), now=5.0)
-    algo.decide(_msg(msg_id=200), node, _node(30), now=5000.0)
+        _meet(algo, node, _node(20 + i), 5.0)
+    _meet(algo, node, _node(30), 5000.0)
     assert algo._turnover(node.id) == 0.0
 
 
@@ -316,7 +327,7 @@ def test_a_stationary_phone_is_not_a_mule_even_with_high_turnover():
     algo = DasfVRouting(window_rotation_s=5.0)
     phone = _node(1)
     for t in (0.0, 5.0, 10.0):
-        algo.decide(_msg(msg_id=int(t)), phone, _node(100 + int(t)), now=t)
+        _meet(algo, phone, _node(100 + int(t)), t)
     algo._prev_window_contacts[phone.id] = {5, 6, 7}
     algo._prev2_window_contacts[phone.id] = {1, 2, 3}
     assert not algo._is_mule(phone)
@@ -327,7 +338,7 @@ def test_a_walking_phone_with_high_turnover_is_a_mule():
     phone = _node(1)
     for t, x in ((0.0, 0.0), (5.0, 6.0)):
         phone.position = Position(x, 0.0)
-        algo.decide(_msg(msg_id=int(t)), phone, _node(100 + int(t)), now=t)
+        _meet(algo, phone, _node(100 + int(t)), t)
     algo._prev_window_contacts[phone.id] = {5, 6, 7}
     algo._prev2_window_contacts[phone.id] = {1, 2, 3}
     assert algo._is_mule(phone)
