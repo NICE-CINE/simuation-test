@@ -257,3 +257,19 @@ def test_density_counts_every_on_tick_neighbour_not_only_those_decide_sees():
     holder = _node(1)
     algo.on_tick(0.0, {1: [_node(100 + i) for i in range(12)]})
     assert algo.density(holder.id, now=0.0) == pytest.approx(12.0)
+
+
+def test_decide_cache_leaves_results_unchanged():
+    # Golden values from main before decide() cached its per-(holder, contact,
+    # now) bookkeeping: the cache must be a pure speedup. Covers evictions,
+    # backhaul, purges and replies. Engine changes legitimately move these;
+    # regenerate them from main without the cache when that happens.
+    from festival_ble_sim.config import BeaconConfig, TrafficConfig
+    config = SimulationConfig(
+        duration_s=300.0, num_festivaliers=80, random_seed=11, node_buffer_capacity=10,
+        area=AreaConfig(width_m=100.0, height_m=100.0), beacons=BeaconConfig(count=4),
+        traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5),
+    )
+    r = run_simulation(config, routing_algorithm=GossipARouting(seed=11))
+    assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (57, 39, 2911)
+    assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (1302, 4091, 23, 19)
