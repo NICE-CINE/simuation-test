@@ -1,3 +1,4 @@
+import random
 import pytest
 from festival_ble_sim.config import AreaConfig, EnergyConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.simulation import draw_charge_fraction, run_simulation
@@ -31,6 +32,7 @@ def test_idle_phones_drain_background_radio_current():
     report = run_simulation(config)
     assert report.total_transmissions == 0
     assert abs(report.avg_energy_consumed_mah - 5.0) < 0.01
+    assert abs(report.avg_mesh_energy_consumed_mah - 3.0) < 0.01
 
 
 def test_random_initial_charge_is_seeded_and_kills_only_low_phones():
@@ -46,6 +48,10 @@ def test_random_initial_charge_is_seeded_and_kills_only_low_phones():
         ))
     assert run(((1.0, 1.0, 1.0),)).dead_node_count == 0
     random_charge = run(((1.0, 0.5, 1.0),))
+    replay = random.Random("3-charge")
+    starts_mah = [150.0 * draw_charge_fraction(((1.0, 0.5, 1.0),), [1.0], replay) for _ in range(40)]
+    assert all(abs(start - 100.0) > 0.1 for start in starts_mah)
+    assert random_charge.dead_node_count == sum(start < 100.0 for start in starts_mah)
     assert 0 < random_charge.dead_node_count < 40
     assert run(((1.0, 0.5, 1.0),)).dead_node_count == random_charge.dead_node_count
     # A dead phone only spent the charge it arrived with, not the full capacity.
@@ -71,12 +77,12 @@ def test_negative_cooldown_is_rejected():
 
 
 def test_festival_charge_bins_shares():
-    import random
     from festival_ble_sim.presets import FESTIVAL_CHARGE_BINS
     rng = random.Random(0)
-    draws = [draw_charge_fraction(FESTIVAL_CHARGE_BINS, rng) for _ in range(20000)]
+    weights = [share for share, _, _ in FESTIVAL_CHARGE_BINS]
+    draws = [draw_charge_fraction(FESTIVAL_CHARGE_BINS, weights, rng) for _ in range(20000)]
     assert min(draws) >= 0.05 and max(draws) <= 1.0
     for (share, lo, hi) in FESTIVAL_CHARGE_BINS:
         observed = sum(lo <= d < hi or d == hi == 1.0 for d in draws) / len(draws)
         assert observed == pytest.approx(share, abs=0.015)
-    assert draw_charge_fraction(((1.0, 1.0, 1.0),), None) == 1.0
+    assert draw_charge_fraction(((1.0, 1.0, 1.0),), [1.0], rng) == 1.0

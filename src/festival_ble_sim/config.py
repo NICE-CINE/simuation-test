@@ -182,7 +182,7 @@ class EnergyConfig:
     battery_capacity_mah: float = 4500.0
     # (share of phones, lo, hi): each phone picks a bin by share, then starts
     # at uniform(lo, hi) x capacity, from a "<seed>-charge" RNG. The default
-    # single fixed bin = everyone full and no draw.
+    # single fixed bin = everyone exactly full.
     initial_charge_bins: Tuple[Tuple[float, float, float], ...] = ((1.0, 1.0, 1.0),)
     # Measured incremental cost over "Nearby active": TX 0.25-0.6 uJ/bit,
     # RX 0.07-0.16 uJ/bit (mid-range values). Per event: ~5 ms of airtime at

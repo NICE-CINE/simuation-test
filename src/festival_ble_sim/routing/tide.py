@@ -102,17 +102,10 @@ class TideRouting(RoutingAlgorithm):
 
     # --- node state -------------------------------------------------------
 
-    @staticmethod
-    def _battery_pct(node: "BaseNode") -> float:
-        capacity = node.battery_capacity_mah
-        if capacity == math.inf or capacity <= 0:
-            return 1.0
-        return node.battery_mah / capacity
-
     def _energy(self, node: "BaseNode") -> float:
         if not self._energy_factor_on:
             return 1.0
-        b = self._battery_pct(node)
+        b = node.battery_fraction
         if b >= 0.5:
             return 1.0
         if b <= 0.2:
@@ -120,7 +113,7 @@ class TideRouting(RoutingAlgorithm):
         return 0.2 + 0.8 * (b - 0.2) / 0.3
 
     def _is_leaf(self, node: "BaseNode") -> bool:
-        return not node.is_beacon and self._battery_pct(node) < self._leaf_battery_pct
+        return not node.is_beacon and node.battery_fraction < self._leaf_battery_pct
 
     def _acts_as_relay(self, node: "BaseNode", now: float) -> bool:
         if node.is_beacon or not self._election:

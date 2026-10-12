@@ -10,10 +10,10 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.config import BeaconConfig, EnergyConfig, GpsConfig, SimulationConfig, TrafficConfig
+from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
-from festival_ble_sim.presets import FESTIVAL_CHARGE_BINS, SITE_PRESETS, build_site, resolve_cli_args
+from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 
@@ -27,6 +27,7 @@ REPORT_FIELDS = [
     "avg_hops",
     "overhead",
     "total_energy_consumed_mah",
+    "total_mesh_energy_consumed_mah",
     "buffer_eviction_count",
     "packet_loss_count",
     "backhaul_transmissions",
@@ -111,7 +112,7 @@ def build_config(
         beacons=BeaconConfig(count=beacon_count),
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
-        energy=EnergyConfig(initial_charge_bins=FESTIVAL_CHARGE_BINS) if random_charge else EnergyConfig(),
+        energy=energy_config(random_charge),
     )
 
 
@@ -303,10 +304,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--gps-fix-failure", type=float, default=0.0,
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
-    parser.add_argument(
-        "--random-charge", action="store_true",
-        help="Charge de depart tiree par telephone (graine du run) au lieu de 100 %%: 50 %% des gens entre 80 et 100 %%, 30 %% entre 50 et 80, 12 %% entre 30 et 50, 8 %% entre 5 et 30",
-    )
+    add_random_charge_argument(parser)
     parser.add_argument(
         "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
         help="Sous-ensemble d'algos a lancer (defaut : tous)",

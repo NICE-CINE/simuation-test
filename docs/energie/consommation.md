@@ -65,7 +65,25 @@ L'ancien courant de fond (2 mA) était environ 15 fois trop bas.
   (`gps_current_ma`, hypothèse non mesurée).
 - Les **bornes** sont sur secteur (`battery_mah = inf`) et exclues du rapport.
 
-Pour ne mesurer que le surcoût du mesh, sans le téléphone lui-même :
+### Deux colonnes d'énergie
+
+Le rapport donne deux mesures, sur les téléphones seulement (bornes exclues) :
+
+- **Énergie totale** (`total_energy_consumed_mah`, `avg_energy_consumed_mah`) :
+  tout ce que la batterie a perdu, téléphone compris. C'est elle qui décide
+  quand un téléphone meurt.
+- **Énergie mesh** (`total_mesh_energy_consumed_mah`,
+  `avg_mesh_energy_consumed_mah`, ligne « dont mesh » du rapport) : la même
+  chose **sans** `phone_current_ma`, c'est-à-dire rester joignable, plus
+  l'émission, la réception et les coûts propres aux algorithmes. **C'est la
+  colonne à utiliser pour comparer les algorithmes** : les 98 mA du
+  téléphone sont identiques pour tous et masqueraient les écarts.
+
+`BaseNode.consume_energy(mah, mesh=False)` est le seul appel qui ne compte
+pas dans la part mesh ; tout nouveau coût facturé par un algorithme y
+entre par défaut. `compare_algorithms.py` écrit les deux totaux dans son CSV.
+
+Pour ne simuler que le mesh, sans le téléphone lui-même :
 `EnergyConfig(phone_current_ma=0.0)`.
 
 ### Autonomie qui en découle
@@ -92,9 +110,9 @@ Chaque nœud distingue :
 
 Deux usages, deux références :
 
-- **Les pourcentages de batterie** des algorithmes (`_battery_pct` dans
-  `tide`, `dasfv`, `fresh_spray`, `eco_sf`) sont calculés par rapport à la
-  **capacité**. Un téléphone arrivé à 20 % est donc vu à 20 % dès le début.
+- **Les pourcentages de batterie** des algorithmes (`tide`, `dasfv`,
+  `fresh_spray`, `eco_sf`) passent tous par `BaseNode.battery_fraction`,
+  calculé par rapport à la **capacité**. Un téléphone arrivé à 20 % est donc vu à 20 % dès le début.
   Le calcul par rapport à la charge de départ le verrait à 100 %.
 - **L'énergie consommée** du rapport (`energy_consumed_mah`) est mesurée
   depuis la **charge de départ**. Un téléphone qui meurt n'a dépensé que ce
@@ -102,9 +120,11 @@ Deux usages, deux références :
 
 ## 4. Charge de départ aléatoire
 
-Par défaut, tout le monde arrive à 100 %, et le simulateur ne fait aucun
-tirage : les runs sont identiques à ceux d'avant cette option. Avec
-`--random-charge` (dans `main.py` et `compare_algorithms.py`), chaque
+Par défaut, tout le monde arrive à 100 % : la tranche unique
+`(1.0, 1.0, 1.0)` donne exactement 1,0 à chaque tirage, et les runs sont
+identiques à ceux d'avant cette option. Avec
+`--random-charge` (dans `main.py` et `compare_algorithms.py`, via
+`presets.add_random_charge_argument` et `presets.energy_config`), chaque
 téléphone tire sa charge selon `presets.FESTIVAL_CHARGE_BINS` :
 
 | Part des festivaliers | Charge de départ |
@@ -136,8 +156,8 @@ voici la part des téléphones déjà sous le seuil dès l'arrivée :
 
 | Algorithme | Seuil | Part sous le seuil |
 | --- | --- | --- |
-| `dasfv` | mule ≥ 40 % ; batterie faible 15 % | ~14 % ; ~3 % |
-| `tide` | facteur d'énergie réduit sous 50 %, minimal sous 20 % ; feuille sous 15 % | ~20 % ; ~3 % |
+| `dasfv` | mule ≥ 40 % ; évacuation sous 30 % (delta forcé à 0) ; batterie faible 15 % | ~14 % ; ~8 % ; ~3 % |
+| `tide` | facteur d'énergie réduit sous 50 % ; minimal sous 20 % ; feuille sous 15 % | ~20 % ; ~5 % ; ~3 % |
 | `fresh_spray` | refus des pairs sous 15 % | ~3 % |
 | `eco_sf` | Trickle allongé sous 50 % (30 → 60 s) ; sous 20 % : 120 s et plus choisi comme relais ; silencieux sous 10 % | ~20 % ; ~5 % ; ~2 % |
 
@@ -167,6 +187,7 @@ des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
 
 Les runs archivés avant ce recalage utilisaient 3 000 mAh, 2 mA de fond et
 une réception aussi chère que l'émission. Leurs colonnes d'énergie ne sont
-pas comparables aux nouvelles. La config exacte de chaque run se trouve
+pas comparables aux nouvelles. Ces archives n'ont pas non plus la colonne
+`total_mesh_energy_consumed_mah`. La config exacte de chaque run se trouve
 dans son `.json`. Les colonnes de livraison, de latence et d'overhead ne
 changent pas : aucun seuil de batterie ne se déclenche à 100 % de charge.

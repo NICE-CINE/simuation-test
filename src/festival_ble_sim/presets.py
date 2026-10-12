@@ -2,13 +2,25 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
-from .config import AreaConfig, MobilityConfig, PointOfInterest
+from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest
 from .mobility.poi import default_festival_pois
 
 DENSE_AREA_FRACTION = 0.15
 DENSE_POPULATION_SHARE = 0.70
 # --random-charge: (share of phones, lo, hi) of their battery capacity.
 FESTIVAL_CHARGE_BINS = ((0.50, 0.80, 1.00), (0.30, 0.50, 0.80), (0.12, 0.30, 0.50), (0.08, 0.05, 0.30))
+
+
+def add_random_charge_argument(parser: Any) -> None:
+    parser.add_argument(
+        "--random-charge", action="store_true",
+        help="Charge de depart tiree par telephone (graine du run) au lieu de 100 %%: 50 %% des gens entre 80 et 100 %%, 30 %% entre 50 et 80, 12 %% entre 30 et 50, 8 %% entre 5 et 30",
+    )
+
+
+def energy_config(random_charge: bool) -> EnergyConfig:
+    return EnergyConfig(initial_charge_bins=FESTIVAL_CHARGE_BINS) if random_charge else EnergyConfig()
+
 
 # Layout of mobility.poi.default_festival_pois: (x/w, y/h, weight).
 _POI_LAYOUT = ((0.25, 0.75, 4.0), (0.80, 0.70, 2.0), (0.55, 0.35, 3.0), (0.50, 0.05, 1.0))

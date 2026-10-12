@@ -187,13 +187,6 @@ class DasfVRouting(RoutingAlgorithm):
         raw = self._l_base * math.sqrt(self._d_ref / max(density, 1))
         return int(min(self._l_max, max(self._k_min, round(raw))))
 
-    @staticmethod
-    def _battery_pct(node: "BaseNode") -> float:
-        capacity = node.battery_capacity_mah
-        if capacity == math.inf or capacity <= 0:
-            return 1.0
-        return node.battery_mah / capacity
-
     def _turnover(self, node_id: int) -> float:
         current = self._prev_window_contacts.get(node_id)
         previous = self._prev2_window_contacts.get(node_id)
@@ -209,7 +202,7 @@ class DasfVRouting(RoutingAlgorithm):
             return False
         return (
             self._speed.get(node.id, 0.0) >= self._mule_min_speed_mps
-            and self._battery_pct(node) >= self._mule_min_battery_pct
+            and node.battery_fraction >= self._mule_min_battery_pct
             and self._turnover(node.id) >= self._mule_turnover_threshold
         )
 
@@ -228,7 +221,7 @@ class DasfVRouting(RoutingAlgorithm):
 
         # The engine delivers to the destination itself before ever calling
         # decide(), so this never blocks a final-hop delivery.
-        if self._battery_pct(contact) < self._battery_low_pct:
+        if contact.battery_fraction < self._battery_low_pct:
             return RoutingDecision.IGNORE
 
         dst = message.dst_id
@@ -242,7 +235,7 @@ class DasfVRouting(RoutingAlgorithm):
 
         u_holder = self._decayed(holder.id, dst, now)
         u_contact = self._decayed(contact.id, dst, now)
-        delta = 0.0 if self._battery_pct(holder) < self._battery_evac_pct else self._delta
+        delta = 0.0 if holder.battery_fraction < self._battery_evac_pct else self._delta
         if u_contact > u_holder + delta:
             message.routing_state[_FORWARD_REASON] = "focus"
             return RoutingDecision.FORWARD
