@@ -10,7 +10,7 @@ import compare_algorithms  # noqa: E402
 
 
 def test_run_matrix_covers_every_algorithm_with_and_without_beacons():
-    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
+    rows = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
     combos = {(row["algorithm"], row["beacons"] > 0) for row in rows}
     expected = {(name, with_beacons) for name in compare_algorithms.ALGORITHMS for with_beacons in (False, True)}
@@ -20,15 +20,15 @@ def test_run_matrix_covers_every_algorithm_with_and_without_beacons():
 
 
 def test_run_matrix_parallel_workers_match_sequential_results():
-    sequential = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=1)
-    parallel = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2)
+    sequential = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=1)
+    parallel = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2)
     assert parallel == sequential
 
 
 def test_run_matrix_writes_csv_incrementally(tmp_path):
     csv_path = tmp_path / "incremental.csv"
     rows = compare_algorithms.run_matrix(
-        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2, csv_path=str(csv_path)
+        seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, workers=2, csv_path=str(csv_path)
     )
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = list(csv.DictReader(f))
@@ -36,13 +36,13 @@ def test_run_matrix_writes_csv_incrementally(tmp_path):
 
 
 def test_write_csv_produces_a_valid_file(tmp_path):
-    rows = compare_algorithms.run_matrix(seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
+    rows = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
     csv_path = tmp_path / "comparison.csv"
     compare_algorithms.write_csv(rows, str(csv_path))
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = list(csv.DictReader(f))
     assert len(reader) == len(rows)
-    assert set(reader[0].keys()) == {"algorithm", "beacons", *compare_algorithms.REPORT_FIELDS}
+    assert list(reader[0].keys()) == compare_algorithms.HEADERS
 
 
 def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
@@ -63,7 +63,7 @@ def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
 
 def test_run_matrix_with_poi_mobility_and_replies():
     rows = compare_algorithms.run_matrix(
-        seed=1, duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, mobility="poi", reply_probability=0.5
+        seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, mobility="poi", reply_probability=0.5
     )
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
 
@@ -106,3 +106,31 @@ def test_main_rejects_size_with_a_different_num_festivaliers(tmp_path, capsys):
         compare_algorithms.main(["--size", "small", "--num-festivaliers", "10", "--archive-dir", str(tmp_path)])
     assert list(tmp_path.iterdir()) == []
     assert "--size" in capsys.readouterr().err
+
+
+def test_summarize_gives_mean_and_student_ci95_per_algorithm_and_beacons():
+    rows = [
+        {"algorithm": "epidemic", "beacons": 0, "seed": seed, **{f: v for f in compare_algorithms.REPORT_FIELDS}}
+        for seed, v in ((1, 0.4), (2, 0.6), (3, 0.5))
+    ]
+    (entry,) = compare_algorithms.summarize(rows)
+    assert entry["runs"] == 3
+    assert entry["delivery_ratio"] == pytest.approx(0.5)
+    assert entry["delivery_ratio_ci95"] == pytest.approx(4.303 * 0.1 / 3 ** 0.5)
+
+
+def test_main_with_several_seeds_writes_paired_runs_and_a_summary(tmp_path):
+    compare_algorithms.main(
+        ["--seeds", "1", "2", "--duration", "30", "--cooldown", "0", "--num-festivaliers", "10",
+         "--beacon-count", "2", "--workers", "2", "--archive-dir", str(tmp_path)]
+    )
+    (runs_csv,) = [p for p in tmp_path.glob("*_comparaison.csv")]
+    with open(runs_csv, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert sorted({row["seed"] for row in rows}) == ["1", "2"]
+    assert len(rows) == 2 * 2 * len(compare_algorithms.ALGORITHMS)
+    (summary_csv,) = tmp_path.glob("*_comparaison_resume.csv")
+    with open(summary_csv, encoding="utf-8") as f:
+        summary = list(csv.DictReader(f))
+    assert len(summary) == 2 * len(compare_algorithms.ALGORITHMS)
+    assert {row["runs"] for row in summary} == {"2"}

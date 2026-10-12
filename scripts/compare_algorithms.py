@@ -1,8 +1,10 @@
 from __future__ import annotations
 import argparse
 import csv
+import math
 import multiprocessing
 import shutil
+import statistics
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
@@ -62,6 +64,15 @@ REPORT_FIELDS = [
     "reply_delivery_ratio",
 ]
 
+HEADERS = ["algorithm", "beacons", "seed"] + REPORT_FIELDS
+SUMMARY_HEADERS = ["algorithm", "beacons", "runs"] + [
+    name for field in REPORT_FIELDS for name in (field, f"{field}_ci95")
+]
+# Two-sided 95 % Student t quantiles by degrees of freedom; a missing df
+# takes the next lower one (wider interval), 1.96 past 30.
+_T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262,
+        10: 2.228, 15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042}
+
 MINI_BAR_WIDTH = 10
 STATUS_REFRESH_S = 0.5
 
@@ -73,8 +84,8 @@ def format_duration(seconds: float) -> str:
     return f"{hours:d}h{minutes:02d}m{secs:02d}s" if hours else f"{minutes:02d}m{secs:02d}s"
 
 
-def run_label(algo_name: str, beacon_count: int) -> str:
-    return f"{algo_name} ({'avec' if beacon_count > 0 else 'sans'} bornes)"
+def run_label(algo_name: str, beacon_count: int, seed: int) -> str:
+    return f"{algo_name} ({'avec' if beacon_count > 0 else 'sans'} bornes) s={seed}"
 
 
 def render_status(
@@ -96,7 +107,7 @@ def render_status(
 
 
 def append_csv_row(row: dict, path: str, write_header: bool, headers: Optional[List[str]] = None) -> None:
-    headers = headers or ["algorithm", "beacons"] + REPORT_FIELDS
+    headers = headers or HEADERS
     with open(path, "w" if write_header else "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=headers)
         if write_header:
@@ -162,7 +173,7 @@ def _run_one(
         followup_probability, gps_fix_failure, size, cooldown_s,
     )
     total_s = config.duration_s + config.cooldown_s
-    label = run_label(algo_name, beacon_count)
+    label = run_label(algo_name, beacon_count, seed)
     progress_callback = None
     if progress is not None:
         progress[label] = 0.0
@@ -184,7 +195,7 @@ def _run_one(
 
 
 def run_matrix(
-    seed: int = 42,
+    seeds: Tuple[int, ...] = (42,),
     duration_s: float = 3600.0,
     num_festivaliers: int = 200,
     beacon_count: int = 6,
@@ -198,7 +209,8 @@ def run_matrix(
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
 ) -> List[dict]:
-    tasks = [(algo_name, count) for algo_name in ALGORITHMS for count in (0, beacon_count)]
+    # Every algorithm runs on the same seeds, so runs are paired by seed.
+    tasks = [(algo_name, count, seed) for seed in seeds for algo_name in ALGORITHMS for count in (0, beacon_count)]
     results: Dict[int, dict] = {}
     matrix_start = time.monotonic()
     manager = multiprocessing.Manager() if show_progress else None
@@ -210,7 +222,7 @@ def run_matrix(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
                 followup_probability, gps_fix_failure, size, cooldown_s,
             ): index
-            for index, (algo_name, count) in enumerate(tasks)
+            for index, (algo_name, count, seed) in enumerate(tasks)
         }
         pending = set(futures)
         while pending:
@@ -218,6 +230,7 @@ def run_matrix(
             for future in finished:
                 index = futures[future]
                 row, run_elapsed = future.result()
+                row = {"seed": tasks[index][2], **row}
                 results[index] = row
                 if csv_path:
                     append_csv_row(row, csv_path, write_header=len(results) == 1)
@@ -247,8 +260,25 @@ def run_matrix(
     return [results[index] for index in range(len(tasks))]
 
 
-def print_table(rows: List[dict]) -> None:
-    headers = ["algorithm", "beacons"] + REPORT_FIELDS
+def summarize(rows: List[dict]) -> List[dict]:
+    groups: Dict[Tuple[str, int], List[dict]] = {}
+    for row in rows:
+        groups.setdefault((row["algorithm"], row["beacons"]), []).append(row)
+    summary = []
+    for (algo_name, beacons), group in groups.items():
+        entry: Dict[str, Any] = {"algorithm": algo_name, "beacons": beacons, "runs": len(group)}
+        n = len(group)
+        t = _T95[max(df for df in _T95 if df <= n - 1)] if 1 < n <= 31 else 1.96
+        for field in REPORT_FIELDS:
+            values = [float(row[field]) for row in group]
+            entry[field] = statistics.mean(values)
+            entry[f"{field}_ci95"] = t * statistics.stdev(values) / math.sqrt(n) if n > 1 else 0.0
+        summary.append(entry)
+    return summary
+
+
+def print_table(rows: List[dict], headers: Optional[List[str]] = None) -> None:
+    headers = headers or HEADERS
     widths = {h: max(len(h), *(len(f"{row[h]:.3f}" if isinstance(row[h], float) else str(row[h])) for row in rows)) for h in headers}
 
     def fmt_cell(value) -> str:
@@ -260,8 +290,8 @@ def print_table(rows: List[dict]) -> None:
         print(" | ".join(fmt_cell(row[h]).ljust(widths[h]) for h in headers))
 
 
-def write_csv(rows: List[dict], path: str) -> None:
-    headers = ["algorithm", "beacons"] + REPORT_FIELDS
+def write_csv(rows: List[dict], path: str, headers: Optional[List[str]] = None) -> None:
+    headers = headers or HEADERS
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
@@ -270,7 +300,10 @@ def write_csv(rows: List[dict], path: str) -> None:
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Compare les algos de routing avec/sans bornes")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--seeds", "--seed", dest="seeds", type=int, nargs="+", default=[42],
+        help="Une ou plusieurs seeds ; avec plusieurs, un resume moyenne +/- IC 95 %% par algo x bornes",
+    )
     parser.add_argument("--duration", type=float, default=3600.0)
     parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
@@ -313,12 +346,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         stem.with_suffix(".json"),
         vars(args),
         build_config(
-            args.beacon_count, args.seed, args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
+            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
             args.followup_probability, args.gps_fix_failure, args.size, args.cooldown,
         ),
     )
     rows = run_matrix(
-        seed=args.seed,
+        seeds=args.seeds,
         duration_s=args.duration,
         num_festivaliers=args.num_festivaliers,
         beacon_count=args.beacon_count,
@@ -336,6 +369,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.csv:
         write_csv(rows, args.csv)
     print_table(rows)
+    if len(args.seeds) > 1:
+        summary = summarize(rows)
+        summary_csv = str(stem.parent / f"{stem.name}_resume.csv")
+        write_csv(summary, summary_csv, SUMMARY_HEADERS)
+        print("\nMoyenne +/- IC 95 % sur les seeds :")
+        print_table(summary, ["algorithm", "beacons", "runs", "delivery_ratio", "delivery_ratio_ci95",
+                              "avg_latency_s", "avg_latency_s_ci95", "overhead", "overhead_ci95",
+                              "total_energy_consumed_mah", "total_energy_consumed_mah_ci95"])
+        print(f"\nResume ecrit dans {summary_csv}")
     print(f"\nArchive ecrite dans {archive_csv} / .json")
     if args.csv:
         print(f"\nExporte vers {args.csv}")
