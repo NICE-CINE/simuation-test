@@ -76,3 +76,29 @@ def test_history_produces_same_report_as_without_history():
     )
     report_with = run_simulation(config, history=history)
     assert report_without == report_with
+
+
+def test_history_events_carry_message_identity_and_hop_count():
+    config = _dense_config()
+    history = SimulationHistory(
+        area_width_m=config.area.width_m, area_height_m=config.area.height_m,
+        tick_interval_s=config.mobility.tick_interval_s,
+    )
+    run_simulation(config, history=history)
+    for event in history.events:
+        assert {"msg", "hops", "src", "dst", "created"} <= set(event)
+    deliveries = [e for e in history.events if e["delivered"]]
+    assert all(e["to"] == e["dst"] for e in deliveries)
+    assert all(e["hops"] >= 1 for e in deliveries)
+
+
+def test_history_records_beacon_backhaul_relays():
+    config = _dense_config(beacons=BeaconConfig(count=4, placement="grid"))
+    history = SimulationHistory(
+        area_width_m=config.area.width_m, area_height_m=config.area.height_m,
+        tick_interval_s=config.mobility.tick_interval_s,
+    )
+    run_simulation(config, history=history)
+    backhaul = [e for e in history.events if e.get("backhaul")]
+    assert backhaul
+    assert all(not e["delivered"] and "msg" in e for e in backhaul)
