@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import random
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import (
@@ -32,7 +33,7 @@ from festival_ble_sim.routing.tide import TideRouting
 from festival_ble_sim.routing.tide_g import TIDE_G2_KWARGS, TideGRouting
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
-from festival_ble_sim.viz.replay import render_replay_html
+from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
 
 DEFAULT_NUM_FESTIVALIERS = 4000
 
@@ -87,8 +88,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--spray-initial-copies", type=int, default=8, help="Nombre de copies initiales (Spray & Wait)")
     parser.add_argument(
         "--replay-html", action="store_true",
-        help="Ecrit un replay HTML autonome (positions + evenements) dans le dossier d'archive, "
-        "sous <date>_<algo>.html. Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
+        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html), et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir). Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -168,9 +169,17 @@ def main(argv: Optional[List[str]] = None) -> None:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(text)
     if history is not None:
-        replay_path = stem.with_suffix(".html")
+        replay_dir = Path(args.archive_dir) / "replay"
+        replay_dir.mkdir(parents=True, exist_ok=True)
+        replay_path = replay_dir / f"{stem.name}.html"
         render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
         print(f"Replay HTML ecrit dans {replay_path}")
+        # Only the default archive dir owns the repo root's index.html; a custom one
+        # could share its parent with unrelated files or other archive dirs.
+        index_dir = Path(".") if args.archive_dir == DEFAULT_ARCHIVE_DIR else Path(args.archive_dir)
+        index_path = index_dir / "index.html"
+        write_replay_index(str(replay_dir), str(index_path))
+        print(f"Index des replays mis a jour : {index_path}")
 
 
 if __name__ == "__main__":

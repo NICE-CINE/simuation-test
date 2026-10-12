@@ -1,5 +1,9 @@
 from __future__ import annotations
 import json
+import os
+from html import escape
+from pathlib import Path
+from urllib.parse import quote
 from .history import SimulationHistory
 
 _MESSAGE_FIELDS = ("src", "dst", "created")
@@ -438,3 +442,48 @@ def render_replay_html(history: SimulationHistory, output_path: str, title: str 
     html = _HTML_TEMPLATE.replace("__TITLE__", title).replace("__DATA__", json.dumps(data))
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
+
+
+_INDEX_TEMPLATE = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Replays</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 16px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { text-align: left; padding: 6px 16px 6px 0; border-bottom: 1px solid #333; }
+  th { font-size: 12px; color: #aaa; font-weight: 600; }
+  a { color: #8ab4f8; }
+</style>
+</head>
+<body>
+<h1>Replays (__COUNT__)</h1>
+<table>
+<tr><th>Date</th><th>Heure</th><th>Algo</th><th>Taille</th></tr>
+__ROWS__
+</table>
+</body>
+</html>
+"""
+
+
+def write_replay_index(replay_dir: str, index_path: str) -> None:
+    index = Path(index_path)
+    # Sort by name, not mtime: names start with the run timestamp, mtimes are reset by git clone.
+    replays = sorted(Path(replay_dir).glob("*.html"), reverse=True)
+    rows = []
+    for replay in replays:
+        date, _, rest = replay.stem.partition("_")
+        time, _, algo = rest.partition("_")
+        href = escape(quote(Path(os.path.relpath(replay, index.parent)).as_posix()))
+        size_mb = replay.stat().st_size / 1e6
+        rows.append(
+            f'<tr><td>{escape(date)}</td><td>{escape(time.replace("-", ":"))}</td>'
+            f'<td><a href="{href}">{escape(algo)}</a></td><td>{size_mb:.1f} Mo</td></tr>'
+        )
+    index.write_text(
+        _INDEX_TEMPLATE.replace("__COUNT__", str(len(replays))).replace("__ROWS__", "\n".join(rows)),
+        encoding="utf-8",
+    )
