@@ -172,7 +172,9 @@ class TideRouting(RoutingAlgorithm):
             met = self._last_met.setdefault(nid, {})
             for n in ns:
                 # A contact spanning several ticks is one PRoPHET encounter.
-                if met.get(n.id) != prev:
+                # On the first tick prev is None, like an unseen pair's last.
+                last = met.get(n.id)
+                if last is None or last != prev:
                     self._encounter(nid, n.id, now)
                 met[n.id] = now
             rho = self._density.get(nid)

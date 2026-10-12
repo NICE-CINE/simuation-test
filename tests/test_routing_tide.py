@@ -120,3 +120,17 @@ def test_runs_end_to_end():
     config = SimulationConfig(num_festivaliers=60, duration_s=600.0)
     report = run_simulation(config, routing_algorithm=TideRouting(seed=3))
     assert report.messages_delivered >= 0
+
+
+def test_contact_already_in_range_at_the_first_tick_is_an_encounter():
+    a, b = _node(1), _node(2)
+    algo = _algo_with([a, b], {1: [b], 2: [a]})
+    assert algo._decayed(1, 2, 1.0) == 0.75
+    assert algo._decayed(2, 1, 1.0) == 0.75
+
+
+def test_contact_spanning_several_ticks_is_one_encounter():
+    a, b = _node(1), _node(2)
+    algo = _algo_with([a, b], {1: [b], 2: [a]}, gamma=1.0)
+    algo.on_tick(2.0, {1: [b], 2: [a]})
+    assert algo._decayed(1, 2, 2.0) == 0.75

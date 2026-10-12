@@ -37,7 +37,8 @@ TIDE (*Tokens, Islands, Density, Energy*) : spray-and-focus à jetons pondérés
 À chaque tick, pour chaque nœud `a` et chacun de ses voisins `b` :
 
 ```
-si (a, b) n'était pas à portée au tick précédent :      // un contact long = une rencontre
+si (a, b) n'était pas à portée au tick précédent :      // un contact long = une rencontre ;
+                                                        // au premier tick, toute paire à portée compte
     p = P_vieilli(a, b)
     P[a][b] ← p + (1 − p) · P_INIT
 dernière_rencontre[a][b] ← t
@@ -170,6 +171,7 @@ Non modélisés : chiffrement, identifiants éphémères, digests de buffer, int
 ## 6. Points d'attention
 
 - **Réglage du 2 octobre** (spec et plan dans `docs/superpowers/specs|plans/2026-10-02-tide-optimisation*`, archives `archives/2026-10-0[23]_*tune*`) : sur 1 000 festivaliers, 900 s, `random_waypoint`, graines 1 à 4, `l_max` 16 au lieu de 12 donne +4,1 points de livraison (positif sur chaque graine), overhead ×1,11 et énergie ×1,19. Deux corrections de logique ont été rejetées par ablation et retirées du code : pas de spray vers un contact trop dense (−3 à −23 points) et une seule copie d'îlot par message (+0,6 point, dans le bruit). **La validation à grande échelle (4 000 festivaliers, graine 42) n'a jamais été archivée** : le gain n'est établi que sur le scénario réduit.
+- **Rencontres au premier tick** (corrigé le 12 octobre 2026) : une paire déjà à portée au premier tick n'était pas comptée comme rencontre (P restait à 0 jusqu'à une séparation puis une nouvelle rencontre ; la fraîcheur, elle, était juste). Environ 30 rencontres par nœud perdues à t = 0 dans le scénario par défaut, et la plupart de ces contacts se défont en moins de 5 min ; une rencontre à t = 0 ne pèserait plus que P ≈ 0,22 après 30 min. Effet attendu faible, limité aux premières minutes ; `tide_g` et `tide_g2` héritent du correctif. Les résultats archivés avant cette date n'en tiennent pas compte.
 - **Résultats antérieurs** : les campagnes de `docs/algorithmes/specs/TIDE-G2.md` et `docs/algorithmes/specs/GSF.md` ont été mesurées avec `l_max = 12`. Leurs lignes TIDE, TIDE-G et TIDE-G2 ne reflètent plus les défauts actuels.
 - **Beaucoup de paramètres** : calibration délicate.
 - **Vues exactes** de l'instance partagée (2 sauts, densité, purge) : optimistes face à de vraies annonces BLE.
