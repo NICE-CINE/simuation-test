@@ -58,7 +58,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replay-html", action="store_true",
         help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
-        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html), et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir). Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html) avec ses donnees dans <meme nom>.data.js a cote, et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir).",
+    )
+    parser.add_argument(
+        "--replay-frame-step", type=float, default=5.0,
+        help="Avec --replay-html : une position tous les N secondes simulees (arrondi au tick de mobilite)",
+    )
+    parser.add_argument(
+        "--replay-max-messages", type=int, default=100,
+        help="Avec --replay-html : nombre de messages dont tous les relais sont gardes (livres en priorite, repartis dans le temps) ; les autres messages livres ne gardent que leur livraison",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -126,6 +134,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             area_width_m=config.area.width_m,
             area_height_m=config.area.height_m,
             tick_interval_s=config.mobility.tick_interval_s,
+            snapshot_every_ticks=max(1, round(args.replay_frame_step / config.mobility.tick_interval_s)),
         )
     report = run_simulation(
         config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history
@@ -143,7 +152,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         replay_dir = Path(args.archive_dir) / "replay"
         replay_dir.mkdir(parents=True, exist_ok=True)
         replay_path = replay_dir / f"{stem.name}.html"
-        render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
+        render_replay_html(
+            history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}",
+            max_messages=args.replay_max_messages,
+        )
         print(f"Replay HTML ecrit dans {replay_path}")
         # Only the default archive dir owns the repo root's index.html; a custom one
         # could share its parent with unrelated files or other archive dirs.

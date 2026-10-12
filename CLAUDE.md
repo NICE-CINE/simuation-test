@@ -40,7 +40,7 @@ python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 --num-festival
     [--variant "fanout=2,max_hops=4" ...]
 ```
 
-Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `replay/<same stem as the .txt>.html` for `main.py --replay-html` (each replay also regenerates an `index.html` listing every replay, since a static page can't list a folder over `file://` — at the repo root for the default archive dir, inside `--archive-dir` otherwise so it never overwrites an unrelated file), `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args, the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run) *and* `git` (`commit`, `dirty`, porcelain `status`, `diff` against HEAD — untracked files are only listed, so commit a script before archiving runs made with it). `archive_stem` reserves the stem by creating the `.json` exclusively, so two runs in the same second get `<stem>` and `<stem>-2`. `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
+Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `replay/<same stem as the .txt>.html` + `.data.js` for `main.py --replay-html` (each replay also regenerates an `index.html` listing every replay, since a static page can't list a folder over `file://` — at the repo root for the default archive dir, inside `--archive-dir` otherwise so it never overwrites an unrelated file), `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args, the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run) *and* `git` (`commit`, `dirty`, porcelain `status`, `diff` against HEAD — untracked files are only listed, so commit a script before archiving runs made with it). `archive_stem` reserves the stem by creating the `.json` exclusively, so two runs in the same second get `<stem>` and `<stem>-2`. `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
 
 Pre-naming archives without a `.json`: `archives/2026-09-21-comparaison.csv` (formerly `comparaison.csv` at the repo root). Replays (`archives/replay/`) and the root `index.html` are meant to be committed.
 
@@ -76,7 +76,13 @@ simulation.py                 — run_simulation(config, routing_algorithm=None,
 viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
                                  container simulation.py/network.py populate
                                  when a caller passes one in; replay.py
-                                 renders it to a standalone HTML file. Neither
+                                 renders it to a small HTML page plus a sibling
+                                 `<stem>.data.js` (loaded by <script src>, since
+                                 fetch() of a JSON fails on file://). Positions
+                                 are decimetre ints thinned by
+                                 `snapshot_every_ticks`, events columnar
+                                 (`CompactEventLog`) and sampled to
+                                 `--replay-max-messages` full messages. Neither
                                  is imported by the core engine unless a
                                  caller opts in.
 ```

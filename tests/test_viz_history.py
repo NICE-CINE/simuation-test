@@ -1,6 +1,6 @@
 from festival_ble_sim.config import AreaConfig, BeaconConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.simulation import run_simulation
-from festival_ble_sim.viz.history import SimulationHistory
+from festival_ble_sim.viz.history import CompactEventLog, SimulationHistory
 
 
 def _dense_config(**overrides):
@@ -102,3 +102,30 @@ def test_history_records_beacon_backhaul_relays():
     backhaul = [e for e in history.events if e.get("backhaul")]
     assert backhaul
     assert all(not e["delivered"] and "msg" in e for e in backhaul)
+
+
+def test_history_snapshot_every_ticks_thins_out_position_snapshots():
+    config = _dense_config()
+    history = SimulationHistory(
+        area_width_m=config.area.width_m, area_height_m=config.area.height_m,
+        tick_interval_s=config.mobility.tick_interval_s, snapshot_every_ticks=5,
+    )
+    run_simulation(config, history=history)
+    tick = config.mobility.tick_interval_s
+    times = [t for t, _ in history.position_snapshots]
+    assert times[0] == tick
+    assert all(b - a == 5 * tick for a, b in zip(times, times[1:]))
+
+
+def test_compact_event_log_round_trips_events():
+    log = CompactEventLog()
+    plain = {"time": 2.5, "from": 2, "to": 3, "delivered": True}
+    relay = {"time": 3.0, "from": 3, "to": 9, "delivered": False, "msg": 7, "hops": 2, "src": 2, "dst": 9, "created": 0.5}
+    backhaul = {**relay, "time": 4.0, "backhaul": True}
+    for event in (plain, relay, backhaul):
+        log.append(event)
+    assert len(log) == 3
+    assert list(log) == [plain, relay, backhaul]
+    assert log[1] == relay
+    assert log[-1] == backhaul
+    assert list(log)[1].keys() == relay.keys()

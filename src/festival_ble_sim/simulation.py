@@ -60,10 +60,13 @@ def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, M
     # instead of N per-node partial writes. Registered after every
     # _mobile_process below so SimPy's same-time event ordering guarantees
     # this fires after that tick's moves, not before.
+    tick = 0
     while True:
         yield env.timeout(tick_interval_s)
-        snapshot = {node_id: (node.position.x, node.position.y) for node_id, node in mobile_nodes.items() if node.is_active}
-        history.position_snapshots.append((env.now, snapshot))
+        if tick % history.snapshot_every_ticks == 0:
+            snapshot = {node_id: (node.position.x, node.position.y) for node_id, node in mobile_nodes.items() if node.is_active}
+            history.position_snapshots.append((env.now, snapshot))
+        tick += 1
 
 
 def _progress_reporter(env, callback: Callable[[float], None], interval_s: float):

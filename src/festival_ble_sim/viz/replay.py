@@ -3,10 +3,11 @@ import json
 import os
 from html import escape
 from pathlib import Path
+from typing import Any, Dict, Iterable, List, Set
 from urllib.parse import quote
 from .history import SimulationHistory
 
-_MESSAGE_FIELDS = ("src", "dst", "created")
+DEFAULT_MAX_MESSAGES = 100
 
 _HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -69,9 +70,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="box" id="trackPanel"><span class="muted">Choisis un message dans la liste pour suivre son trajet.</span></div>
   </div>
 </div>
+<script src="__DATA_SRC__"></script>
 <script>
-const DATA = __DATA__;
-
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const maxPixels = 800;
@@ -81,8 +81,46 @@ canvas.height = Math.max(1, DATA.area.height * scale);
 
 const beaconEntries = Object.entries(DATA.beacons);
 const frames = DATA.frames;
-const events = DATA.events;
 const messages = DATA.messages || {};
+const events = DATA.events.map(([time, from, to, flags, hops, msg]) => {
+  const e = { time, from, to, delivered: !!(flags & 1), hops };
+  if (flags & 2) e.backhaul = true;
+  if (msg >= 0) e.msg = msg;
+  return e;
+});
+
+// Frames only carry their id list when it changes; positions are ints in decimetres.
+const idIndexCache = new Map();
+let lastIds = [];
+for (const f of frames) {
+  if (f.ids) lastIds = f.ids;
+  f.ids = lastIds;
+}
+
+function idIndex(ids) {
+  let m = idIndexCache.get(ids);
+  if (!m) {
+    m = new Map();
+    ids.forEach((id, k) => m.set(id, k));
+    idIndexCache.set(ids, m);
+  }
+  return m;
+}
+
+function eachPos(frame, cb) {
+  const { ids, xy } = frame;
+  for (let k = 0; k < ids.length; k++) cb(ids[k], xy[2 * k] / 10, xy[2 * k + 1] / 10);
+}
+
+// first index whose time is strictly greater than t
+function eventsAfter(t) {
+  let lo = 0, hi = events.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid].time > t) hi = mid; else lo = mid + 1;
+  }
+  return lo;
+}
 const slider = document.getElementById("slider");
 const playBtn = document.getElementById("playBtn");
 const speedSel = document.getElementById("speed");
@@ -98,7 +136,7 @@ const GENERIC_LEGEND = `
   <span><i class="dot" style="background:#4da3ff"></i>phone</span>
   <span><i class="dot" style="background:#ffb020"></i>beacon</span>
   <span><i class="dot" style="background:#3ddc84"></i>delivery this tick</span>
-  <span style="color:#888">line = relay/delivery event in this tick's window</span>`;
+  <span style="color:#888">line = relay/delivery event in this frame's window (relays only recorded for a sample of messages, deliveries for all)</span>`;
 const TRACK_LEGEND = `
   <span><i class="dot" style="background:#3ddc84"></i>source</span>
   <span><i class="dot" style="background:#ff5d5d"></i>destinataire</span>
@@ -118,14 +156,17 @@ function frameAt(t) {
 }
 
 function posAt(f, id) {
-  return frames[f].positions[id] || DATA.beacons[id] || null;
+  const fr = frames[f];
+  const k = idIndex(fr.ids).get(id);
+  if (k !== undefined) return [fr.xy[2 * k] / 10, fr.xy[2 * k + 1] / 10];
+  return DATA.beacons[id] || null;
 }
 
 function eventsForFrame(i) {
   if (frames.length === 0) return [];
   const upper = frames[i].time;
-  const lower = i > 0 ? frames[i - 1].time : -Infinity;
-  return events.filter(e => e.time > lower && e.time <= upper);
+  const from = i > 0 ? eventsAfter(frames[i - 1].time) : 0;
+  return events.slice(from, eventsAfter(upper));
 }
 
 const byMsg = {};
@@ -139,12 +180,13 @@ const msgInfos = Object.keys(byMsg).map(id => {
   const meta = messages[id];
   const delivery = evs.find(e => e.delivered) || null;
   return {
-    id: Number(id), src: meta.src, dst: meta.dst, created: meta.created, evs, delivery,
+    id: Number(id), src: meta.src, dst: meta.dst, created: meta.created, partial: !meta.full, evs, delivery,
     hops: delivery ? delivery.hops : 0,
     latency: delivery ? delivery.time - meta.created : null,
   };
 });
 msgInfos.sort((a, b) => {
+  if (a.partial !== b.partial) return a.partial ? 1 : -1;
   if (!!a.delivery !== !!b.delivery) return a.delivery ? -1 : 1;
   return b.hops - a.hops || b.evs.length - a.evs.length || a.id - b.id;
 });
@@ -158,7 +200,9 @@ function fillList() {
     if (onlyDelivered.checked && !info.delivery) continue;
     const opt = document.createElement("option");
     opt.value = info.id;
-    const status = info.delivery
+    const status = info.partial
+      ? `livré en ${info.latency.toFixed(0)}s (livraison seule)`
+      : info.delivery
       ? `livré ${info.hops} saut${info.hops > 1 ? "s" : ""} en ${info.latency.toFixed(0)}s`
       : `non livré (${info.evs.length} relais)`;
     opt.textContent = `#${info.id}  ${info.src} → ${info.dst}  ${status}`;
@@ -219,6 +263,7 @@ function renderTrackPanel() {
     <h2>Message #${info.id}</h2>
     <div>${info.src} → ${info.dst}, créé à t=${info.created.toFixed(0)}s</div>
     <div>${status}</div>
+    ${info.partial ? '<div class="muted">Relais non enregistrés (échantillon) : seule la livraison est affichée.</div>' : ""}
     <div id="live" class="muted"></div>
     <div class="btnrow">
       <button id="btnFollow">&#9654; Suivre depuis la création</button>
@@ -287,17 +332,16 @@ function marker(pos, color, label) {
 
 function drawTracked(i) {
   const frame = frames[i];
-  const positions = frame.positions;
   const T = frame.time;
   const lower = i > 0 ? frames[i - 1].time : -Infinity;
   const { info, segs } = tracked;
 
-  for (const [, [x, y]] of Object.entries(positions)) {
-    ctx.fillStyle = "#2d3a4d";
+  ctx.fillStyle = "#2d3a4d";
+  eachPos(frame, (id, x, y) => {
     ctx.beginPath();
     ctx.arc(x * scale, y * scale, 2, 0, 2 * Math.PI);
     ctx.fill();
-  }
+  });
   drawBeacons();
 
   const past = segs.filter(s => s.e.time <= T);
@@ -330,7 +374,7 @@ function drawTracked(i) {
       if (s.e.time > lower) fresh.add(s.e.to);
     }
     for (const id of holders) {
-      const p = positions[id] || DATA.beacons[id];
+      const p = posAt(i, id);
       if (!p) continue;
       ctx.strokeStyle = fresh.has(id) ? "#ffd23f" : "#4da3ff";
       ctx.fillStyle = ctx.strokeStyle;
@@ -345,8 +389,8 @@ function drawTracked(i) {
   }
 
   const delivered = past.some(s => s.e.delivered);
-  marker(positions[info.src] || DATA.beacons[info.src], "#3ddc84", `source ${info.src}`);
-  marker(positions[info.dst] || DATA.beacons[info.dst], delivered ? "#ffd23f" : "#ff5d5d", delivered ? `reçu ! ${info.dst}` : `dest. ${info.dst}`);
+  marker(posAt(i, info.src), "#3ddc84", `source ${info.src}`);
+  marker(posAt(i, info.dst), delivered ? "#ffd23f" : "#ff5d5d", delivered ? `reçu ! ${info.dst}` : `dest. ${info.dst}`);
   updateTrackLive(i);
 }
 
@@ -358,7 +402,6 @@ function draw(i) {
     return;
   }
   const frame = frames[i];
-  const positions = frame.positions;
 
   if (tracked) {
     drawTracked(i);
@@ -368,8 +411,8 @@ function draw(i) {
     const delivered = new Set();
     for (const e of eventsForFrame(i)) {
       if (e.delivered) delivered.add(e.to);
-      const from = positions[e.from];
-      const to = positions[e.to] || (DATA.beacons[e.to]);
+      const from = posAt(i, e.from);
+      const to = posAt(i, e.to);
       if (!from || !to) continue;
       ctx.strokeStyle = e.delivered ? "#3ddc84" : "#555";
       ctx.lineWidth = e.delivered ? 1.5 : 1;
@@ -379,15 +422,16 @@ function draw(i) {
       ctx.stroke();
     }
 
-    for (const [idStr, [x, y]] of Object.entries(positions)) {
-      ctx.fillStyle = delivered.has(Number(idStr)) ? "#3ddc84" : "#4da3ff";
+    eachPos(frame, (id, x, y) => {
+      const hit = delivered.has(id);
+      ctx.fillStyle = hit ? "#3ddc84" : "#4da3ff";
       ctx.beginPath();
-      ctx.arc(x * scale, y * scale, delivered.has(Number(idStr)) ? 4 : 2.5, 0, 2 * Math.PI);
+      ctx.arc(x * scale, y * scale, hit ? 4 : 2.5, 0, 2 * Math.PI);
       ctx.fill();
-    }
+    });
   }
 
-  readout.textContent = `t = ${frame.time.toFixed(1)}s — frame ${i + 1}/${frames.length} — ${Object.keys(positions).length} active nodes`;
+  readout.textContent = `t = ${frame.time.toFixed(1)}s — frame ${i + 1}/${frames.length} — ${frame.ids.length} active nodes`;
 }
 
 let playing = false;
@@ -424,24 +468,88 @@ draw(0);
 """
 
 
-def render_replay_html(history: SimulationHistory, output_path: str, title: str = "Festival BLE Mesh - Replay") -> None:
-    messages = {}
-    events = []
-    for event in history.events:
-        if "msg" in event:
-            messages.setdefault(event["msg"], {"src": event["src"], "dst": event["dst"], "created": event["created"]})
-            event = {k: v for k, v in event.items() if k not in _MESSAGE_FIELDS}
-        events.append(event)
-    data = {
-        "area": {"width": history.area_width_m, "height": history.area_height_m},
-        "beacons": history.beacon_positions,
-        "frames": [{"time": t, "positions": positions} for t, positions in history.position_snapshots],
-        "events": events,
-        "messages": messages,
-    }
-    html = _HTML_TEMPLATE.replace("__TITLE__", title).replace("__DATA__", json.dumps(data))
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html)
+def _select_full_messages(events: Iterable[Dict[str, Any]], max_messages: int) -> Set[int]:
+    created: Dict[int, float] = {}
+    delivered: Set[int] = set()
+    for event in events:
+        msg = event.get("msg")
+        if msg is None:
+            continue
+        created.setdefault(msg, event["created"])
+        if event["delivered"]:
+            delivered.add(msg)
+    by_age = sorted(created, key=lambda m: (created[m], m))
+    # Delivered messages first: they are the ones worth following. Within each group, evenly spread over the run.
+    chosen = _spread([m for m in by_age if m in delivered], max_messages)
+    chosen += _spread([m for m in by_age if m not in delivered], max_messages - len(chosen))
+    return set(chosen)
+
+
+def _spread(items: List[int], k: int) -> List[int]:
+    if k <= 0:
+        return []
+    if len(items) <= k:
+        return list(items)
+    if k == 1:
+        return [items[0]]
+    return [items[round(i * (len(items) - 1) / (k - 1))] for i in range(k)]
+
+
+def _compact_number(value: float) -> Any:
+    return int(value) if float(value).is_integer() else round(value, 3)
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(value, separators=(",", ":"))
+
+
+def _write_data_js(history: SimulationHistory, path: Path, max_messages: int) -> None:
+    events = history.events
+    full = _select_full_messages(events, max_messages)
+    messages: Dict[int, Dict[str, Any]] = {}
+    kept: List[List[Any]] = []
+    for event in events:
+        msg = event.get("msg")
+        if msg is not None:
+            if msg not in full and not event["delivered"]:
+                continue
+            if msg not in messages:
+                messages[msg] = {"src": event["src"], "dst": event["dst"], "created": event["created"], "full": msg in full}
+        flags = (1 if event["delivered"] else 0) | (2 if event.get("backhaul") else 0)
+        kept.append(
+            [_compact_number(event["time"]), event["from"], event["to"], flags, event.get("hops", 0),
+             -1 if msg is None else msg]
+        )
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("const DATA = {\n")
+        f.write(f'"area":{_dumps({"width": history.area_width_m, "height": history.area_height_m})},\n')
+        f.write(f'"beacons":{_dumps(history.beacon_positions)},\n')
+        f.write(f'"messages":{_dumps(messages)},\n')
+        f.write('"frames":[\n')
+        previous_ids: List[int] = []
+        for k, (time, positions) in enumerate(history.position_snapshots):
+            ids = list(positions)
+            frame: Dict[str, Any] = {"time": _compact_number(time)}
+            if k == 0 or ids != previous_ids:
+                frame["ids"] = ids
+                previous_ids = ids
+            frame["xy"] = [round(c * 10) for node_id in ids for c in positions[node_id]]
+            f.write(("," if k else "") + _dumps(frame) + "\n")
+        f.write('],\n"events":[\n')
+        f.write(",\n".join(_dumps(e) for e in kept))
+        f.write("\n]};\n")
+
+
+def render_replay_html(
+    history: SimulationHistory, output_path: str, title: str = "Festival BLE Mesh - Replay",
+    max_messages: int = DEFAULT_MAX_MESSAGES,
+) -> None:
+    html_path = Path(output_path)
+    data_path = html_path.with_suffix(".data.js")
+    _write_data_js(history, data_path, max_messages)
+    html = _HTML_TEMPLATE.replace("__TITLE__", escape(title)).replace("__DATA_SRC__", escape(quote(data_path.name)))
+    html_path.write_text(html, encoding="utf-8")
 
 
 _INDEX_TEMPLATE = """<!DOCTYPE html>
@@ -478,7 +586,8 @@ def write_replay_index(replay_dir: str, index_path: str) -> None:
         date, _, rest = replay.stem.partition("_")
         time, _, algo = rest.partition("_")
         href = escape(quote(Path(os.path.relpath(replay, index.parent)).as_posix()))
-        size_mb = replay.stat().st_size / 1e6
+        data = replay.with_suffix(".data.js")
+        size_mb = (replay.stat().st_size + (data.stat().st_size if data.exists() else 0)) / 1e6
         rows.append(
             f'<tr><td>{escape(date)}</td><td>{escape(time.replace("-", ":"))}</td>'
             f'<td><a href="{href}">{escape(algo)}</a></td><td>{size_mb:.1f} Mo</td></tr>'

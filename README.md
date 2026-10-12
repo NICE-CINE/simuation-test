@@ -47,8 +47,12 @@ Options disponibles :
 - `--archive-dir DOSSIER` : dossier d'archive (defaut `archives`)
 - `--output CHEMIN` : copie optionnelle du rapport, en plus de l'archive
 - `--spray-initial-copies` : propre a `spray_wait` (defaut 8)
-- `--replay-html` : ecrit un replay HTML autonome de la simulation dans
-  le dossier d'archive, sous `<date>_<algo>.html` (voir "Visualisation / replay" plus bas)
+- `--replay-html` : ecrit un replay de la simulation dans
+  `<archive-dir>/replay/`, sous `<date>_<algo>.html` + `<date>_<algo>.data.js`
+  (voir "Visualisation / replay" plus bas)
+- `--replay-frame-step S` : une position tous les S secondes simulees (defaut 5)
+- `--replay-max-messages N` : nombre de messages dont tous les relais sont
+  gardes (defaut 100) ; les autres messages livres ne gardent que leur livraison
 - `--reply-probability P` : probabilite qu'un message livre recoive une
   reponse du destinataire apres 20 a 180 s (defaut 0, pas de reponses) ;
   necessaire pour que `tide_g` ait des indices de position
@@ -339,14 +343,22 @@ les departs de churn.
 
 ## Visualisation / replay
 
-`--replay-html` enregistre les positions (un instantane par tick
-de mobilite) et les evenements de relais/livraison pendant le run, puis
-ecrit `archives/<date>_<algo>.html`, un fichier HTML autonome (Canvas + JS, aucune dependance externe)
-avec lecture/pause et curseur temporel — telephones et bornes en points,
-liens de relais/livraison du tick courant en traits. Cout memoire
-proportionnel a `duration x num_festivaliers` : a reserver aux scenarios
-modestes (quelques dizaines/centaines de noeuds), pas au run par defaut
-a 4 000 festivaliers.
+`--replay-html` enregistre les positions (un instantane tous les
+`--replay-frame-step` secondes) et les evenements de relais/livraison pendant
+le run, puis ecrit `archives/replay/<date>_<algo>.html` (page Canvas + JS,
+aucune dependance externe) et `<date>_<algo>.data.js` a cote (les donnees,
+une frame / un evenement par ligne). Le `.html` n'a pas de donnees en dur : il
+charge le `.data.js` par `<script src>` (un `fetch` de JSON est bloque en
+`file://`), donc les deux fichiers doivent rester ensemble. Lecture/pause et
+curseur temporel — telephones et bornes en points, liens de relais/livraison
+de la frame courante en traits.
+
+Pour rester ouvrable avec un algo qui inonde (epidemic : ~23 millions de
+relais pour 4 000 noeuds en 1 h), les positions sont arrondies a 0,1 m et les
+relais ne sont gardes que pour `--replay-max-messages` messages (livres en
+priorite, repartis sur la duree) ; les autres messages livres gardent leur
+seule livraison. Les evenements sont stockes en colonnes pendant le run
+(`CompactEventLog`) pour ne pas payer un dict par relais en memoire.
 
 Le panneau "Suivre un message" liste les messages relayes (livres en
 premier, plus de sauts d'abord). En choisir un grise le reste et affiche
@@ -354,7 +366,8 @@ sa source, son destinataire, les porteurs de copies, chaque relais avec
 son numero de saut (chemin livre en vert, backhaul des bornes en
 pointille orange) et une chronologie cliquable ; "Suivre depuis la
 creation" lance la lecture au bon moment. Les copies purgees ou evincees
-ne sont pas enregistrees : un porteur reste affiche jusqu'a la fin.
+ne sont pas enregistrees : un porteur reste affiche jusqu'a la fin. Un message
+hors echantillon n'affiche que sa livraison.
 Programmatiquement :
 
     from festival_ble_sim.config import SimulationConfig
