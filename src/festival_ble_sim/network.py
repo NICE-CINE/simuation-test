@@ -27,8 +27,15 @@ def _compute_neighbors(nodes: Dict[int, BaseNode], grid: SpatialGrid) -> Dict[in
     for node_id, node in nodes.items():
         if not node.is_active:
             continue
-        neighbors[node_id] = grid.get_nearby(node, node.radio_range_m)
+        neighbors[node_id] = _active_nearby(node, grid)
     return neighbors
+
+
+def _active_nearby(node: BaseNode, grid: SpatialGrid) -> List[BaseNode]:
+    # The grid still holds dead, departed and not-yet-arrived nodes: without
+    # this filter they would take link slots, inflate congestion loss and show
+    # up as encounters in every algorithm's on_tick.
+    return [n for n in grid.get_nearby(node, node.radio_range_m) if n.is_active]
 
 
 def _compute_contention_counts(
@@ -104,7 +111,7 @@ def process_node_contacts(
                 return
 
     if neighbors is None:
-        neighbors = grid.get_nearby(sender, sender.radio_range_m)
+        neighbors = _active_nearby(sender, grid)
 
     if ble_config is not None and ble_config.max_concurrent_links is not None:
         neighbors = routing_algorithm.select_links(sender, neighbors, ble_config.max_concurrent_links)

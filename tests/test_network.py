@@ -147,3 +147,46 @@ def test_delivery_records_source_position_at_destination():
     process_node_contacts(now=5.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(), energy_model=_energy_model(), metrics=MetricsCollector())
     assert dest.known_positions[1] == (Position(3.0, 4.0), 4.0)
     assert 2 not in sender.known_positions
+
+
+def test_inactive_neighbor_does_not_take_a_link_slot():
+    from festival_ble_sim.config import BleConfig
+    sender = _node(1, 0.0, 0.0)
+    departed = _node(2, 1.0, 0.0)
+    departed.is_active = False
+    far = _node(3, 10.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in (sender, departed, far):
+        grid.insert(n)
+    sender.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    process_node_contacts(
+        now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(), energy_model=_energy_model(),
+        metrics=MetricsCollector(), ble_config=BleConfig(max_concurrent_links=1),
+    )
+    assert far.has_message(1)
+
+
+def test_on_tick_neighbors_exclude_inactive_nodes():
+    from festival_ble_sim.config import BleConfig
+    from festival_ble_sim.routing.base import RoutingAlgorithm, RoutingDecision
+
+    class Spy(RoutingAlgorithm):
+        seen = []
+
+        def on_tick(self, now, neighbors_by_node):
+            self.seen.append({k: sorted(n.id for n in v) for k, v in neighbors_by_node.items()})
+
+        def decide(self, message, holder, contact, now):
+            return RoutingDecision.IGNORE
+
+    a, b, c = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0), _node(3, 10.0, 0.0)
+    b.is_active = False
+    nodes = {1: a, 2: b, 3: c}
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in nodes.values():
+        grid.insert(n)
+    env = simpy.Environment()
+    spy = Spy()
+    env.process(network_engine(env, nodes, grid, spy, _energy_model(), MetricsCollector(), 1.0, ble_config=BleConfig()))
+    env.run(until=1.5)
+    assert spy.seen == [{1: [3], 3: [1]}]
