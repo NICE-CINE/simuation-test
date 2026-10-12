@@ -116,12 +116,15 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
             "--archive-dir", str(archive_dir),
         ]
     )
-    replays = list(archive_dir.glob("*_epidemic.html"))
+    replays = list((archive_dir / "replay").glob("*_epidemic.html"))
     assert len(replays) == 1
-    assert replays[0].name[:10].count("-") == 2
-    assert replays[0].with_suffix(".txt").exists()
+    assert len(replays[0].stem) == len("YYYY-MM-DD_epidemic")
+    assert list(archive_dir.glob("*_epidemic.txt"))
     assert "<canvas" in replays[0].read_text(encoding="utf-8")
     assert "Replay HTML ecrit" in capsys.readouterr().out
+    main_module.main(["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10",
+                      "--seed", "1", "--replay-html", "--archive-dir", str(archive_dir)])
+    assert (archive_dir / "replay" / f"{replays[0].stem}_2.html").exists()
 
 
 def test_main_does_not_write_replay_html_by_default(tmp_path):
