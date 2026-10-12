@@ -172,3 +172,24 @@ def test_network_engine_computes_contention_from_live_buffers():
     )
     env.run(until=1.5)
     assert metrics.build_report([], 0).backoff_count == 5
+
+
+def test_hidden_terminal_count_keeps_the_sender_when_the_contact_cannot_hear_it():
+    # A beacon (60 m) reaching a phone (20 m) 40 m away: the phone's one
+    # counted transmitter is someone else, so the collision must apply.
+    ble_config = BleConfig(
+        relay_backoff_coefficient=0.0, collision_loss_coefficient=1.0, collision_loss_max_probability=1.0,
+        **_no_signal_or_congestion_loss(),
+    )
+    beacon = BaseNode(node_id=1, position=Position(0.0, 0.0), radio_range_m=60.0, buffer_capacity=10, battery_mah=100.0)
+    phone = _node(2, 40.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(beacon)
+    grid.insert(phone)
+    beacon.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    process_node_contacts(
+        now=1.0, sender=beacon, grid=grid, routing_algorithm=EpidemicRouting(),
+        energy_model=_energy_model(), metrics=MetricsCollector(), ble_config=ble_config,
+        rng=random.Random(0), contention_counts={1: 0, 2: 1},
+    )
+    assert not phone.has_message(1)
