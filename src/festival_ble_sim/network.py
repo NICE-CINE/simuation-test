@@ -163,7 +163,14 @@ def process_node_contacts(
 
                 collision_loss_prob = 0.0
                 if contention_counts is not None:
-                    other_transmitters = max(0, contention_counts.get(contact.id, 0) - 1)
+                    # The contact's count includes this sender only if the
+                    # contact can hear it: not the case for a beacon reaching
+                    # a phone beyond the phone's own (shorter) range.
+                    reach = contact.radio_range_m
+                    sender_counted = bool(messages) and (
+                        contact.position.distance_squared_to(sender.position) <= reach * reach
+                    )
+                    other_transmitters = max(0, contention_counts.get(contact.id, 0) - int(sender_counted))
                     collision_loss_prob = min(
                         ble_config.collision_loss_max_probability,
                         ble_config.collision_loss_coefficient * other_transmitters,
