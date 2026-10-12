@@ -182,6 +182,8 @@ def process_node_contacts(
                 )
 
         for message in messages:
+            if not sender.is_active:
+                return
             if message.msg_id not in sender.buffer:
                 continue
             if not contact.is_active:

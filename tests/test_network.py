@@ -190,3 +190,19 @@ def test_on_tick_neighbors_exclude_inactive_nodes():
     env.process(network_engine(env, nodes, grid, spy, _energy_model(), MetricsCollector(), 1.0, ble_config=BleConfig()))
     env.run(until=1.5)
     assert spy.seen == [{1: [3], 3: [1]}]
+
+
+def test_sender_that_runs_out_of_battery_stops_sending_mid_tick():
+    sender = BaseNode(node_id=1, position=Position(0.0, 0.0), radio_range_m=20.0, buffer_capacity=10, battery_mah=1.0)
+    a, b = _node(2, 5.0, 0.0), _node(3, 0.0, 5.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in (sender, a, b):
+        grid.insert(n)
+    sender.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    metrics = MetricsCollector()
+    process_node_contacts(
+        now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),
+        energy_model=_energy_model(), metrics=metrics,
+    )
+    assert sender.battery_depleted
+    assert metrics.build_report([], 0).total_transmissions == 1
