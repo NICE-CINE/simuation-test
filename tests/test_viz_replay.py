@@ -1,7 +1,6 @@
 import json
-import re
 from festival_ble_sim.viz.history import SimulationHistory
-from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
+from festival_ble_sim.viz.replay import render_replay_html
 
 
 def _sample_history() -> SimulationHistory:
@@ -196,25 +195,3 @@ def test_render_replay_html_has_message_tracking_panel(tmp_path):
     content = output_path.read_text(encoding="utf-8")
     assert 'id="msgList"' in content
     assert 'id="trackPanel"' in content
-
-
-def test_write_replay_index_lists_replays_newest_first(tmp_path):
-    replay_dir = tmp_path / "archives" / "replay"
-    replay_dir.mkdir(parents=True)
-    for name in ("2026-10-11_09-00-00_epidemic", "2026-10-12_10-30-00_tide_g2", "2026-10-12_08-00-00_a<b"):
-        (replay_dir / f"{name}.html").write_text("x", encoding="utf-8")
-    (replay_dir / "2026-10-12_10-30-00_tide_g2.data.js").write_text("y" * 2_000_000, encoding="utf-8")
-    index_path = tmp_path / "index.html"
-    write_replay_index(str(replay_dir), str(index_path))
-    html = index_path.read_text(encoding="utf-8")
-    assert "Replays (3)" in html
-    hrefs = re.findall(r'href="([^"]+)"', html)
-    assert hrefs == [
-        "archives/replay/2026-10-12_10-30-00_tide_g2.html",
-        "archives/replay/2026-10-12_08-00-00_a%3Cb.html",
-        "archives/replay/2026-10-11_09-00-00_epidemic.html",
-    ]
-    assert "<td>10:30:00</td>" in html
-    assert ">tide_g2</a>" in html
-    assert ">a&lt;b</a>" in html
-    assert "<td>2.0 Mo</td>" in html

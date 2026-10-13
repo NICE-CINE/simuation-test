@@ -23,7 +23,7 @@ from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
-from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
+from festival_ble_sim.viz.replay import render_replay_html
 
 DEFAULT_NUM_FESTIVALIERS = 4000
 PROGRESS_BAR_WIDTH = 30
@@ -64,7 +64,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replay-html", action="store_true",
         help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
-        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html) avec ses donnees dans <meme nom>.data.js a cote, et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir).",
+        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html) avec ses donnees dans <meme nom>.data.js a cote.",
     )
     parser.add_argument(
         "--replay-frame-step", type=float, default=5.0,
@@ -161,11 +161,16 @@ def main(argv: Optional[List[str]] = None) -> None:
             snapshot_every_ticks=max(1, round(args.replay_frame_step / config.mobility.tick_interval_s)),
         )
     total_s = config.duration_s + config.cooldown_s
-    report = run_simulation(
-        config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history,
-        progress_callback=make_progress_callback(total_s), progress_interval_s=max(total_s / 1000, 1.0),
-    )
-    sys.stderr.write("\r\033[K")
+    show_progress = sys.stderr.isatty()
+    try:
+        report = run_simulation(
+            config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history,
+            progress_callback=make_progress_callback(total_s) if show_progress else None,
+            progress_interval_s=max(total_s / 1000, 1.0),
+        )
+    finally:
+        if show_progress:
+            sys.stderr.write("\r\033[K")
     text = format_report(report)
     print(text)
     stem = archive_stem(args.archive_dir, args.routing)
@@ -184,12 +189,6 @@ def main(argv: Optional[List[str]] = None) -> None:
             max_messages=args.replay_max_messages,
         )
         print(f"Replay HTML ecrit dans {replay_path}")
-        # Only the default archive dir owns the repo root's index.html; a custom one
-        # could share its parent with unrelated files or other archive dirs.
-        index_dir = Path(".") if args.archive_dir == DEFAULT_ARCHIVE_DIR else Path(args.archive_dir)
-        index_path = index_dir / "index.html"
-        write_replay_index(str(replay_dir), str(index_path))
-        print(f"Index des replays mis a jour : {index_path}")
 
 
 if __name__ == "__main__":

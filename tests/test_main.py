@@ -120,8 +120,7 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
     assert "<canvas" in replays[0].read_text(encoding="utf-8")
     assert replays[0].with_suffix(".data.js").exists()
     assert "Replay HTML ecrit" in capsys.readouterr().out
-    assert f'href="replay/{replays[0].name}"' in (archive_dir / "index.html").read_text(encoding="utf-8")
-    assert not (tmp_path / "index.html").exists()
+    assert not (archive_dir / "index.html").exists()
 
 
 def test_replay_flags_default_to_a_light_replay():
