@@ -40,7 +40,7 @@ Par exemple 2,4e-7 mAh/octet × 3,6 × 3,84 V ≈ 3,3 µJ/octet ≈ 0,42 µJ/bit
 | --- | --- | --- | --- | --- |
 | `battery_capacity_mah` | 3 000 (`initial_battery_mah`) | **4 500** | téléphone récent typique, entre les deux du banc | choisi |
 | `background_current_ma` | 2 mA | **31 mA** | « Nearby actif, connecté, sans trafic » : +29 à +34 mA | mesuré |
-| `phone_current_ma` | — | **82 mA** | repos écran éteint 38 mA (moyenne de 27 et 49) + écran allumé 20 % du temps à +218 mA (voir ci-dessous) | repos et surcoût écran **mesurés**, part de 20 % **estimée** |
+| `phone_current_ma` | 98 mA (écran estimé à ~300 mA) | **82 mA** | repos écran éteint 38 mA (moyenne de 27 et 49) + écran allumé 20 % du temps à +218 mA (voir ci-dessous) | repos et surcoût écran **mesurés**, part de 20 % **estimée** |
 | `tx_cost_mah_per_byte` | 2,8e-7 | **2,4e-7** | milieu de 0,25–0,6 µJ/bit à 3,84 V | mesuré |
 | `rx_cost_mah_per_byte` | 2,8e-7 | **6,3e-8** | milieu de 0,07–0,16 µJ/bit à 4,04 V | mesuré |
 | `tx_cost_mah_per_event` | 1,4e-5 | **2,9e-5** | ~5 ms d'antenne à +21 mA | courant mesuré, durée supposée |
@@ -66,6 +66,22 @@ stabilisation. Surcoût par rapport à l'écran éteint de la même série :
 Surcoût moyen : +272 mA (Honor), +165 mA (Samsung), soit **+218 mA**
 pour les deux. L'ancienne estimation (~300 mA) correspondait au courant
 total écran allumé, pas au surcoût, et surestimait le téléphone de 16 mA.
+
+Limites de cette mesure :
+
+- **Référence écran éteint instable** : 92 mA (Honor) et 68 mA (Samsung)
+  dans cette série, contre 56 et 83 mA pour « Nearby actif » sur le banc du
+  12 oct. Le surcoût est pris par rapport à la référence de la même série ;
+  calculé sur celle du 12 oct., il passerait à environ +308 mA sur le Honor.
+- **Moyenne simple des trois écrans** : cela suppose un temps écran réparti
+  également entre Amis, Carte et Conversation, et passé entièrement dans
+  l'app. Avec la Carte seule (+296 / +219 mA), on aurait environ 89 mA.
+- **Luminosité fixée à 50 %** : en plein jour, la luminosité automatique est
+  proche du maximum, donc le surcoût réel est probablement plus élevé.
+- **GPS** : l'onglet Carte fait un fix toutes les 5 s, donc une petite part
+  de GPS (de l'ordre de 1 mA sur les 82) est déjà dans `phone_current_ma`.
+  `tide_g`, `tide_g2` et `geo_spray_focus` facturent en plus leurs propres
+  fix (`gps_current_ma`) : ce double compte est négligeable.
 
 ### Ce qui est facturé, et où
 
@@ -115,7 +131,7 @@ Pour ne simuler que le mesh, sans le téléphone lui-même :
 | 5 % | 225 | ~2 h |
 
 Sans le mesh (82 mA seulement), un téléphone plein tient environ 55 h.
-Le mesh coûte donc environ un quart de l'autonomie.
+Le mesh coûte donc environ 27 % de l'autonomie.
 
 ## 3. Capacité et charge : deux grandeurs distinctes
 
@@ -185,9 +201,10 @@ des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
 
 ## 5. Ce qui n'est pas modélisé
 
-- **Écran** : le surcoût de l'écran allumé est mesuré, mais la part de 20 %
-  du temps écran allumé est une estimation. À recalibrer si l'équipe mesure
-  un usage réel en festival.
+- **Écran** : le surcoût de l'écran allumé est mesuré (à 50 % de luminosité,
+  dans l'app seulement, voir §2), mais la part de 20 % du temps écran allumé
+  est une estimation. À recalibrer si l'équipe mesure un usage réel en
+  festival.
 - **Réseau cellulaire saturé** : un téléphone qui cherche du réseau dans une
   foule consomme beaucoup plus. Ce n'est compté nulle part.
 - **Débit** : `BleConfig.transfer_rate_bytes_per_s` reste à 10 ko/s
@@ -209,3 +226,9 @@ pas comparables aux nouvelles. Ces archives n'ont pas non plus la colonne
 `total_mesh_energy_consumed_mah`. La config exacte de chaque run se trouve
 dans son `.json`. Les colonnes de livraison, de latence et d'overhead ne
 changent pas : aucun seuil de batterie ne se déclenche à 100 % de charge.
+
+Les runs archivés entre ce recalage et la mesure de l'écran (13 oct.)
+utilisaient `phone_current_ma = 98` au lieu de 82. Leur énergie totale est
+environ 14 % plus haute et leur `dead_node_count` un peu plus élevé avec
+`--random-charge`. Leur énergie mesh reste comparable, et les autres
+colonnes aussi à 100 % de charge. La valeur utilisée est dans le `.json`.
