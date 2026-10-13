@@ -196,9 +196,10 @@ class EnergyConfig:
     # +29 to +34 mA over the phone's own idle.
     background_current_ma: float = 31.0
     # The phone's own draw, mesh off: 38 mA measured screen-off idle (mean
-    # of 27 and 49) + screen on 20 % of the time at ~300 mA (estimate, not
-    # measured). 0 = count only the mesh.
-    phone_current_ma: float = 98.0
+    # of 27 and 49) + screen on 20 % of the time at +218 mA (screen-on
+    # overhead measured 13 Oct over screen off, mean of both phones and three
+    # app screens; the 20 % share is an estimate). 0 = count only the mesh.
+    phone_current_ma: float = 82.0
 
 
 @dataclass(frozen=True)

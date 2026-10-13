@@ -1,7 +1,7 @@
 # Modèle de consommation et charge de départ
 
 > **Statut** : valeurs recalées le 12 oct. 2026 sur le banc radio Nice Mesh
-> (IMT Mines Alès). Chaque paramètre indique s'il est **mesuré** ou **estimé**.
+> (IMT Mines Alès), écran mesuré le 13 oct. Chaque paramètre indique s'il est **mesuré** ou **estimé**.
 > Code : `EnergyConfig` (`src/festival_ble_sim/config.py`), facturation dans
 > `simulation.py` (courant de fond) et `network.py` (émission/réception).
 
@@ -40,7 +40,7 @@ Par exemple 2,4e-7 mAh/octet × 3,6 × 3,84 V ≈ 3,3 µJ/octet ≈ 0,42 µJ/bit
 | --- | --- | --- | --- | --- |
 | `battery_capacity_mah` | 3 000 (`initial_battery_mah`) | **4 500** | téléphone récent typique, entre les deux du banc | choisi |
 | `background_current_ma` | 2 mA | **31 mA** | « Nearby actif, connecté, sans trafic » : +29 à +34 mA | mesuré |
-| `phone_current_ma` | — | **98 mA** | repos écran éteint 38 mA (moyenne de 27 et 49) + écran allumé 20 % du temps à ~300 mA | repos **mesuré**, écran **estimé** |
+| `phone_current_ma` | — | **82 mA** | repos écran éteint 38 mA (moyenne de 27 et 49) + écran allumé 20 % du temps à +218 mA (voir ci-dessous) | repos et surcoût écran **mesurés**, part de 20 % **estimée** |
 | `tx_cost_mah_per_byte` | 2,8e-7 | **2,4e-7** | milieu de 0,25–0,6 µJ/bit à 3,84 V | mesuré |
 | `rx_cost_mah_per_byte` | 2,8e-7 | **6,3e-8** | milieu de 0,07–0,16 µJ/bit à 4,04 V | mesuré |
 | `tx_cost_mah_per_event` | 1,4e-5 | **2,9e-5** | ~5 ms d'antenne à +21 mA | courant mesuré, durée supposée |
@@ -50,10 +50,27 @@ Par exemple 2,4e-7 mAh/octet × 3,6 × 3,84 V ≈ 3,3 µJ/octet ≈ 0,42 µJ/bit
 L'ancienne réception coûtait autant que l'émission, soit 3 à 7 fois trop cher.
 L'ancien courant de fond (2 mA) était environ 15 fois trop bas.
 
+### Écran allumé (mesuré le 13 oct.)
+
+Téléphone débranché, luminosité manuelle à 50 %, app au premier plan, lien
+Nearby connecté. Moyenne de 120 échantillons (1/s) par écran, après 20 s de
+stabilisation. Surcoût par rapport à l'écran éteint de la même série :
+
+| Écran | Honor 8X | Galaxy A56 |
+| --- | --- | --- |
+| Onglet Amis (liste statique) | 336 mA (+244) | 196 mA (+128) |
+| Onglet Carte (rendu, GPS toutes les 5 s, orientation) | 388 mA (+296) | 287 mA (+219) |
+| Conversation | 367 mA (+275) | 216 mA (+148) |
+| Écran éteint (référence de la série) | 92 mA | 68 mA |
+
+Surcoût moyen : +272 mA (Honor), +165 mA (Samsung), soit **+218 mA**
+pour les deux. L'ancienne estimation (~300 mA) correspondait au courant
+total écran allumé, pas au surcoût, et surestimait le téléphone de 16 mA.
+
 ### Ce qui est facturé, et où
 
 - **Chaque tick, chaque téléphone actif** paie
-  `background_current_ma + phone_current_ma`, soit 129 mA
+  `background_current_ma + phone_current_ma`, soit 113 mA
   (`simulation._mobile_process`). Ce poste représente plus de 95 % de la
   consommation d'un run : les écarts d'énergie entre algorithmes viennent
   des seuls coûts d'émission et de réception.
@@ -76,7 +93,7 @@ Le rapport donne deux mesures, sur les téléphones seulement (bornes exclues) :
   `avg_mesh_energy_consumed_mah`, ligne « dont mesh » du rapport) : la même
   chose **sans** `phone_current_ma`, c'est-à-dire rester joignable, plus
   l'émission, la réception et les coûts propres aux algorithmes. **C'est la
-  colonne à utiliser pour comparer les algorithmes** : les 98 mA du
+  colonne à utiliser pour comparer les algorithmes** : les 82 mA du
   téléphone sont identiques pour tous et masqueraient les écarts.
 
 `BaseNode.consume_energy(mah, mesh=False)` est le seul appel qui ne compte
@@ -88,16 +105,16 @@ Pour ne simuler que le mesh, sans le téléphone lui-même :
 
 ### Autonomie qui en découle
 
-À 129 mA, un téléphone perd environ 2,9 % de sa capacité par heure :
+À 113 mA, un téléphone perd environ 2,5 % de sa capacité par heure :
 
 | Charge de départ | mAh | Autonomie |
 | --- | --- | --- |
-| 100 % | 4 500 | ~35 h |
-| 50 % | 2 250 | ~17 h |
-| 30 % | 1 350 | ~10 h |
-| 5 % | 225 | ~1 h 45 |
+| 100 % | 4 500 | ~40 h |
+| 50 % | 2 250 | ~20 h |
+| 30 % | 1 350 | ~12 h |
+| 5 % | 225 | ~2 h |
 
-Sans le mesh (98 mA seulement), un téléphone plein tient environ 46 h.
+Sans le mesh (82 mA seulement), un téléphone plein tient environ 55 h.
 Le mesh coûte donc environ un quart de l'autonomie.
 
 ## 3. Capacité et charge : deux grandeurs distinctes
@@ -161,15 +178,16 @@ voici la part des téléphones déjà sous le seuil dès l'arrivée :
 | `fresh_spray` | refus des pairs sous 15 % | ~3 % |
 | `eco_sf` | Trickle allongé sous 50 % (30 → 60 s) ; sous 20 % : 120 s et plus choisi comme relais ; silencieux sous 10 % | ~20 % ; ~5 % ; ~2 % |
 
-**Téléphones à plat** (`dead_node_count`). À 129 mA, un téléphone meurt
-pendant le run s'il arrive sous 2,9 % × durée en heures. Pour un run de
-3 h, plus 30 min de cooldown, ce seuil est d'environ 10 % : environ 1,6 %
+**Téléphones à plat** (`dead_node_count`). À 113 mA, un téléphone meurt
+pendant le run s'il arrive sous 2,5 % × durée en heures. Pour un run de
+3 h, plus 30 min de cooldown, ce seuil est d'environ 9 % : environ 1,2 %
 des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
 
 ## 5. Ce qui n'est pas modélisé
 
-- **Écran** : la part de 20 % d'écran allumé à ~300 mA est une estimation,
-  pas une mesure. À recalibrer si l'équipe mesure un usage réel en festival.
+- **Écran** : le surcoût de l'écran allumé est mesuré, mais la part de 20 %
+  du temps écran allumé est une estimation. À recalibrer si l'équipe mesure
+  un usage réel en festival.
 - **Réseau cellulaire saturé** : un téléphone qui cherche du réseau dans une
   foule consomme beaucoup plus. Ce n'est compté nulle part.
 - **Débit** : `BleConfig.transfer_rate_bytes_per_s` reste à 10 ko/s

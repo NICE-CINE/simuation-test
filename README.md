@@ -227,7 +227,7 @@ colonnes du CSV :
 | Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
-| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 98 mA du telephone etant identiques pour tous |
+| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 82 mA du telephone etant identiques pour tous |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
@@ -245,8 +245,8 @@ moyenne :
 - **Batterie** : 4 500 mAh, tout le monde charge a 100 % (`--random-charge`
   pour une charge de depart realiste, de 5 a 100 %).
 - **Consommation** (mesuree sur deux telephones, banc radio du 12 oct. 2026) :
-  31 mA pour rester joignable (mesh actif) + 98 mA pour le telephone lui-meme
-  (veille + ecran, ecran estime), soit ~35 h d'autonomie a pleine charge ;
+  31 mA pour rester joignable (mesh actif) + 82 mA pour le telephone lui-meme
+  (veille + ecran, part d'ecran estimee), soit ~40 h d'autonomie a pleine charge ;
   emission ~0,42 µJ/bit, reception ~0,11 µJ/bit. Detail et sources :
   `docs/energie/consommation.md`.
 - **Churn** (si active) : arrivees etalees sur les 30 premieres minutes,
@@ -276,7 +276,7 @@ retrouve le modele deterministe (equivalent a un cercle fixe).
 
 **Courant de fond** : chaque telephone actif paie a chaque seconde
 `EnergyConfig.background_current_ma` (31 mA, mesh joignable, mesure) +
-`phone_current_ma` (98 mA, le telephone lui-meme ecran compris ; 0 pour ne
+`phone_current_ma` (82 mA, le telephone lui-meme ecran compris ; 0 pour ne
 compter que le mesh), qu'il envoie ou non des messages ; s'ajoute aux couts
 par emission/reception. C'est plus de 95 % de la consommation d'un run.
 Les pourcentages de batterie des algorithmes se lisent par rapport a la
