@@ -14,6 +14,7 @@ from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, T
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
+from festival_ble_sim.progress import MINI_BAR_WIDTH, format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 
@@ -44,15 +45,7 @@ SUMMARY_HEADERS = ["algorithm", "beacons", "runs"] + [
 _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262,
         10: 2.228, 15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042}
 
-MINI_BAR_WIDTH = 10
 STATUS_REFRESH_S = 0.5
-
-
-def format_duration(seconds: float) -> str:
-    seconds = int(seconds)
-    hours, rest = divmod(seconds, 3600)
-    minutes, secs = divmod(rest, 60)
-    return f"{hours:d}h{minutes:02d}m{secs:02d}s" if hours else f"{minutes:02d}m{secs:02d}s"
 
 
 def run_label(algo_name: str, beacon_count: int, seed: int) -> str:
@@ -69,9 +62,7 @@ def render_status(
     parts = []
     for label in running:
         fraction = progress.get(label, 0.0)
-        filled = int(round(fraction * MINI_BAR_WIDTH))
-        bar = "█" * filled + "░" * (MINI_BAR_WIDTH - filled)
-        parts.append(f"{label} {bar} {fraction * 100:3.0f}%")
+        parts.append(f"{label} {render_bar(fraction, MINI_BAR_WIDTH)} {fraction * 100:3.0f}%")
     line = f"{done_count}/{total_runs} terminés | {format_duration(wall_elapsed)} | " + " | ".join(parts)
     width = shutil.get_terminal_size((120, 20)).columns - 1
     return "\r" + line[:width].ljust(width)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 import argparse
 import random
+import shutil
+import sys
+import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
@@ -16,12 +19,15 @@ from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
+from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
 
 DEFAULT_NUM_FESTIVALIERS = 4000
+PROGRESS_BAR_WIDTH = 30
+STATUS_REFRESH_S = 0.5
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
 # festival layout (see default_festival_pois) since the mobility_factory
@@ -121,6 +127,24 @@ def _raise_value_error(message: str) -> None:
     raise ValueError(message)
 
 
+def make_progress_callback(total_s: float) -> Callable[[float], None]:
+    start = time.monotonic()
+    last_refresh = [0.0]
+
+    def callback(sim_now: float) -> None:
+        fraction = min(sim_now / total_s, 1.0) if total_s > 0 else 1.0
+        now = time.monotonic()
+        if fraction < 1.0 and now - last_refresh[0] < STATUS_REFRESH_S:
+            return
+        last_refresh[0] = now
+        line = f"{render_bar(fraction, PROGRESS_BAR_WIDTH)} {fraction * 100:3.0f}% | {format_duration(now - start)}"
+        width = shutil.get_terminal_size((120, 20)).columns - 1
+        sys.stderr.write("\r" + line[:width].ljust(width))
+        sys.stderr.flush()
+
+    return callback
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -136,9 +160,12 @@ def main(argv: Optional[List[str]] = None) -> None:
             tick_interval_s=config.mobility.tick_interval_s,
             snapshot_every_ticks=max(1, round(args.replay_frame_step / config.mobility.tick_interval_s)),
         )
+    total_s = config.duration_s + config.cooldown_s
     report = run_simulation(
-        config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history
+        config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history,
+        progress_callback=make_progress_callback(total_s), progress_interval_s=max(total_s / 1000, 1.0),
     )
+    sys.stderr.write("\r\033[K")
     text = format_report(report)
     print(text)
     stem = archive_stem(args.archive_dir, args.routing)
