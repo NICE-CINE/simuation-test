@@ -1,7 +1,7 @@
 from __future__ import annotations
 from array import array
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Set, Tuple
 
 _DELIVERED = 1
 _BACKHAUL = 2
@@ -20,6 +20,19 @@ class CompactEventLog:
         self._hops = array("h")
         self._flags = array("b")
         self._messages: Dict[int, Tuple[int, int, float]] = {}
+        self._delivered: Set[int] = set()
+
+    @property
+    def messages(self) -> Dict[int, Tuple[int, int, float]]:
+        return self._messages
+
+    @property
+    def delivered_messages(self) -> Set[int]:
+        return self._delivered
+
+    def rows(self) -> Iterator[Tuple[float, int, int, int, int, int]]:
+        # (time, from, to, flags, hops, msg) without building a dict per event.
+        return zip(self._time, self._from, self._to, self._flags, self._hops, self._msg)
 
     def append(self, event: Dict[str, Any]) -> None:
         msg = event.get("msg", _NO_MESSAGE)
@@ -31,6 +44,8 @@ class CompactEventLog:
         self._msg.append(msg)
         self._hops.append(event.get("hops", 0))
         self._flags.append((_DELIVERED if event["delivered"] else 0) | (_BACKHAUL if event.get("backhaul") else 0))
+        if event["delivered"] and msg != _NO_MESSAGE:
+            self._delivered.add(msg)
 
     def __len__(self) -> int:
         return len(self._time)

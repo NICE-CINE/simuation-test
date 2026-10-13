@@ -1,5 +1,5 @@
 import json
-from festival_ble_sim.viz.history import SimulationHistory
+from festival_ble_sim.viz.history import CompactEventLog, SimulationHistory
 from festival_ble_sim.viz.replay import render_replay_html
 
 
@@ -195,3 +195,14 @@ def test_render_replay_html_has_message_tracking_panel(tmp_path):
     content = output_path.read_text(encoding="utf-8")
     assert 'id="msgList"' in content
     assert 'id="trackPanel"' in content
+
+
+def test_render_replay_html_gives_the_same_data_for_a_compact_log_and_a_plain_list(tmp_path):
+    history = _message_history()
+    render_replay_html(history, str(tmp_path / "list.html"), max_messages=2)
+    compact = CompactEventLog()
+    for event in history.events:
+        compact.append(event)
+    history.events = compact
+    render_replay_html(history, str(tmp_path / "compact.html"), max_messages=2)
+    assert (tmp_path / "list.data.js").read_text(encoding="utf-8") == (tmp_path / "compact.data.js").read_text(encoding="utf-8")

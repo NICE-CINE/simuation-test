@@ -2,9 +2,9 @@ from __future__ import annotations
 import json
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Set
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Set, Tuple
 from urllib.parse import quote
-from .history import SimulationHistory
+from .history import CompactEventLog, SimulationHistory
 
 DEFAULT_MAX_MESSAGES = 100
 
@@ -467,17 +467,29 @@ draw(0);
 """
 
 
-def _select_full_messages(events: Iterable[Dict[str, Any]], max_messages: int) -> Set[int]:
-    created: Dict[int, float] = {}
+def _scan_events(events: Any) -> Tuple[Dict[int, Tuple[int, int, float]], Set[int], Callable[[], Iterable[Tuple]]]:
+    if isinstance(events, CompactEventLog):
+        return events.messages, events.delivered_messages, events.rows
+    meta: Dict[int, Tuple[int, int, float]] = {}
     delivered: Set[int] = set()
     for event in events:
         msg = event.get("msg")
         if msg is None:
             continue
-        created.setdefault(msg, event["created"])
+        meta.setdefault(msg, (event["src"], event["dst"], event["created"]))
         if event["delivered"]:
             delivered.add(msg)
-    by_age = sorted(created, key=lambda m: (created[m], m))
+
+    def rows() -> Iterator[Tuple]:
+        for event in events:
+            flags = (1 if event["delivered"] else 0) | (2 if event.get("backhaul") else 0)
+            yield (event["time"], event["from"], event["to"], flags, event.get("hops", 0), event.get("msg", -1))
+
+    return meta, delivered, rows
+
+
+def _select_full_messages(meta: Dict[int, Tuple[int, int, float]], delivered: Set[int], max_messages: int) -> Set[int]:
+    by_age = sorted(meta, key=lambda m: (meta[m][2], m))
     # Delivered messages first: they are the ones worth following. Within each group, evenly spread over the run.
     chosen = _spread([m for m in by_age if m in delivered], max_messages)
     chosen += _spread([m for m in by_age if m not in delivered], max_messages - len(chosen))
@@ -503,22 +515,18 @@ def _dumps(value: Any) -> str:
 
 
 def _write_data_js(history: SimulationHistory, path: Path, max_messages: int) -> None:
-    events = history.events
-    full = _select_full_messages(events, max_messages)
+    meta, delivered, rows = _scan_events(history.events)
+    full = _select_full_messages(meta, delivered, max_messages)
     messages: Dict[int, Dict[str, Any]] = {}
     kept: List[List[Any]] = []
-    for event in events:
-        msg = event.get("msg")
-        if msg is not None:
-            if msg not in full and not event["delivered"]:
+    for time, from_id, to_id, flags, hops, msg in rows():
+        if msg >= 0:
+            if msg not in full and not flags & 1:
                 continue
             if msg not in messages:
-                messages[msg] = {"src": event["src"], "dst": event["dst"], "created": event["created"], "full": msg in full}
-        flags = (1 if event["delivered"] else 0) | (2 if event.get("backhaul") else 0)
-        kept.append(
-            [_compact_number(event["time"]), event["from"], event["to"], flags, event.get("hops", 0),
-             -1 if msg is None else msg]
-        )
+                src, dst, created = meta[msg]
+                messages[msg] = {"src": src, "dst": dst, "created": created, "full": msg in full}
+        kept.append([_compact_number(time), from_id, to_id, flags, hops, msg])
 
     with open(path, "w", encoding="utf-8") as f:
         f.write("const DATA = {\n")
