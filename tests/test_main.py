@@ -118,9 +118,30 @@ def test_main_writes_replay_html_when_requested(tmp_path, capsys):
     assert len(replays) == 1
     assert (archive_dir / f"{replays[0].stem}.txt").exists()
     assert "<canvas" in replays[0].read_text(encoding="utf-8")
+    assert replays[0].with_suffix(".data.js").exists()
     assert "Replay HTML ecrit" in capsys.readouterr().out
-    assert f'href="replay/{replays[0].name}"' in (archive_dir / "index.html").read_text(encoding="utf-8")
-    assert not (tmp_path / "index.html").exists()
+    assert not (archive_dir / "index.html").exists()
+
+
+def test_replay_flags_default_to_a_light_replay():
+    args = main_module.build_arg_parser().parse_args([])
+    assert args.replay_frame_step == 5.0
+    assert args.replay_max_messages == 100
+
+
+def test_main_replay_flags_shape_the_replay_data(tmp_path):
+    archive_dir = tmp_path / "archives"
+    main_module.main(
+        ["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10", "--seed", "1",
+         "--cooldown", "0", "--replay-html", "--replay-frame-step", "10", "--replay-max-messages", "1",
+         "--archive-dir", str(archive_dir)]
+    )
+    replay = next((archive_dir / "replay").glob("*_epidemic.html"))
+    text = replay.with_suffix(".data.js").read_text(encoding="utf-8")
+    data = json.loads(text[len("const DATA = "):].rstrip().rstrip(";"))
+    times = [frame["time"] for frame in data["frames"]]
+    assert times == [1, 11, 21]
+    assert sum(1 for meta in data["messages"].values() if meta["full"]) <= 1
 
 
 def test_main_does_not_write_replay_html_by_default(tmp_path):

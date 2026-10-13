@@ -1,6 +1,9 @@
 from __future__ import annotations
 import argparse
 import random
+import shutil
+import sys
+import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
@@ -16,12 +19,15 @@ from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
+from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
 from festival_ble_sim.viz.history import SimulationHistory
-from festival_ble_sim.viz.replay import render_replay_html, write_replay_index
+from festival_ble_sim.viz.replay import render_replay_html
 
 DEFAULT_NUM_FESTIVALIERS = 4000
+PROGRESS_BAR_WIDTH = 30
+STATUS_REFRESH_S = 0.5
 
 # "poi" has no CLI knobs of its own: build_config() points it at a default
 # festival layout (see default_festival_pois) since the mobility_factory
@@ -58,7 +64,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--replay-html", action="store_true",
         help="Ecrit un replay HTML autonome (positions + evenements) dans <archive-dir>/replay/, "
-        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html), et regenere index.html qui les liste tous (a la racine avec l'archive par defaut, sinon dans --archive-dir). Cout memoire proportionnel a duration x num-festivaliers : reserve aux scenarios modestes.",
+        "sous le meme nom que le rapport (<date>_<heure>_<algo>.html) avec ses donnees dans <meme nom>.data.js a cote.",
+    )
+    parser.add_argument(
+        "--replay-frame-step", type=float, default=5.0,
+        help="Avec --replay-html : une position tous les N secondes simulees (arrondi au tick de mobilite)",
+    )
+    parser.add_argument(
+        "--replay-max-messages", type=int, default=100,
+        help="Avec --replay-html : nombre de messages dont tous les relais sont gardes (livres en priorite, repartis dans le temps) ; les autres messages livres ne gardent que leur livraison",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -113,6 +127,24 @@ def _raise_value_error(message: str) -> None:
     raise ValueError(message)
 
 
+def make_progress_callback(total_s: float) -> Callable[[float], None]:
+    start = time.monotonic()
+    last_refresh = [0.0]
+
+    def callback(sim_now: float) -> None:
+        fraction = min(sim_now / total_s, 1.0) if total_s > 0 else 1.0
+        now = time.monotonic()
+        if fraction < 1.0 and now - last_refresh[0] < STATUS_REFRESH_S:
+            return
+        last_refresh[0] = now
+        line = f"{render_bar(fraction, PROGRESS_BAR_WIDTH)} {fraction * 100:3.0f}% | {format_duration(now - start)}"
+        width = shutil.get_terminal_size((120, 20)).columns - 1
+        sys.stderr.write("\r" + line[:width].ljust(width))
+        sys.stderr.flush()
+
+    return callback
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
@@ -126,10 +158,19 @@ def main(argv: Optional[List[str]] = None) -> None:
             area_width_m=config.area.width_m,
             area_height_m=config.area.height_m,
             tick_interval_s=config.mobility.tick_interval_s,
+            snapshot_every_ticks=max(1, round(args.replay_frame_step / config.mobility.tick_interval_s)),
         )
-    report = run_simulation(
-        config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history
-    )
+    total_s = config.duration_s + config.cooldown_s
+    show_progress = sys.stderr.isatty()
+    try:
+        report = run_simulation(
+            config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history,
+            progress_callback=make_progress_callback(total_s) if show_progress else None,
+            progress_interval_s=max(total_s / 1000, 1.0),
+        )
+    finally:
+        if show_progress:
+            sys.stderr.write("\r\033[K")
     text = format_report(report)
     print(text)
     stem = archive_stem(args.archive_dir, args.routing)
@@ -143,14 +184,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         replay_dir = Path(args.archive_dir) / "replay"
         replay_dir.mkdir(parents=True, exist_ok=True)
         replay_path = replay_dir / f"{stem.name}.html"
-        render_replay_html(history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}")
+        render_replay_html(
+            history, str(replay_path), title=f"Festival BLE Mesh - {args.routing}/{args.mobility}",
+            max_messages=args.replay_max_messages,
+        )
         print(f"Replay HTML ecrit dans {replay_path}")
-        # Only the default archive dir owns the repo root's index.html; a custom one
-        # could share its parent with unrelated files or other archive dirs.
-        index_dir = Path(".") if args.archive_dir == DEFAULT_ARCHIVE_DIR else Path(args.archive_dir)
-        index_path = index_dir / "index.html"
-        write_replay_index(str(replay_dir), str(index_path))
-        print(f"Index des replays mis a jour : {index_path}")
 
 
 if __name__ == "__main__":
