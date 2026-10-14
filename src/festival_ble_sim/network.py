@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from dataclasses import replace
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Collection, Dict, List, Optional
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -39,7 +39,10 @@ def _active_nearby(node: BaseNode, grid: SpatialGrid) -> List[BaseNode]:
 
 
 def _compute_contention_counts(
-    nodes: Dict[int, BaseNode], neighbors_by_node: Dict[int, List[BaseNode]], snapshot: Dict[int, List[Message]]
+    nodes: Dict[int, BaseNode],
+    neighbors_by_node: Dict[int, List[BaseNode]],
+    snapshot: Dict[int, List[Message]],
+    broadcasters: Collection[int] = (),
 ) -> Dict[int, int]:
     # For each active node, how many other nodes within ITS OWN radio range
     # have something to send this tick — a proxy for the local shared-medium
@@ -51,7 +54,9 @@ def _compute_contention_counts(
         if not node.is_active:
             counts[node_id] = 0
             continue
-        counts[node_id] = sum(1 for n in neighbors_by_node.get(node_id, ()) if n.is_active and snapshot.get(n.id))
+        counts[node_id] = sum(
+            1 for n in neighbors_by_node.get(node_id, ()) if n.is_active and (snapshot.get(n.id) or n.id in broadcasters)
+        )
     return counts
 
 
@@ -66,6 +71,105 @@ def _weak_signal_loss_probability(margin_db: float, ble_config: BleConfig) -> fl
     if margin_db <= 0.0:
         return ble_config.weak_signal_max_probability
     return ble_config.weak_signal_max_probability * (1.0 - margin_db / cutoff)
+
+
+def _link_loss_probability(
+    sender: BaseNode,
+    contact: BaseNode,
+    radio,
+    ble_config: BleConfig,
+    rng: Optional[random.Random],
+    contention_counts: Optional[Dict[int, int]],
+    base_loss_prob: float,
+    sender_transmitting: bool,
+) -> float:
+    distance_m = sender.position.distance_to(contact.position)
+    # Shadowing (see radio.RadioParams.shadowing_std_db) makes this
+    # a stochastic per-tick sample, not a fixed function of
+    # distance: an unlucky fade can push the actual received power
+    # below the sensitivity floor even inside the deterministic
+    # max range used to shortlist neighbors, in which case
+    # reception is treated as guaranteed lost this tick — same
+    # loss/energy accounting path as any other packet loss.
+    margin_db = link_margin_db(distance_m, radio, rng)
+    if margin_db < 0.0:
+        # A true outage isn't a "soft" loss source: it bypasses
+        # packet_loss_max_probability entirely, since a signal
+        # below the noise floor can't be received no matter how
+        # that cap is configured.
+        return 1.0
+    weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
+
+    collision_loss_prob = 0.0
+    if contention_counts is not None:
+        # The contact's count includes this sender only if the
+        # contact can hear it: not the case for a beacon reaching
+        # a phone beyond the phone's own (shorter) range.
+        reach = contact.radio_range_m
+        sender_counted = sender_transmitting and (
+            contact.position.distance_squared_to(sender.position) <= reach * reach
+        )
+        other_transmitters = max(0, contention_counts.get(contact.id, 0) - int(sender_counted))
+        collision_loss_prob = min(
+            ble_config.collision_loss_max_probability,
+            ble_config.collision_loss_coefficient * other_transmitters,
+        )
+
+    return min(
+        ble_config.packet_loss_max_probability,
+        base_loss_prob + weak_signal_loss_prob + collision_loss_prob,
+    )
+
+
+def _send_control_broadcast(
+    sender: BaseNode,
+    size: int,
+    neighbors: List[BaseNode],
+    energy_model: EnergyModel,
+    metrics: MetricsCollector,
+    ble_config: BleConfig,
+    rng: Optional[random.Random],
+    contention_counts: Optional[Dict[int, int]],
+    airtime_left: Dict[int, float],
+    received: Dict[int, List[int]],
+) -> None:
+    # One broadcast to every active node in range: no link slot (no
+    # connection needed), otherwise the same rules as data so control-heavy
+    # algorithms get no free ride: CSMA backoff, the shared airtime budget,
+    # the congestion term the sender's data links would see, and the same
+    # per-receiver loss.
+    if not sender.is_active:
+        return
+    if rng is not None and contention_counts is not None:
+        other_transmitters = contention_counts.get(sender.id, 0)
+        if other_transmitters > 0 and rng.random() < min(
+            ble_config.relay_backoff_max_probability, ble_config.relay_backoff_coefficient * other_transmitters
+        ):
+            metrics.record_backoff()
+            return
+    budget = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+    left = airtime_left.get(sender.id, budget)
+    if size > left:
+        return
+    airtime_left[sender.id] = left - size
+    sender.consume_energy(energy_model.cost_of_tx(size))
+    links = len(neighbors)
+    if ble_config.max_concurrent_links is not None:
+        links = min(links, ble_config.max_concurrent_links)
+    congestion_loss_prob = ble_config.packet_loss_base_probability + ble_config.packet_loss_congestion_coefficient * max(0, links - 1)
+    radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
+    for contact in neighbors:
+        contact_left = airtime_left.get(contact.id, budget)
+        if size > contact_left:
+            continue
+        airtime_left[contact.id] = contact_left - size
+        loss_prob = _link_loss_probability(
+            sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, True
+        )
+        if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
+            continue
+        contact.consume_energy(energy_model.cost_of_rx(size))
+        received.setdefault(contact.id, []).append(sender.id)
 
 
 def process_node_contacts(
@@ -143,43 +247,9 @@ def process_node_contacts(
 
         loss_prob = 0.0
         if ble_config is not None:
-            distance_m = sender.position.distance_to(contact.position)
-            # Shadowing (see radio.RadioParams.shadowing_std_db) makes this
-            # a stochastic per-tick sample, not a fixed function of
-            # distance: an unlucky fade can push the actual received power
-            # below the sensitivity floor even inside the deterministic
-            # max range used to shortlist `neighbors` above, in which case
-            # reception is treated as guaranteed lost this tick — same
-            # loss/energy accounting path as any other packet loss below.
-            margin_db = link_margin_db(distance_m, radio, rng)
-            if margin_db < 0.0:
-                # A true outage isn't a "soft" loss source: it bypasses
-                # packet_loss_max_probability entirely, since a signal
-                # below the noise floor can't be received no matter how
-                # that cap is configured.
-                loss_prob = 1.0
-            else:
-                weak_signal_loss_prob = _weak_signal_loss_probability(margin_db, ble_config)
-
-                collision_loss_prob = 0.0
-                if contention_counts is not None:
-                    # The contact's count includes this sender only if the
-                    # contact can hear it: not the case for a beacon reaching
-                    # a phone beyond the phone's own (shorter) range.
-                    reach = contact.radio_range_m
-                    sender_counted = bool(messages) and (
-                        contact.position.distance_squared_to(sender.position) <= reach * reach
-                    )
-                    other_transmitters = max(0, contention_counts.get(contact.id, 0) - int(sender_counted))
-                    collision_loss_prob = min(
-                        ble_config.collision_loss_max_probability,
-                        ble_config.collision_loss_coefficient * other_transmitters,
-                    )
-
-                loss_prob = min(
-                    ble_config.packet_loss_max_probability,
-                    congestion_loss_prob + weak_signal_loss_prob + collision_loss_prob,
-                )
+            loss_prob = _link_loss_probability(
+                sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, bool(messages)
+            )
 
         for message in messages:
             if not sender.is_active:
@@ -334,18 +404,28 @@ def network_engine(
             event_log=event_log,
         )
         neighbors_by_node = _compute_neighbors(nodes, grid) if ble_config is not None else None
+        broadcasts: Dict[int, int] = {}
         if neighbors_by_node is not None:
             routing_algorithm.on_tick(now, neighbors_by_node)
+            broadcasts = routing_algorithm.control_broadcasts(now)
         contention_counts = (
-            _compute_contention_counts(nodes, neighbors_by_node, snapshot) if ble_config is not None else None
+            _compute_contention_counts(nodes, neighbors_by_node, snapshot, broadcasts) if ble_config is not None else None
         )
         airtime_left: Dict[int, float] = {}
+        received: Dict[int, List[int]] = {}
         # Senders compete for receivers' airtime, so a fixed order would let
         # the lowest ids (the beacons) always win it.
         order = list(nodes.items())
         if rng is not None:
             rng.shuffle(order)
         for node_id, sender in order:
+            # A node's control broadcast goes out at its turn, just before its
+            # data: no global priority of control over data or the reverse.
+            if node_id in broadcasts:
+                _send_control_broadcast(
+                    sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
+                    ble_config, rng, contention_counts, airtime_left, received,
+                )
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
@@ -357,3 +437,5 @@ def network_engine(
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
             )
+        if broadcasts:
+            routing_algorithm.on_control_received(now, received)

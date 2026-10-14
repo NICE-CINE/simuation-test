@@ -206,3 +206,64 @@ def test_sender_that_runs_out_of_battery_stops_sending_mid_tick():
     )
     assert sender.battery_depleted
     assert metrics.build_report([], 0).total_transmissions == 1
+
+
+class _Announcer(EpidemicRouting):
+    def __init__(self, sizes):
+        self.sizes = sizes
+        self.received = []
+
+    def control_broadcasts(self, now):
+        return self.sizes
+
+    def on_control_received(self, now, received):
+        self.received.append(received)
+
+
+def _lossless_ble(**kw):
+    from dataclasses import replace
+    from festival_ble_sim.config import BleConfig
+    ble = BleConfig()
+    params = dict(shadowing_std_db=0.0)
+    return replace(
+        ble,
+        phone_radio=replace(ble.phone_radio, **params),
+        beacon_radio=replace(ble.beacon_radio, **params),
+        packet_loss_base_probability=0.0,
+        collision_loss_coefficient=0.0,
+        **kw,
+    )
+
+
+def test_control_broadcast_reaches_neighbors_and_bills_energy():
+    import random
+    env = simpy.Environment()
+    a, b, c = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0), _node(3, 90.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in (a, b, c):
+        grid.insert(n)
+    algo = _Announcer({1: 50})
+    env.process(network_engine(env, {1: a, 2: b, 3: c}, grid, algo, _energy_model(), MetricsCollector(),
+                               contact_check_interval_s=1.0, ble_config=_lossless_ble(), rng=random.Random(0)))
+    env.run(until=1.5)
+    assert algo.received == [{2: [1]}]
+    assert a.battery_mah < 100.0 and b.battery_mah < 100.0 and c.battery_mah == 100.0
+
+
+def test_control_broadcast_takes_airtime_from_data():
+    import random
+
+    def delivered(sizes):
+        env = simpy.Environment()
+        a, b = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0)
+        grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+        grid.insert(a)
+        grid.insert(b)
+        a.store_message(Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+        env.process(network_engine(env, {1: a, 2: b}, grid, _Announcer(sizes), _energy_model(), MetricsCollector(),
+                                   contact_check_interval_s=1.0,
+                                   ble_config=_lossless_ble(transfer_rate_bytes_per_s=100.0), rng=random.Random(0)))
+        env.run(until=1.5)
+        return 1 in b.delivered_ids
+
+    assert delivered({}) and not delivered({1: 95})

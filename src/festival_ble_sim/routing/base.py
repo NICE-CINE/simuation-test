@@ -39,6 +39,18 @@ class RoutingAlgorithm(ABC):
         # which undersamples contact-history-driven algorithms.
         pass
 
+    def control_broadcasts(self, now: float) -> Dict[int, int]:
+        # {node_id: bytes} each node broadcasts this tick (announces, distance
+        # vectors), called right after on_tick. The engine sends each one at
+        # its node's turn, before that node's data, with the same backoff,
+        # airtime budget, loss and tx/rx energy as data.
+        return {}
+
+    def on_control_received(self, now: float, received: Dict[int, List[int]]) -> None:
+        # {receiver_id: [sender_ids]} whose control_broadcasts got through,
+        # once per tick after all data has been sent.
+        pass
+
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
         pass
 
