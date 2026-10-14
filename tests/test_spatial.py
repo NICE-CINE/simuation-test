@@ -38,3 +38,12 @@ def test_get_nearby_respects_area_edges():
     grid.insert(corner)
     nearby = grid.get_nearby(_FakeNode(2, 1.0, 1.0), radius_m=5.0)
     assert corner in nearby
+
+
+def test_get_nearby_follows_insertion_order_not_memory_layout():
+    grid = SpatialGrid(width_m=100.0, height_m=100.0, cell_size_m=50.0)
+    center = _FakeNode(0, 10.0, 10.0)
+    others = [_FakeNode(i, 10.0 + i, 10.0) for i in (5, 3, 9, 1, 7, 2, 8, 4, 6)]
+    for n in [center] + others:
+        grid.insert(n)
+    assert [n.id for n in grid.get_nearby(center, radius_m=30.0)] == [5, 3, 9, 1, 7, 2, 8, 4, 6]
