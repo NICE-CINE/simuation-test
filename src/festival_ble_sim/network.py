@@ -34,8 +34,46 @@ def _compute_neighbors(nodes: Dict[int, BaseNode], grid: SpatialGrid) -> Dict[in
 def _active_nearby(node: BaseNode, grid: SpatialGrid) -> List[BaseNode]:
     # The grid still holds dead, departed and not-yet-arrived nodes: without
     # this filter they would take link slots, inflate congestion loss and show
-    # up as encounters in every algorithm's on_tick.
-    return [n for n in grid.get_nearby(node, node.radio_range_m) if n.is_active]
+    # up as encounters in every algorithm's on_tick. Range is mutual: every
+    # BLE packet is acknowledged by the other side, so a beacon can't reach a
+    # phone that can't answer it.
+    return [
+        n for n in grid.get_nearby(node, node.radio_range_m)
+        if n.is_active and node.position.distance_squared_to(n.position) <= n.radio_range_m * n.radio_range_m
+    ]
+
+
+def _link_radio(ble_config: BleConfig, a: BaseNode, b: BaseNode):
+    # A link is only as good as its weaker direction.
+    weaker = a if a.radio_range_m <= b.radio_range_m else b
+    return ble_config.beacon_radio if weaker.is_beacon else ble_config.phone_radio
+
+
+def _assign_links(
+    order: List[Any],
+    neighbors_by_node: Dict[int, List[BaseNode]],
+    snapshot: Dict[int, List[Message]],
+    routing_algorithm: RoutingAlgorithm,
+    max_links: Optional[int],
+) -> Dict[int, List[BaseNode]]:
+    # Connections are two-way and count against both ends' slots, so a
+    # beacon or a popular destination can't be reached by every sender in
+    # range at once. Only nodes with something to send initiate one.
+    if max_links is None:
+        return neighbors_by_node
+    links: Dict[int, List[BaseNode]] = {node_id: [] for node_id in neighbors_by_node}
+    for node_id, node in order:
+        if not snapshot.get(node_id) or node_id not in links:
+            continue
+        free = max_links - len(links[node_id])
+        if free <= 0:
+            continue
+        linked = {n.id for n in links[node_id]}
+        candidates = [n for n in neighbors_by_node[node_id] if n.id not in linked and len(links[n.id]) < max_links]
+        for contact in routing_algorithm.select_links(node, candidates, free)[:free]:
+            links[node_id].append(contact)
+            links[contact.id].append(node)
+    return links
 
 
 def _compute_contention_counts(
@@ -177,7 +215,6 @@ def _send_control_broadcast(
     if ble_config.max_concurrent_links is not None:
         links = min(links, ble_config.max_concurrent_links)
     congestion_loss_prob = _congestion_loss_probability(ble_config, links)
-    radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
     for contact in neighbors:
         # Neighbors are listed at tick start; a battery may have died since.
         if not contact.is_active:
@@ -187,7 +224,8 @@ def _send_control_broadcast(
             continue
         airtime_left[contact.id] = contact_left - size
         loss_prob = _link_loss_probability(
-            sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, sender_was_transmitting
+            sender, contact, _link_radio(ble_config, sender, contact), ble_config, rng, contention_counts,
+            congestion_loss_prob, sender_was_transmitting,
         )
         if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
             continue
@@ -234,19 +272,16 @@ def process_node_contacts(
     if backed_off:
         return False
 
+    # neighbors, when given, are the links network_engine already assigned
+    # (see _assign_links); otherwise this sender picks its own.
     if neighbors is None:
         neighbors = _active_nearby(sender, grid)
-
-    if ble_config is not None and ble_config.max_concurrent_links is not None:
-        neighbors = routing_algorithm.select_links(sender, neighbors, ble_config.max_concurrent_links)
+        if ble_config is not None and ble_config.max_concurrent_links is not None:
+            neighbors = routing_algorithm.select_links(sender, neighbors, ble_config.max_concurrent_links)
 
     congestion_loss_prob = 0.0
     if ble_config is not None and neighbors:
         congestion_loss_prob = _congestion_loss_probability(ble_config, len(neighbors))
-
-    radio = None
-    if ble_config is not None:
-        radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
 
     # Per radio, not per link: one node's sends and receives this tick all
     # share its airtime. network_engine passes one dict for the whole tick so
@@ -265,7 +300,7 @@ def process_node_contacts(
         loss_prob = 0.0
         if ble_config is not None:
             loss_prob = _link_loss_probability(
-                sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, sender_was_transmitting
+                sender, contact, _link_radio(ble_config, sender, contact), ble_config, rng, contention_counts, congestion_loss_prob, sender_was_transmitting
             )
 
         for message in messages:
@@ -440,6 +475,10 @@ def network_engine(
         order = list(nodes.items())
         if rng is not None:
             rng.shuffle(order)
+        links = (
+            _assign_links(order, neighbors_by_node, snapshot, routing_algorithm, ble_config.max_concurrent_links)
+            if neighbors_by_node is not None else None
+        )
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
@@ -461,7 +500,7 @@ def network_engine(
                 rng=rng,
                 contention_counts=contention_counts,
                 event_log=event_log,
-                neighbors=neighbors_by_node.get(node_id) if neighbors_by_node is not None else None,
+                neighbors=links.get(node_id, []) if links is not None else None,
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
                 backed_off=backed_off,

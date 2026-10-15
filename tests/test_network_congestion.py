@@ -224,3 +224,36 @@ def test_link_budget_is_shared_by_all_of_a_receivers_senders_in_one_tick():
     assert metrics.build_report([], 0).messages_delivered == 1
     env.run(until=2.5)
     assert metrics.build_report([], 0).messages_delivered == 2
+
+
+def test_beacon_cannot_link_to_a_phone_that_cannot_answer():
+    beacon = BaseNode(node_id=1, position=Position(0.0, 0.0), radio_range_m=60.0, buffer_capacity=10, battery_mah=100.0)
+    beacon.is_beacon = True
+    near_phone, far_phone = _node(2, 15.0, 0.0), _node(3, 40.0, 0.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in (beacon, near_phone, far_phone):
+        grid.insert(n)
+    beacon.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    process_node_contacts(
+        now=1.0, sender=beacon, grid=grid, routing_algorithm=EpidemicRouting(),
+        energy_model=_energy_model(), metrics=MetricsCollector(), ble_config=BleConfig(max_concurrent_links=None),
+    )
+    assert near_phone.has_message(1) and not far_phone.has_message(1)
+
+
+def test_receiver_link_slots_are_shared_by_every_sender():
+    import simpy
+    from festival_ble_sim.network import network_engine
+    s1, s2, receiver = _node(1, 0.0, 0.0), _node(2, 10.0, 0.0), _node(3, 5.0, 0.0)
+    nodes = {1: s1, 2: s2, 3: receiver}
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in nodes.values():
+        grid.insert(n)
+    s1.store_message(Message(msg_id=1, src_id=1, dst_id=3, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    s2.store_message(Message(msg_id=2, src_id=2, dst_id=3, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    metrics = MetricsCollector()
+    env = simpy.Environment()
+    ble = BleConfig(max_concurrent_links=1)
+    env.process(network_engine(env, nodes, grid, EpidemicRouting(), _energy_model(), metrics, 1.0, ble_config=ble))
+    env.run(until=1.5)
+    assert metrics.build_report([], 0).messages_delivered == 1

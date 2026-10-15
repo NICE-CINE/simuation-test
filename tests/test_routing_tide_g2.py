@@ -173,9 +173,9 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     report = run_simulation(config, routing_algorithm=algo)
     created = report.messages_created + report.replies_created
     delivered = report.messages_delivered + report.replies_delivered
-    assert (created, delivered, report.total_transmissions) == (82, 67, 1311)
+    assert (created, delivered, report.total_transmissions) == (96, 90, 1743)
     assert {k: algo.hint_stats[k] for k in ("routed", "hinted", "delivered", "delivered_hinted", "gps_fixes")} == {
-        "routed": 81, "hinted": 46, "delivered": 67, "delivered_hinted": 42, "gps_fixes": 1200,
+        "routed": 94, "hinted": 60, "delivered": 90, "delivered_hinted": 59, "gps_fixes": 1200,
     }
 
 
