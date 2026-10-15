@@ -42,8 +42,9 @@ class RoutingAlgorithm(ABC):
     def control_broadcasts(self, now: float) -> Dict[int, int]:
         # {node_id: bytes} each node broadcasts this tick (announces, distance
         # vectors), called right after on_tick. The engine sends each one at
-        # its node's turn, before that node's data, with the same backoff,
-        # airtime budget, loss and tx/rx energy as data.
+        # its node's turn, before that node's data, with the same airtime
+        # budget and tx/rx energy as data, on the advertising channels'
+        # load, lost rather than resent (no connection).
         return {}
 
     def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:

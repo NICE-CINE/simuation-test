@@ -285,30 +285,33 @@ charge de depart. Voir `docs/energie/consommation.md`.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
-- un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
+- un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`,
+  37 ko/s mesures en Bluetooth classique entre deux telephones seuls) :
   emissions et receptions d'un noeud partagent ce budget sur tous ses liens ;
   un message qui ne rentre pas dans le budget de l'emetteur ou du recepteur
   reste en buffer et retente au tick suivant (les emetteurs sont traites dans
   un ordre tire au hasard a chaque tick) ;
-- une **limite de connexions BLE simultanees** (`max_concurrent_links`,
-  defaut 6, realiste pour un smartphone) — au-dela, les contacts les plus
-  proches sont prioritaires ;
-- un **backoff a la CSMA** (`relay_backoff_coefficient` /
-  `relay_backoff_max_probability`) : avant d'emettre, un noeud estime
-  combien d'autres noeuds a sa portee ont aussi quelque chose a envoyer ce
-  tick, et renonce (retente au tick suivant, sans energie ni perte
-  comptabilisee) avec une probabilite qui croit avec ce nombre — c'est ce
-  qui evite que tous les noeuds emettent en meme temps ;
-- une **collision "hidden-terminal"** (`collision_loss_coefficient` /
-  `collision_loss_max_probability`) : meme apres backoff, un recepteur
-  entoure de plusieurs emetteurs qui ne s'entendent pas entre eux peut
-  perdre le paquet — un cout distinct de la congestion normale ;
-- une **perte de paquets probabiliste**, combinant plusieurs composantes :
-  congestion (`packet_loss_congestion_coefficient`), marge de signal
-  faible pres du bord de portee (`signal_margin_cutoff_db` /
-  `weak_signal_max_probability`) et collision ci-dessus, plafonnees par
-  `packet_loss_max_probability` — sauf une vraie panne radio (fading
-  negatif, cf. ci-dessus), qui est une perte garantie et ignore ce plafond ;
+- des **connexions** : un lien n'existe que si les deux telephones s'entendent
+  (portee mutuelle : une borne ne peut pas joindre un telephone qui ne peut
+  pas lui repondre), met `connection_setup_s` (7 s mesurees avec Nearby) a
+  s'etablir, garde sa place tant que la paire reste a portee et se ferme
+  apres `connection_idle_timeout_s` (30 s, estime) sans echange ; un
+  telephone tient au plus `max_concurrent_links` connexions (defaut 6),
+  comptees des deux cotes ;
+- un **canal partage** : un voisin qui emet une part u de son temps
+  d'antenne tombe sur le canal d'un paquet avec une probabilite ~u / canaux
+  (79 canaux du Bluetooth classique pour les donnees, 3 canaux d'annonce BLE
+  pour les diffusions de controle), donc un paquet passe avec une probabilite
+  exp(-charge entendue / canaux), sans plafond : une foule dense sature. La
+  charge est ce que les voisins ont reellement emis au tick precedent ;
+- des **pertes** : collisions ci-dessus, marge de signal faible pres du bord
+  de portee (`signal_margin_cutoff_db` / `weak_signal_max_probability`) et
+  perte residuelle (`packet_loss_base_probability`). Sur une connexion chaque
+  paquet est acquitte et renvoye : une perte p coute 1/(1-p) fois le temps
+  d'antenne et l'energie (`retransmitted_bytes` du rapport) au lieu de perdre
+  le message ; seule une vraie panne radio (fading negatif, cf. ci-dessus)
+  ne laisse rien passer ce tick. Une diffusion de controle, sans connexion,
+  est perdue ou non (`packet_loss_count`) ;
 - un **TTL reseau en nombre de sauts** (`TrafficConfig.message_ttl_hops`,
   defaut 8, a la Bluetooth Mesh) en plus du TTL temporel `message_ttl_s` :
   un message qui a deja consomme son budget de sauts n'est plus relaye a

@@ -63,11 +63,11 @@ class BleConfig:
     phone_radio: RadioParams = field(default_factory=_default_phone_radio)
     beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
     # Bytes each radio can send + receive per tick, shared by all its links
-    # (network_engine tracks it per node for the whole tick): real effective
-    # GATT throughput in a dense opportunistic-mesh deployment, well below
-    # BLE's raw PHY rate once ATT/connection overhead and 2.4GHz contention
-    # from thousands of nearby devices are accounted for.
-    transfer_rate_bytes_per_s: float = 10_000.0
+    # (network_engine tracks it per node for the whole tick): the ~37 kB/s
+    # Nearby measured over Bluetooth Classic between two phones alone
+    # (docs/energie/consommation.md). A crowd lowers it through the
+    # channel load below, not through this figure.
+    transfer_rate_bytes_per_s: float = 37_000.0
     contact_check_interval_s: float = 1.0
     # Simultaneous GATT-central connections a phone can realistically hold
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
@@ -79,29 +79,21 @@ class BleConfig:
     # An established connection with no data either way for this long is
     # closed, freeing both slots (estimated, not measured).
     connection_idle_timeout_s: float = 30.0
+    # Residual per-packet error on any link.
     packet_loss_base_probability: float = 0.01
-    packet_loss_congestion_coefficient: float = 0.02
-    # Extra loss probability for links near the edge of radio range: fades
+    # Extra per-packet error for links near the edge of radio range: fades
     # linearly from 0 at signal_margin_cutoff_db (or above) to
     # weak_signal_max_probability at a 0 dB margin (received power at the
-    # receiver sensitivity floor), on top of the congestion-based loss above.
+    # receiver sensitivity floor).
     signal_margin_cutoff_db: float = 6.0
     weak_signal_max_probability: float = 0.30
-    packet_loss_max_probability: float = 0.30
-    # CSMA-style channel sensing: before transmitting, a node estimates
-    # how many other nodes within its own radio range also have something
-    # to send this tick, and backs off (skips this tick, retries next one,
-    # no energy spent, no loss counted) with a probability that grows with
-    # that count — this is what keeps a real BLE mesh from having every
-    # node blast a relay at once.
-    relay_backoff_coefficient: float = 0.05
-    relay_backoff_max_probability: float = 0.5
-    # Even after backoff, a receiver can still be hit by two senders that
-    # can't hear each other (hidden-terminal collision): extra loss
-    # probability per other transmitter within the RECEIVER's own range,
-    # on top of (not instead of) congestion/weak-signal loss.
-    collision_loss_coefficient: float = 0.03
-    collision_loss_max_probability: float = 0.4
+    # Collisions: a neighbor transmitting a share u of its airtime lands on a
+    # packet's channel with probability ~u / channels. Data goes over
+    # connections on Bluetooth Classic's 79 hopping channels, connectionless
+    # control broadcasts over BLE's 3 advertising channels. On a connection
+    # a lost packet is resent (airtime and energy), a broadcast is just lost.
+    data_channels: int = 79
+    advertising_channels: int = 3
 
 
 @dataclass(frozen=True)
@@ -302,29 +294,14 @@ class SimulationConfig:
             raise ValueError("max_concurrent_links must be None or >= 1")
         if self.ble.connection_setup_s < 0 or self.ble.connection_idle_timeout_s <= 0:
             raise ValueError("connection_setup_s must be >= 0 and connection_idle_timeout_s > 0")
-        for prob in (
-            self.ble.packet_loss_base_probability,
-            self.ble.packet_loss_congestion_coefficient,
-            self.ble.packet_loss_max_probability,
-        ):
-            if prob < 0:
-                raise ValueError("packet loss probabilities/coefficients must be >= 0")
-        if self.ble.packet_loss_base_probability > 1 or self.ble.packet_loss_max_probability > 1:
-            raise ValueError("packet loss probabilities must be <= 1")
-        if self.ble.packet_loss_base_probability > self.ble.packet_loss_max_probability:
-            raise ValueError("packet_loss_base_probability must be <= packet_loss_max_probability")
+        if not 0.0 <= self.ble.packet_loss_base_probability <= 1.0:
+            raise ValueError("packet_loss_base_probability must be within [0, 1]")
         if self.ble.signal_margin_cutoff_db <= 0:
             raise ValueError("signal_margin_cutoff_db must be positive")
         if not (0.0 <= self.ble.weak_signal_max_probability <= 1.0):
             raise ValueError("weak_signal_max_probability must be within [0, 1]")
-        if self.ble.relay_backoff_coefficient < 0:
-            raise ValueError("relay_backoff_coefficient must be >= 0")
-        if not (0.0 <= self.ble.relay_backoff_max_probability <= 1.0):
-            raise ValueError("relay_backoff_max_probability must be within [0, 1]")
-        if self.ble.collision_loss_coefficient < 0:
-            raise ValueError("collision_loss_coefficient must be >= 0")
-        if not (0.0 <= self.ble.collision_loss_max_probability <= 1.0):
-            raise ValueError("collision_loss_max_probability must be within [0, 1]")
+        if self.ble.data_channels < 1 or self.ble.advertising_channels < 1:
+            raise ValueError("data_channels and advertising_channels must be >= 1")
         if self.beacons.backhaul_latency_s <= 0:
             raise ValueError("backhaul_latency_s must be positive")
         if not (0.0 <= self.beacons.backhaul_loss_probability <= 1.0):

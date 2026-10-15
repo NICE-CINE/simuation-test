@@ -58,7 +58,7 @@ def test_lost_transfer_to_a_beacon_does_not_set_the_flag():
     phone.store_message(msg)
     process_node_contacts(
         1.0, phone, grid, BeaconPriorityRouting(), EnergyModel(EnergyConfig()), MetricsCollector(),
-        ble_config=BleConfig(packet_loss_base_probability=0.3, relay_backoff_coefficient=0.0), rng=AlwaysLose(),
+        ble_config=BleConfig(packet_loss_base_probability=1.0), rng=AlwaysLose(),
     )
     assert not beacon.has_message(1)
     assert "reached_beacon" not in msg.routing_state

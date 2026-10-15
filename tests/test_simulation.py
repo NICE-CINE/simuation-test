@@ -62,7 +62,7 @@ def test_cooldown_lets_late_messages_arrive_without_counting_new_ones():
     from festival_ble_sim.config import TrafficConfig
     base = dict(
         duration_s=300.0, num_festivaliers=20, random_seed=4,
-        area=AreaConfig(width_m=60.0, height_m=60.0),
+        area=AreaConfig(width_m=100.0, height_m=100.0),
         traffic=TrafficConfig(messages_per_hour_range=(20.0, 40.0)),
     )
     cut = run_simulation(SimulationConfig(**base))

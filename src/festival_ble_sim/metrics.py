@@ -19,9 +19,11 @@ class SimulationReport:
     avg_energy_consumed_mah: float
     dead_node_count: int
     buffer_eviction_count: int = 0
+    # Connectionless control broadcast receptions lost (data on a
+    # connection is resent instead, see retransmitted_bytes).
     packet_loss_count: int = 0
     backhaul_transmissions: int = 0
-    backoff_count: int = 0
+    retransmitted_bytes: float = 0.0
     backhaul_loss_count: int = 0
     replies_created: int = 0
     replies_delivered: int = 0
@@ -52,7 +54,7 @@ class MetricsCollector:
         self._total_transmissions = 0
         self._packet_loss_count = 0
         self._backhaul_transmissions = 0
-        self._backoff_count = 0
+        self._retransmitted_bytes = 0.0
         self._backhaul_loss_count = 0
 
     def _measured(self, message: Optional[Message]) -> bool:
@@ -78,8 +80,9 @@ class MetricsCollector:
         if self._measured(message):
             self._backhaul_transmissions += 1
 
-    def record_backoff(self) -> None:
-        self._backoff_count += 1
+    def record_retransmission(self, message: Message, extra_bytes: float) -> None:
+        if self._measured(message):
+            self._retransmitted_bytes += extra_bytes
 
     def record_backhaul_loss(self, message: Optional[Message] = None) -> None:
         if self._measured(message):
@@ -133,7 +136,7 @@ class MetricsCollector:
             buffer_eviction_count=buffer_eviction_count,
             packet_loss_count=self._packet_loss_count,
             backhaul_transmissions=self._backhaul_transmissions,
-            backoff_count=self._backoff_count,
+            retransmitted_bytes=self._retransmitted_bytes,
             backhaul_loss_count=self._backhaul_loss_count,
             replies_created=self._replies_created,
             replies_delivered=replies_delivered,
@@ -163,9 +166,9 @@ def format_report(report: SimulationReport) -> str:
         f"  dont mesh (totale / moy): {report.total_mesh_energy_consumed_mah:.2f} / {report.avg_mesh_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
         f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
-        f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
+        f"Annonces perdues (radio)  : {report.packet_loss_count}\n"
         f"Transmissions backhaul    : {report.backhaul_transmissions}\n"
-        f"Backoffs (contention)     : {report.backoff_count}\n"
+        f"Octets retransmis (radio) : {report.retransmitted_bytes:.0f}\n"
         f"Paquets perdus (backhaul) : {report.backhaul_loss_count}\n"
         "===================================================================\n"
     )

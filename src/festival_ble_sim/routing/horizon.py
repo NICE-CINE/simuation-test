@@ -15,7 +15,7 @@ class HorizonRouting(FreshSprayRouting):
     # bounded to horizon_hops). Each node broadcasts its vector once per
     # announce_period_s at its own phase (jittered, so the whole crowd never
     # announces in the same tick) through the engine's control_broadcasts
-    # path (backoff, airtime, loss, energy). Right before broadcasting it
+    # path (airtime, channel load, loss, energy). Right before broadcasting it
     # rebuilds its vector from the last one heard from each neighbor within
     # entry_ttl_s: one lost announce doesn't erase a route, a neighbor gone
     # quiet drops out after entry_ttl_s. Rebuilding from scratch only from

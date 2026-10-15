@@ -31,9 +31,7 @@ def test_zero_shadowing_never_causes_outage_within_deterministic_range():
     radio = _shadowed_radio(0.0)
     ble_config = BleConfig(
         phone_radio=radio, beacon_radio=radio,
-        packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0,
-        weak_signal_max_probability=0.0, packet_loss_max_probability=1.0,
-        relay_backoff_coefficient=0.0, collision_loss_coefficient=0.0,
+        packet_loss_base_probability=0.0, weak_signal_max_probability=0.0,
     )
     range_m = max_range_m(radio)
     for seed in range(50):
@@ -56,9 +54,7 @@ def test_shadowing_causes_intermittent_outage_near_deterministic_edge_of_range()
     radio = _shadowed_radio(8.0)
     ble_config = BleConfig(
         phone_radio=radio, beacon_radio=radio,
-        packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0,
-        weak_signal_max_probability=0.0, packet_loss_max_probability=1.0,
-        relay_backoff_coefficient=0.0, collision_loss_coefficient=0.0,
+        packet_loss_base_probability=0.0, weak_signal_max_probability=0.0,
     )
     range_m = max_range_m(radio)
     losses = 0
@@ -82,13 +78,11 @@ def test_shadowing_causes_intermittent_outage_near_deterministic_edge_of_range()
     assert 0.1 < loss_rate < 0.9
 
 
-def test_outage_bypasses_packet_loss_max_probability_cap():
+def test_outage_carries_nothing_beyond_the_deterministic_range():
     radio = _shadowed_radio(20.0)
     ble_config = BleConfig(
         phone_radio=radio, beacon_radio=radio,
-        packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0,
-        weak_signal_max_probability=0.0, packet_loss_max_probability=0.05,
-        relay_backoff_coefficient=0.0, collision_loss_coefficient=0.0,
+        packet_loss_base_probability=0.0, weak_signal_max_probability=0.0,
     )
     range_m = max_range_m(radio)
     losses = 0
@@ -109,6 +103,4 @@ def test_outage_bypasses_packet_loss_max_probability_cap():
         )
         if not contact.has_message(1):
             losses += 1
-    # Deterministic margin here is already well negative; even a tiny
-    # packet_loss_max_probability cap must not water this down.
     assert losses / trials > 0.5

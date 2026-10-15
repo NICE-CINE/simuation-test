@@ -207,13 +207,13 @@ des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
   festival.
 - **Réseau cellulaire saturé** : un téléphone qui cherche du réseau dans une
   foule consomme beaucoup plus. Ce n'est compté nulle part.
-- **Débit** : `BleConfig.transfer_rate_bytes_per_s` reste à 10 ko/s
-  (BLE GATT en foule dense). Le banc mesure environ 37 ko/s en Bluetooth
-  classique, entre deux téléphones seuls. Modifier ce débit changerait les
-  taux de livraison, pas seulement l'énergie, donc il n'a pas été touché.
+- **Débit** : `BleConfig.transfer_rate_bytes_per_s` vaut les 37 ko/s
+  mesurés en Bluetooth classique entre deux téléphones seuls ; la foule
+  agit par la charge du canal (collisions, retransmissions), pas par ce
+  chiffre.
 - **Connexion** : Nearby met environ 7 s entre la découverte et la
-  connexion. Dans le simulateur, un contact est utilisable dès le premier
-  tick.
+  connexion (`BleConfig.connection_setup_s`). Son coût énergétique n'a pas
+  été mesuré à part.
 - **EMUI (Huawei/Honor)** : avec les réglages par défaut, l'app est gelée
   écran éteint, et le téléphone est en pratique hors réseau. Ce n'est pas
   simulé.
