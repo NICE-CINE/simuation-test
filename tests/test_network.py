@@ -216,8 +216,9 @@ class _Announcer(EpidemicRouting):
     def control_broadcasts(self, now):
         return self.sizes
 
-    def on_control_received(self, now, received):
+    def on_control_received(self, now, received, sent):
         self.received.append(received)
+        self.sent = sent
 
 
 def _lossless_ble(**kw):
@@ -246,7 +247,7 @@ def test_control_broadcast_reaches_neighbors_and_bills_energy():
     env.process(network_engine(env, {1: a, 2: b, 3: c}, grid, algo, _energy_model(), MetricsCollector(),
                                contact_check_interval_s=1.0, ble_config=_lossless_ble(), rng=random.Random(0)))
     env.run(until=1.5)
-    assert algo.received == [{2: [1]}]
+    assert algo.received == [{2: [1]}] and algo.sent == [1]
     assert a.battery_mah < 100.0 and b.battery_mah < 100.0 and c.battery_mah == 100.0
 
 

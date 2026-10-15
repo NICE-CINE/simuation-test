@@ -154,18 +154,18 @@ def _send_control_broadcast(
     contention_counts: Optional[Dict[int, int]],
     airtime_left: Dict[int, float],
     received: Dict[int, List[int]],
-) -> None:
+) -> bool:
     # One broadcast to every active node in range: no link slot (no
     # connection needed), otherwise the same rules as data so control-heavy
     # algorithms get no free ride: the CSMA backoff network_engine draws for
     # the node's whole turn, the shared airtime budget, the congestion term
     # the sender's data links would see, and the same per-receiver loss.
     if not sender.is_active:
-        return
+        return False
     budget = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
     left = airtime_left.get(sender.id, budget)
     if size > left:
-        return
+        return False
     airtime_left[sender.id] = left - size
     sender.consume_energy(energy_model.cost_of_tx(size))
     links = len(neighbors)
@@ -188,6 +188,7 @@ def _send_control_broadcast(
             continue
         contact.consume_energy(energy_model.cost_of_rx(size))
         received.setdefault(contact.id, []).append(sender.id)
+    return True
 
 
 def process_node_contacts(
@@ -424,6 +425,7 @@ def network_engine(
         )
         airtime_left: Dict[int, float] = {}
         received: Dict[int, List[int]] = {}
+        sent: List[int] = []
         # Senders compete for receivers' airtime, so a fixed order would let
         # the lowest ids (the beacons) always win it.
         order = list(nodes.items())
@@ -436,11 +438,11 @@ def network_engine(
             backed_off = None
             if node_id in broadcasts and sender.is_active:
                 backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
-                if not backed_off:
-                    _send_control_broadcast(
-                        sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                        ble_config, rng, contention_counts, airtime_left, received,
-                    )
+                if not backed_off and _send_control_broadcast(
+                    sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
+                    ble_config, rng, contention_counts, airtime_left, received,
+                ):
+                    sent.append(node_id)
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
@@ -454,4 +456,4 @@ def network_engine(
                 backed_off=backed_off,
             )
         if broadcasts:
-            routing_algorithm.on_control_received(now, received)
+            routing_algorithm.on_control_received(now, received, sent)

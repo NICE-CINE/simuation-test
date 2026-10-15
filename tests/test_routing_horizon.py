@@ -41,7 +41,7 @@ def _tick(algo, now, links, lost=()):
         for n in links.get(sender_id, ()):
             if (sender_id, n.id) not in lost:
                 received.setdefault(n.id, []).append(sender_id)
-    algo.on_control_received(now, received)
+    algo.on_control_received(now, received, list(sizes))
     return sizes
 
 
@@ -197,3 +197,20 @@ def test_node_back_from_a_gap_does_not_announce_twice_in_a_row():
     _settle(algo, away, start=15, until=24)
     times = [t for t in range(24, 40) if 3 in _tick(algo, float(t), links)]
     assert all(b - a >= 5 for a, b in zip(times, times[1:]))
+
+
+def test_stats_count_only_announces_that_went_out():
+    algo = HorizonRouting(announce_entry_bytes=5)
+    nodes, links = _line(algo)
+    algo.on_tick(0.0, links)
+    sizes = {}
+    t = 0.0
+    while not sizes:
+        t += 1.0
+        algo.on_tick(t, links)
+        sizes = algo.control_broadcasts(t)
+    first = next(iter(sizes))
+    algo.on_control_received(t, {}, [])
+    assert algo.stats["announces_sent"] == 0
+    algo.on_control_received(t, {}, [first])
+    assert algo.stats["announces_sent"] == 1 and algo.stats["announce_bytes"] == sizes[first]

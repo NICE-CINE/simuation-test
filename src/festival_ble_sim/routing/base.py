@@ -46,9 +46,10 @@ class RoutingAlgorithm(ABC):
         # airtime budget, loss and tx/rx energy as data.
         return {}
 
-    def on_control_received(self, now: float, received: Dict[int, List[int]]) -> None:
+    def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:
         # {receiver_id: [sender_ids]} whose control_broadcasts got through,
-        # once per tick after all data has been sent.
+        # and the senders whose broadcast actually went out (not backed off,
+        # within airtime), once per tick after all data has been sent.
         pass
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:

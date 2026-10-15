@@ -97,11 +97,11 @@ class HorizonRouting(FreshSprayRouting):
             self._vectors[node_id] = {dst: (hops, via[dst]) for dst, hops in nearest}
             sizes[node_id] = len(nearest) * self._entry_bytes
         self._sizes = sizes
-        self.stats["announces_sent"] += len(sizes)
-        self.stats["announce_bytes"] += sum(sizes.values())
         return sizes
 
-    def on_control_received(self, now: float, received: Dict[int, List[int]]) -> None:
+    def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:
+        self.stats["announces_sent"] += len(sent)
+        self.stats["announce_bytes"] += sum(self._sizes[node_id] for node_id in sent)
         for node_id, senders in received.items():
             heard = self._heard.setdefault(node_id, {})
             reachable = {n.id for n in self._neighbors.get(node_id, ())}
