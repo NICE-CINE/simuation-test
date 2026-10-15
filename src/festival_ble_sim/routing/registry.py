@@ -11,6 +11,7 @@ from .epidemic import EpidemicRouting
 from .fresh_spray import FreshSprayRouting
 from .geo_spray_focus import GeoSprayFocusRouting
 from .gossip_a import GossipARouting
+from .horizon import HorizonRouting
 from .managed_flood import ManagedFloodRouting
 from .prophet import ProphetRouting
 from .spray_and_wait import SprayAndWaitRouting
@@ -37,6 +38,7 @@ _FACTORIES: Dict[str, Callable[[int, int], RoutingAlgorithm]] = {
     "eco_sf": lambda seed, copies: EcoSfRouting(seed=seed),
     "band_fanout": lambda seed, copies: BandFanoutRouting(seed=seed),
     "bitchat": lambda seed, copies: BitchatRouting(),
+    "horizon": lambda seed, copies: HorizonRouting(),
 }
 
 ROUTING_NAMES: Tuple[str, ...] = tuple(_FACTORIES)

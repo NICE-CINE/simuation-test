@@ -25,7 +25,7 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
 
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
-  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf`, `band_fanout` ou `bitchat` (un seul choix a la fois, pas de `|`).
+  `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf`, `band_fanout`, `bitchat` ou `horizon` (un seul choix a la fois, pas de `|`).
   `band_fanout` n'a pas d'option dediee : `main.py` le lance avec ses
   defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
   `--seed` pour le tirage des relais ; pour faire varier ses parametres,
@@ -73,7 +73,7 @@ Options disponibles :
         [--random-charge]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 
@@ -528,6 +528,19 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   vers le reseau de bornes + purge globale des messages livres. Vise a la
   fois livraison, latence et energie ; details dans
   `docs/algorithmes/fresh_spray.md`.
+- `horizon` (`routing/horizon.py`) — `fresh_spray` + champ de distances
+  en sauts : toutes les 5 s, a sa propre phase, chaque noeud diffuse son
+  vecteur de distances (destinations a `horizon_hops` = 5 sauts ou moins),
+  reconstruit a partir du dernier vecteur entendu de chaque voisin depuis
+  moins de 15 s, avec split horizon (chaque entree porte le prochain saut)
+  et plafonnes a 1650 octets ; les vecteurs passent par la radio du moteur
+  comme des messages (backoff, temps d'antenne, pertes, energie), et ceux
+  d'un emetteur injoignable (borne de plus grande portee) sont ignores. Une copie dont le
+  porteur a un voisin plus proche du destinataire lui est passee (tirage,
+  un saut par tick) si le TTL de sauts restant suffit ; hors tirage, une
+  copie a `hops >= ttl_hops - horizon_hops` ne se replique plus (reserve
+  pour le tirage) ; `select_links` donne les liaisons aux prochains sauts
+  d'abord. Spec dans `docs/algorithmes/specs/HORIZON.md`.
 - `geo_spray_focus` (`routing/geo_spray_focus.py`) — GSF, Spray-and-Focus
   autonome guide par la derniere position connue du destinataire : budget
   de 2 a 12 copies selon l'aire d'incertitude de l'indice, spray refuse a

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import math
-from typing import Dict, List, Set, Tuple, TYPE_CHECKING
+from typing import Dict, List, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .nodes import BaseNode
@@ -13,7 +13,10 @@ class SpatialGrid:
         self.cell_size_m = cell_size_m
         self._cols = max(1, math.ceil(width_m / cell_size_m))
         self._rows = max(1, math.ceil(height_m / cell_size_m))
-        self._cells: Dict[Tuple[int, int], Set["BaseNode"]] = {}
+        # Dicts as ordered sets: a set of nodes iterates in id()-hash order,
+        # i.e. memory layout, which made neighbor order (and bitchat's
+        # first-arrival BFS) differ between runs with the same seed.
+        self._cells: Dict[Tuple[int, int], Dict["BaseNode", None]] = {}
 
     def _cell_of(self, x: float, y: float) -> Tuple[int, int]:
         col = min(max(int(x // self.cell_size_m), 0), self._cols - 1)
@@ -22,7 +25,7 @@ class SpatialGrid:
 
     def insert(self, node: "BaseNode") -> None:
         cell = self._cell_of(node.position.x, node.position.y)
-        self._cells.setdefault(cell, set()).add(node)
+        self._cells.setdefault(cell, {})[node] = None
 
     def update(self, node: "BaseNode", old_x: float, old_y: float) -> None:
         old_cell = self._cell_of(old_x, old_y)
@@ -30,8 +33,8 @@ class SpatialGrid:
         if old_cell == new_cell:
             return
         if old_cell in self._cells:
-            self._cells[old_cell].discard(node)
-        self._cells.setdefault(new_cell, set()).add(node)
+            self._cells[old_cell].pop(node, None)
+        self._cells.setdefault(new_cell, {})[node] = None
 
     def get_nearby(self, node: "BaseNode", radius_m: float) -> List["BaseNode"]:
         cx, cy = self._cell_of(node.position.x, node.position.y)
