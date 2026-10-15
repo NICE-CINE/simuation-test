@@ -54,9 +54,10 @@ def _active_nearby(node: BaseNode, grid: SpatialGrid) -> List[BaseNode]:
     # up as encounters in every algorithm's on_tick. Range is mutual: every
     # BLE packet is acknowledged by the other side, so a beacon can't reach a
     # phone that can't answer it.
+    r = node.radio_range_m
     return [
-        n for n in grid.get_nearby(node, node.radio_range_m)
-        if n.is_active and node.position.distance_squared_to(n.position) <= n.radio_range_m * n.radio_range_m
+        n for n in grid.get_nearby(node, r)
+        if n.is_active and (n.radio_range_m >= r or node.position.distance_squared_to(n.position) <= n.radio_range_m ** 2)
     ]
 
 
