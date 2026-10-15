@@ -75,6 +75,7 @@ def _update_connections(
     routing_algorithm: RoutingAlgorithm,
     ble_config: BleConfig,
     connections: Dict[Tuple[int, int], _Connection],
+    energy_model: Optional[EnergyModel] = None,
 ) -> Dict[int, List[BaseNode]]:
     # connections: (low id, high id) -> _Connection, kept across
     # ticks. A pair must stay in range connection_setup_s before it can carry
@@ -113,6 +114,9 @@ def _update_connections(
             connections[(min(node_id, contact.id), max(node_id, contact.id))] = _Connection(
                 now + ble_config.connection_setup_s
             )
+            if energy_model is not None:
+                node.consume_energy(energy_model.connection_setup_cost())
+                contact.consume_energy(energy_model.connection_setup_cost())
             taken.append(contact.id)
             partners.setdefault(contact.id, []).append(node_id)
     links: Dict[int, List[BaseNode]] = {}
@@ -585,9 +589,17 @@ def network_engine(
         if rng is not None:
             rng.shuffle(order)
         links = (
-            _update_connections(now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections)
+            _update_connections(
+                now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections, energy_model,
+            )
             if neighbors_by_node is not None else None
         )
+        if links is not None:
+            for node_id, node_links in links.items():
+                if len(node_links) > 1:
+                    nodes[node_id].consume_energy(
+                        energy_model.connection_holding_cost(len(node_links), contact_check_interval_s)
+                    )
         if links is not None:
             for (a_id, b_id), conn in connections.items():
                 if conn.ready_at <= now:

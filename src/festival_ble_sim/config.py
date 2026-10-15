@@ -202,6 +202,13 @@ class EnergyConfig:
     # overhead measured 13 Oct over screen off, mean of both phones and three
     # app screens; the 20 % share is an estimate). 0 = count only the mesh.
     phone_current_ma: float = 82.0
+    # Opening a connection: ~7 s of discovery (BleConfig.connection_setup_s)
+    # at the measured "BLE advertising + scan" overhead (+18 / +11 mA, mean
+    # 14.5), on both phones.
+    connection_setup_mah: float = 7.0 * 14.5 / 3600.0
+    # Each connection held beyond the first, per phone (background_current_ma
+    # was measured with one): estimated, not measured.
+    extra_connection_current_ma: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -284,6 +291,8 @@ class SimulationConfig:
             raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")
         if self.energy.background_current_ma < 0 or self.energy.phone_current_ma < 0:
             raise ValueError("background_current_ma and phone_current_ma must be >= 0")
+        if self.energy.connection_setup_mah < 0 or self.energy.extra_connection_current_ma < 0:
+            raise ValueError("connection_setup_mah and extra_connection_current_ma must be >= 0")
         if self.energy.battery_capacity_mah <= 0:
             raise ValueError("battery_capacity_mah must be positive")
         if not self.energy.initial_charge_bins:

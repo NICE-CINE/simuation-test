@@ -1,4 +1,5 @@
 import random
+import pytest
 from festival_ble_sim.config import BleConfig, EnergyConfig
 from festival_ble_sim.energy import EnergyModel
 from festival_ble_sim.metrics import MetricsCollector
@@ -257,3 +258,26 @@ def test_weak_signal_near_edge_of_range_costs_more_resends_than_close_contact():
         return total / trials
 
     assert _resent(1.0, 200) < 0.1 < _resent(29.5, 200)
+
+
+def test_opening_and_holding_connections_cost_energy():
+    import simpy
+    from festival_ble_sim.network import network_engine
+    a, b, c = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0), _node(3, 0.0, 5.0)
+    for i, node in enumerate((a, b, c)):
+        node.store_message(Message(msg_id=i + 1, src_id=node.id, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=1e6))
+    nodes = {1: a, 2: b, 3: c}
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in nodes.values():
+        grid.insert(n)
+    energy = EnergyModel(EnergyConfig(
+        tx_cost_mah_per_event=0.0, tx_cost_mah_per_byte=0.0, rx_cost_mah_per_event=0.0, rx_cost_mah_per_byte=0.0,
+        connection_setup_mah=1.0, extra_connection_current_ma=3600.0,
+    ))
+    env = simpy.Environment()
+    ble = BleConfig(connection_setup_s=0.0, connection_idle_timeout_s=1e6, summary_id_bytes=0)
+    env.process(network_engine(env, nodes, grid, EpidemicRouting(), energy, MetricsCollector(), 1.0, ble_config=ble))
+    env.run(until=1.5)
+    # A triangle: two connections per node, each opened once (1 mAh per end)
+    # and the second one held for a 1 s tick at 3600 mA (1 mAh).
+    assert [n.energy_consumed_mah for n in (a, b, c)] == pytest.approx([3.0, 3.0, 3.0])

@@ -31,7 +31,8 @@ def _msg(msg_id=1, src_id=1, dst_id=99, hops=0, ttl_hops=None):
 
 def _energy_model():
     return EnergyModel(
-        EnergyConfig(tx_cost_mah_per_event=0.0, tx_cost_mah_per_byte=0.0, rx_cost_mah_per_event=0.0, rx_cost_mah_per_byte=0.0)
+        EnergyConfig(tx_cost_mah_per_event=0.0, tx_cost_mah_per_byte=0.0, rx_cost_mah_per_event=0.0, rx_cost_mah_per_byte=0.0,
+                     connection_setup_mah=0.0, extra_connection_current_ma=0.0)
     )
 
 
