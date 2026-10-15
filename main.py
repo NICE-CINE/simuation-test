@@ -15,8 +15,8 @@ from festival_ble_sim.config import (
 )
 from festival_ble_sim.metrics import format_report
 from festival_ble_sim.presets import (
-    DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site,
-    energy_config, mobility_factory, resolve_cli_args,
+    DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_social_arguments,
+    build_site, energy_config, mobility_factory, resolve_cli_args, social_config,
 )
 from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
@@ -79,6 +79,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
     add_random_charge_argument(parser)
+    add_social_arguments(parser)
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -113,6 +114,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=args.gps_fix_failure),
         energy=energy_config(args.random_charge),
+        social=social_config(args.no_outside_friends),
     )
 
 

@@ -185,6 +185,10 @@ class SocialConfig:
     # Friend groups (the QR-code graph) shared by traffic and bubble_f.
     group_size_range: Tuple[int, int] = (2, 8)
     no_friend_fraction: float = 0.2
+    # Friends who came separately: each group member also gets up to this
+    # many friends from other groups (estimate), who don't walk with them.
+    # (0, 0) = friends are exactly the group.
+    outside_friends_range: Tuple[int, int] = (0, 2)
 
 
 @dataclass(frozen=True)
@@ -359,6 +363,9 @@ class SimulationConfig:
             raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
         if not (0.0 <= self.social.no_friend_fraction <= 1.0):
             raise ValueError("no_friend_fraction must be within [0, 1]")
+        outside_lo, outside_hi = self.social.outside_friends_range
+        if not 0 <= outside_lo <= outside_hi:
+            raise ValueError("outside_friends_range must satisfy 0 <= lo <= hi")
         group = self.mobility.group
         if group.radius_m < 0 or group.visual_range_m <= 0 or group.rendezvous_max_wait_s < 0:
             raise ValueError("group radius_m and rendezvous_max_wait_s must be >= 0, visual_range_m > 0")

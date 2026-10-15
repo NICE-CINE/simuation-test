@@ -54,18 +54,21 @@ les groupes tires).
 On n'ecrit pas a un ami qu'on voit : au moment d'un envoi, les amis a
 moins de `TrafficConfig.skip_friends_within_m` (15 m, position reelle)
 sont ecartes, le destinataire est tire parmi les autres, et s'il n'en
-reste aucun l'envoi est **annule** (pas reporte). Les amis etant les
-membres du groupe (`social.assign_friend_groups` fait des groupes
-disjoints, et ce sont eux qui se deplacent ensemble) :
+reste aucun l'envoi est **annule** (pas reporte). Les amis sont le groupe
+(`social.assign_friend_groups`, groupes disjoints, ceux qui se deplacent
+ensemble) plus 0 a 2 **amis venus a part** tires dans d'autres groupes
+(`SocialConfig.outside_friends_range`, `social.add_outside_friends` ;
+`--no-outside-friends` les retire) :
 
-- tant que tout le groupe est reuni, personne n'ecrit ;
-- les messages naissent d'une **separation** : le membre parti ecrit au
-  groupe, ou le groupe ecrit au membre parti (sortie, retour au
+- tant que tout le groupe est reuni, on n'ecrit qu'a ses amis venus a
+  part, ailleurs sur le site, qu'on n'a parfois pas vus de la journee ;
+- les autres messages naissent d'une **separation** : le membre parti
+  ecrit au groupe, ou le groupe ecrit au membre parti (sortie, retour au
   rendez-vous, recherche) ;
-- a taux personnel egal (`messages_per_hour_range`), beaucoup moins de
-  messages sont crees qu'avec `poi`, ou les amis sont disperses et le
-  filtre n'ecarte presque personne. Le taux reel depend donc de
-  `GroupConfig` (frequence et duree des sorties).
+- a taux personnel egal (`messages_per_hour_range`), moins de messages
+  sont crees qu'avec `poi`, ou les amis sont disperses et le filtre
+  n'ecarte presque personne. Le taux reel depend donc de `GroupConfig`
+  (frequence et duree des sorties) et du nombre d'amis venus a part.
 
 Les reponses (`--reply-probability`) et relances (`--followup-probability`)
 ne repassent pas par ce filtre : elles partent meme si le destinataire est
@@ -105,10 +108,9 @@ flowchart TD
   reseau (voir "Effet sur le trafic").
 - Le groupe entier suit le meneur au rendez-vous ; dans la realite le
   groupe peut aussi se scinder.
-- Tous les amis d'une personne sont dans son groupe : personne n'a d'ami
-  venu separement, a l'autre bout du site depuis le debut. Les
-  destinataires sont donc toujours un membre parti ou un groupe a un
-  rendez-vous connu, jamais un ami qu'on n'a pas vu de la journee.
+- Le nombre d'amis venus a part (0 a 2) est estime, et ils sont tires au
+  hasard sur tout le site : rien ne rapproche deux groupes qui se
+  connaissent.
 
 ## References
 

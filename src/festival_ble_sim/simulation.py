@@ -16,7 +16,7 @@ from .nodes import BaseNode, BeaconNode, MobileNode
 from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
-from .social import assign_friend_groups
+from .social import add_outside_friends, assign_friend_groups
 from .spatial import SpatialGrid
 from .traffic import reply_process, traffic_process
 from .viz.history import SimulationHistory
@@ -168,11 +168,12 @@ def run_simulation(
             env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng, followup_rng
         )))
 
-    friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
+    groups = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
+    friends = add_outside_friends(groups, config.social, random.Random(f"{config.random_seed}-outside-friends"))
     gps_rng = random.Random(rng.randrange(1 << 30))
     for node_id, mobile in mobile_nodes.items():
-        if node_id in friends:
-            members = [mobile_nodes[i] for i in sorted(friends[node_id] | {node_id})]
+        if node_id in groups:
+            members = [mobile_nodes[i] for i in sorted(groups[node_id] | {node_id})]
             start = mobile.mobility.join_group(mobile, members)
             if start is not None:
                 old_x, old_y = mobile.position.x, mobile.position.y

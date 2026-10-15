@@ -3,7 +3,7 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
-from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest
+from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest, SocialConfig
 from .mobility.base import MobilityModel
 from .mobility.group import GroupMobility
 from .mobility.poi import PoiMobility, default_festival_pois
@@ -46,6 +46,17 @@ def add_random_charge_argument(parser: Any) -> None:
 
 def energy_config(random_charge: bool) -> EnergyConfig:
     return EnergyConfig(initial_charge_bins=FESTIVAL_CHARGE_BINS) if random_charge else EnergyConfig()
+
+
+def add_social_arguments(parser: Any) -> None:
+    parser.add_argument(
+        "--no-outside-friends", action="store_true",
+        help="Pas d'amis hors du groupe : les amis sont exactement le groupe (par defaut chacun a aussi 0 a 2 amis venus a part)",
+    )
+
+
+def social_config(no_outside_friends: bool) -> SocialConfig:
+    return SocialConfig(outside_friends_range=(0, 0)) if no_outside_friends else SocialConfig()
 
 
 # Layout of mobility.poi.default_festival_pois: (x/w, y/h, weight).

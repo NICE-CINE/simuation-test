@@ -23,7 +23,8 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   `extra_connection_current_ma`), fermeture d'une connexion inactive
   (`connection_idle_timeout_s`), taille des annonces bitchat et des
   beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
-  rendez-vous, distance a laquelle on reconnait son groupe).
+  rendez-vous, distance a laquelle on reconnait son groupe), le nombre
+  d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2).
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
   d'un voisin dans `on_tick` avant toute connexion ; les tables des
@@ -99,6 +100,8 @@ Options disponibles :
 - `--random-charge` : charge de depart tiree par telephone (graine du run)
   au lieu de 100 % : 50 % des gens entre 80 et 100 %, 30 % entre 50 et 80,
   12 % entre 30 et 50, 8 % entre 5 et 30 (voir `docs/energie/consommation.md`)
+- `--no-outside-friends` : pas d'amis venus a part, les amis sont
+  exactement le groupe (voir "Destinataire : un ami" plus bas)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -107,7 +110,7 @@ Options disponibles :
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
-        [--random-charge]
+        [--random-charge] [--no-outside-friends]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
@@ -199,14 +202,20 @@ selon `SimulationConfig.social` :
   (`no_friend_fraction`) et **n'envoient rien** ;
 - les autres sont repartis en groupes disjoints de 2 a 8 personnes
   (`group_size_range`), ou tout le monde est ami avec tout le monde ;
+- chaque membre d'un groupe a aussi 0 a 2 **amis venus a part**, tires
+  dans d'autres groupes (`outside_friends_range`, `social.add_outside_friends`,
+  RNG a part `f"{seed}-outside-friends"`) : ils ne se deplacent pas avec
+  lui, et ce sont souvent les messages les plus durs a livrer.
+  `--no-outside-friends` (`main.py`, `compare_algorithms.py`) les retire ;
 - a chaque envoi, le destinataire est un ami actif tire au hasard parmi
   ceux a plus de 15 m (`skip_friends_within_m` : on n'ecrit pas a un ami
   qu'on voit) ; envoi annule si aucun ne reste.
 
-Le meme graphe sert a `bubble_f` et, avec `--mobility group` (defaut de
-`--size`), aux groupes qui se deplacent ensemble : les messages naissent
-alors des separations, et bien moins de messages sont crees qu'avec `poi`
-(voir `docs/mobilite/group.md`). Avec `random_waypoint` et `poi`, la
+Le meme graphe sert a `bubble_f`. Avec `--mobility group` (defaut de
+`--size`), les groupes (sans les amis venus a part) se deplacent
+ensemble : les messages vont aux amis venus a part ou naissent des
+separations, et bien moins de messages sont crees qu'avec `poi` (voir
+`docs/mobilite/group.md`). Avec `random_waypoint` et `poi`, la
 mobilite ignore le graphe. `friends_only=False` revient a un
 destinataire tire parmi tous les festivaliers actifs.
 

@@ -14,7 +14,8 @@ from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, T
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import (
-    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site, energy_config, resolve_cli_args,
+    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_social_arguments, build_site,
+    energy_config, resolve_cli_args, social_config,
 )
 from festival_ble_sim.progress import MINI_BAR_WIDTH, format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
@@ -94,6 +95,7 @@ def build_config(
     cooldown_s: Optional[float] = None,
     random_charge: bool = False,
     warmup_s: Optional[float] = None,
+    no_outside_friends: bool = False,
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     traffic = TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability)
@@ -110,6 +112,7 @@ def build_config(
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
         energy=energy_config(random_charge),
+        social=social_config(no_outside_friends),
     )
 
 
@@ -138,11 +141,12 @@ def _run_one(
     cooldown_s: Optional[float] = None,
     random_charge: bool = False,
     warmup_s: Optional[float] = None,
+    no_outside_friends: bool = False,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s,
+        followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
     )
     total_s = config.total_s
     label = run_label(algo_name, beacon_count, seed)
@@ -183,6 +187,7 @@ def run_matrix(
     algorithms: Optional[List[str]] = None,
     random_charge: bool = False,
     warmup_s: Optional[float] = None,
+    no_outside_friends: bool = False,
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
@@ -196,7 +201,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s,
+                followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
             ): index
             for index, (algo_name, count, seed) in enumerate(tasks)
         }
@@ -305,6 +310,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
     )
     add_random_charge_argument(parser)
+    add_social_arguments(parser)
     parser.add_argument(
         "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
         help="Sous-ensemble d'algos a lancer (defaut : tous)",
@@ -330,7 +336,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         build_config(
             args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
             args.followup_probability, args.gps_fix_failure, args.size, args.cooldown, args.random_charge,
-            args.warmup,
+            args.warmup, args.no_outside_friends,
         ),
     )
     rows = run_matrix(
@@ -350,6 +356,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         algorithms=args.algorithms,
         random_charge=args.random_charge,
         warmup_s=args.warmup,
+        no_outside_friends=args.no_outside_friends,
     )
     write_csv(rows, archive_csv)
     if args.csv:
