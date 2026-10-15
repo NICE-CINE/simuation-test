@@ -18,13 +18,6 @@ Mesure sur `fresh_spray` (500 festivaliers, mobilité `poi`, 6 bornes, réponses
 
 La foule forme une composante géante (60 % des destinataires y sont reliés à la source) dont les chemins font jusqu'à 20 sauts et plus. Même à 8 sauts ou moins, la livraison prend une demi-minute au lieu de quelques secondes. Aucun algorithme existant n'exploite cette topologie comme un gradient : les îlots de `tide` et de `geo_spray_focus` ont un rayon d'un saut, `bitchat` n'en tire qu'un booléen « joignable » qui déclenche une inondation.
 
----|---|---|---|
-| destinataire à 8 sauts ou moins | 11–12 % | 98,5 % | 23–30 s |
-| même composante, plus de 8 sauts | ~31 % | 91–93 % | ~240 s |
-| autre composante | ~57 % | 83–85 % | 460–495 s |
-
-La foule forme une composante géante dont les chemins font typiquement 10 à 25 sauts. Aucun algorithme existant n'exploite cette topologie comme un gradient : les îlots de `tide` et de `geo_spray_focus` ont un rayon d'un saut, `bitchat` n'en tire qu'un booléen « joignable » qui déclenche une inondation.
-
 ---
 
 ## 2. Origine
