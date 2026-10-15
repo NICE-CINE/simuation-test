@@ -30,9 +30,10 @@ class BandFanoutRouting(RoutingAlgorithm):
         self._fanout = fanout
         self._max_hops = max_hops
         self._band = band
-        self._purge_delivered = purge_delivered
+        # Delivery acks spread by the engine purge copies; off = copies live
+        # until their TTL.
+        self.uses_delivery_acks = purge_delivered
         self._rng = random.Random(seed)
-        self._delivered: Set[int] = set()
         self._nodes: Dict[int, "BaseNode"] = {}
         self._selected: Dict[int, Set[int]] = {}
         # Relays already spent per (holder, message), not stored in routing_state:
@@ -49,8 +50,6 @@ class BandFanoutRouting(RoutingAlgorithm):
             node = self._nodes.get(node_id)
             if node is None:
                 continue
-            for msg_id in self._delivered.intersection(node.buffer):
-                del node.buffer[msg_id]
             spent = self._relayed.get(node_id)
             if spent:
                 for msg_id in [m for m in spent if m not in node.buffer]:
@@ -104,7 +103,7 @@ class BandFanoutRouting(RoutingAlgorithm):
         return (destinations + chosen + others)[:max_links]
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered or contact.has_message(message.msg_id):
+        if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
         if not self._can_relay(message, holder.id):
             return RoutingDecision.IGNORE
@@ -116,8 +115,3 @@ class BandFanoutRouting(RoutingAlgorithm):
         spent = self._relayed.setdefault(holder.id, {})
         spent[message.msg_id] = spent.get(message.msg_id, 0) + 1
         self._relayed.get(contact.id, {}).pop(message.msg_id, None)
-
-    def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        if self._purge_delivered:
-            self._delivered.add(message.msg_id)
-            holder.buffer.pop(message.msg_id, None)

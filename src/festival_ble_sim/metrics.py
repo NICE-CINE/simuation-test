@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from .models import Message
 
 
@@ -19,9 +19,11 @@ class SimulationReport:
     avg_energy_consumed_mah: float
     dead_node_count: int
     buffer_eviction_count: int = 0
+    # Connectionless control broadcast receptions lost (data on a
+    # connection is resent instead, see retransmitted_bytes).
     packet_loss_count: int = 0
     backhaul_transmissions: int = 0
-    backoff_count: int = 0
+    retransmitted_bytes: float = 0.0
     backhaul_loss_count: int = 0
     replies_created: int = 0
     replies_delivered: int = 0
@@ -30,6 +32,16 @@ class SimulationReport:
     # extras, without EnergyConfig.phone_current_ma (identical for every algorithm).
     total_mesh_energy_consumed_mah: float = 0.0
     avg_mesh_energy_consumed_mah: float = 0.0
+    # Bytes put on the air: data (resends included) of measured messages;
+    # summaries, acks, algorithm tables and control broadcasts sent before
+    # the end of the measured window. overhead_bytes = all of it per
+    # delivered message, the airtime cost to compare algorithms on.
+    data_bytes: float = 0.0
+    summary_bytes: float = 0.0
+    ack_bytes: float = 0.0
+    table_bytes: float = 0.0
+    control_bytes: float = 0.0
+    overhead_bytes: float = 0.0
 
 
 @dataclass
@@ -52,7 +64,10 @@ class MetricsCollector:
         self._total_transmissions = 0
         self._packet_loss_count = 0
         self._backhaul_transmissions = 0
-        self._backoff_count = 0
+        self._retransmitted_bytes = 0.0
+        self._attempts = 0.0
+        self._data_bytes = 0.0
+        self._overhead_bytes: Dict[str, float] = {"summary": 0.0, "ack": 0.0, "table": 0.0, "control": 0.0}
         self._backhaul_loss_count = 0
 
     def _measured(self, message: Optional[Message]) -> bool:
@@ -66,9 +81,21 @@ class MetricsCollector:
         else:
             self._messages_created += 1
 
-    def record_transmission(self, message: Optional[Message] = None) -> None:
-        if self._measured(message):
-            self._total_transmissions += 1
+    def record_transmission(self, message: Optional[Message] = None, airtime: Optional[float] = None) -> None:
+        # airtime: bytes on the air for this copy, resends included.
+        if not self._measured(message):
+            return
+        self._total_transmissions += 1
+        if message is None or airtime is None:
+            self._attempts += 1.0
+            return
+        self._attempts += airtime / message.size_bytes
+        self._data_bytes += airtime
+        self._retransmitted_bytes += airtime - message.size_bytes
+
+    def record_overhead_bytes(self, kind: str, nbytes: float, now: float) -> None:
+        if self._measure_until is None or now < self._measure_until:
+            self._overhead_bytes[kind] += nbytes
 
     def record_packet_loss(self, message: Optional[Message] = None) -> None:
         if self._measured(message):
@@ -77,9 +104,6 @@ class MetricsCollector:
     def record_backhaul_transmission(self, message: Optional[Message] = None) -> None:
         if self._measured(message):
             self._backhaul_transmissions += 1
-
-    def record_backoff(self) -> None:
-        self._backoff_count += 1
 
     def record_backhaul_loss(self, message: Optional[Message] = None) -> None:
         if self._measured(message):
@@ -111,9 +135,11 @@ class MetricsCollector:
         p95_latency = latencies[math.ceil(0.95 * delivered) - 1] if delivered else 0.0
         avg_hops = sum(d.hops for d in spontaneous) / delivered if delivered else 0.0
         # Extra transmissions per delivered message, as in The ONE: a
-        # single-hop delivery with no other copy scores 0.
+        # single-hop delivery with no other copy scores 0. Counted in
+        # attempts, so resends on a lossy link count too.
         all_delivered = len(self._deliveries)
-        overhead = (self._total_transmissions - all_delivered) / all_delivered if all_delivered else 0.0
+        overhead = (self._attempts - all_delivered) / all_delivered if all_delivered else 0.0
+        all_bytes = self._data_bytes + sum(self._overhead_bytes.values())
         total_energy = sum(node_energy_consumed_mah)
         avg_energy = total_energy / len(node_energy_consumed_mah) if node_energy_consumed_mah else 0.0
         mesh = node_mesh_energy_consumed_mah or []
@@ -133,13 +159,19 @@ class MetricsCollector:
             buffer_eviction_count=buffer_eviction_count,
             packet_loss_count=self._packet_loss_count,
             backhaul_transmissions=self._backhaul_transmissions,
-            backoff_count=self._backoff_count,
+            retransmitted_bytes=self._retransmitted_bytes,
             backhaul_loss_count=self._backhaul_loss_count,
             replies_created=self._replies_created,
             replies_delivered=replies_delivered,
             reply_delivery_ratio=replies_delivered / self._replies_created if self._replies_created else 0.0,
             total_mesh_energy_consumed_mah=total_mesh,
             avg_mesh_energy_consumed_mah=total_mesh / len(mesh) if mesh else 0.0,
+            data_bytes=self._data_bytes,
+            summary_bytes=self._overhead_bytes["summary"],
+            ack_bytes=self._overhead_bytes["ack"],
+            table_bytes=self._overhead_bytes["table"],
+            control_bytes=self._overhead_bytes["control"],
+            overhead_bytes=all_bytes / all_delivered if all_delivered else 0.0,
         )
 
 
@@ -158,14 +190,17 @@ def format_report(report: SimulationReport) -> str:
         f" ({report.reply_delivery_ratio * 100:.2f} %)\n"
         f"Surcharge (overhead)      : {report.overhead:.2f}\n"
         f"Transmissions totales     : {report.total_transmissions}\n"
+        f"Octets emis / livre       : {report.overhead_bytes:.0f}\n"
+        f"  donnees / resumes / ACK : {report.data_bytes:.0f} / {report.summary_bytes:.0f} / {report.ack_bytes:.0f}\n"
+        f"  tables / controle       : {report.table_bytes:.0f} / {report.control_bytes:.0f}\n"
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
         f"  dont mesh (totale / moy): {report.total_mesh_energy_consumed_mah:.2f} / {report.avg_mesh_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
         f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
-        f"Paquets perdus (radio)    : {report.packet_loss_count}\n"
+        f"Annonces perdues (radio)  : {report.packet_loss_count}\n"
         f"Transmissions backhaul    : {report.backhaul_transmissions}\n"
-        f"Backoffs (contention)     : {report.backoff_count}\n"
+        f"Octets retransmis (radio) : {report.retransmitted_bytes:.0f}\n"
         f"Paquets perdus (backhaul) : {report.backhaul_loss_count}\n"
         "===================================================================\n"
     )

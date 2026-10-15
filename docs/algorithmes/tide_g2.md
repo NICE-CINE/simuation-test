@@ -42,7 +42,7 @@ flowchart TD
     A -- non --> G
     G --> L["Livre a D"]
     T --> L
-    L --> P["Purge ; apres le trajet retour, la source recoit la position de D"]
+    L --> P["ACK propage ; quand il atteint la source, elle recoit la position de D"]
     P --> C
 ```
 
@@ -65,8 +65,8 @@ flowchart TD
 - Herite du cout GPS de TIDE-G : energie x2 a x2,3 par rapport a TIDE pour
   1 a 2 points de livraison.
 - Gain dependant de taux de reponses et de relances inconnus en festival.
-- Purge par ACK instantanee dans le moteur ; seule la position est
-  retardee.
+- L'ACK (20 octets avec la position) passe par le moteur : la source ne
+  recoit la position que si l'ACK l'atteint.
 - Pas encore mesure a la densite de reference (~11 400 personnes/km2).
 
 ## References

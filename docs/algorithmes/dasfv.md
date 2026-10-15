@@ -15,7 +15,7 @@ voir l'en-tete du fichier) :
   heuristique de *mule* (noeud mobile a fort renouvellement de contacts) ;
 - politique batterie : refus des pairs en batterie critique, evacuation
   acceleree depuis un porteur en batterie faible ;
-- purge reseau-large des copies une fois le message livre.
+- purge des copies par l'ACK du destinataire, propage par le moteur sur les connexions.
 
 ## Diagramme
 
@@ -29,7 +29,7 @@ Decision prise pour chaque message du porteur a chaque contact :
 ```mermaid
 flowchart TD
     A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
-    B -- oui --> L["Livraison (moteur) puis purge reseau-large"]
+    B -- oui --> L["Livraison (moteur) puis ACK propage"]
     B -- non --> P{"Message deja livre ?"}
     P -- oui --> X["Purge de la copie locale, IGNORE"]
     P -- non --> C{"Voisin a deja le message ?"}
@@ -60,8 +60,8 @@ flowchart TD
 
 - Beaucoup de parametres (une vingtaine) : calibration delicate, risque de
   sur-ajustement a un scenario.
-- Les vues exactes de l'instance partagee (densite, 2 sauts, purge
-  instantanee) sont optimistes par rapport a un vrai deploiement ou ces
+- Les vues exactes de l'instance partagee (densite, 2 sauts ; leur echange
+  est facture une fois par connexion) sont optimistes par rapport a un vrai deploiement ou ces
   informations transitent par des balises ou des filtres de Bloom.
 - Latence plus elevee que les approches par inondation.
 - L'economie porte surtout sur l'overhead, moins sur la consommation radio

@@ -1,10 +1,36 @@
 from __future__ import annotations
 import math
+import random
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest
-from .mobility.poi import default_festival_pois
+from .mobility.base import MobilityModel
+from .mobility.group import GroupMobility
+from .mobility.poi import PoiMobility, default_festival_pois
+from .mobility.random_waypoint import RandomWaypointMobility
 
+# --mobility choices. Each maps the run's MobilityConfig to one model per
+# node; "poi" and "group" get the festival POIs from build_site.
+MOBILITY_MODELS: Dict[str, Callable[..., MobilityModel]] = {
+    "random_waypoint": RandomWaypointMobility,
+    "poi": PoiMobility,
+    "group": GroupMobility,
+}
+POI_MOBILITIES = ("poi", "group")
+
+
+def mobility_factory(name: str, config: MobilityConfig) -> Callable[[random.Random], MobilityModel]:
+    model = MOBILITY_MODELS[name]
+    return lambda rng: model(config, rng=rng)
+
+
+# Warm-up default for the CLI: the longest pause, so the measured window
+# doesn't open on the whole crowd leaving its start position together.
+DEFAULT_WARMUP_S = MobilityConfig().pause_duration_range_s[1]
+WARMUP_HELP = (
+    "Secondes de mobilite seule avant --duration (pas de radio, de trafic ni d'energie), pour ne pas mesurer "
+    "le demarrage synchronise de la foule. Defaut : la pause la plus longue (2700 s) ; 0 = pas de chauffe"
+)
 DENSE_AREA_FRACTION = 0.15
 DENSE_POPULATION_SHARE = 0.70
 # --random-charge: (share of phones, lo, hi) of their battery capacity.
@@ -86,7 +112,7 @@ def resolve_cli_args(args: Any, default_num_festivaliers: int, error: Callable[[
             error(f"--size {args.size} fixe {preset_count} festivaliers, incompatible avec --num-festivaliers {args.num_festivaliers}")
         args.num_festivaliers = preset_count
         if args.mobility is None:
-            args.mobility = "poi"
+            args.mobility = "group"
     elif args.num_festivaliers is None:
         args.num_festivaliers = default_num_festivaliers
     if args.mobility is None:
@@ -98,8 +124,8 @@ def build_site(
 ) -> Tuple[int, AreaConfig, MobilityConfig]:
     if size is None:
         area = AreaConfig()
-        pois = default_festival_pois(area) if mobility == "poi" else ()
+        pois = default_festival_pois(area) if mobility in POI_MOBILITIES else ()
         return num_festivaliers, area, MobilityConfig(points_of_interest=pois)
     area = site_area(size)
-    mobility_config = crowd_mobility_config(area) if mobility == "poi" else MobilityConfig()
+    mobility_config = crowd_mobility_config(area) if mobility in POI_MOBILITIES else MobilityConfig()
     return SITE_PRESETS[size].num_festivaliers, area, mobility_config

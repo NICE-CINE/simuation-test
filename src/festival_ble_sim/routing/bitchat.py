@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
+import math
 from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingDecision
@@ -39,6 +40,15 @@ class BitchatRouting(ManagedFloodRouting):
     #   announce reaches it, every 10 min at most.
     # Acks are managed_flood's flooded acks (they also purge copies), relay
     # jitter is below the tick, full courier stores reject instead of evicting.
+    # Announces go over the radio: each round every node sends its own and
+    # relays every other one that reaches it, approximated by the size of
+    # its connected component (one BFS per round instead of one per origin),
+    # spread over the round and capped at the node's airtime, so a big
+    # crowd's announce flood crowds the data out. Who hears an announce is
+    # still the loss-free BFS of _announce_reach.
+    # bitchat itself relays over BLE GATT connections.
+    advertising_bearer = False
+
     def __init__(
         self,
         ttl: int = 7,
@@ -61,6 +71,9 @@ class BitchatRouting(ManagedFloodRouting):
         courier_verified_capacity: int = 20,
         courier_per_favorite_depositor: int = 5,
         courier_per_verified_depositor: int = 2,
+        # Header, sender id, nickname, Noise and signing keys, signature
+        # (estimated, not read off a capture).
+        announce_bytes: int = 150,
         **kwargs: Any,
     ) -> None:
         super().__init__(
@@ -87,6 +100,10 @@ class BitchatRouting(ManagedFloodRouting):
         self._courier_capacity = courier_capacity
         self._courier_verified_capacity = courier_verified_capacity
         self._per_depositor = {"favorite": courier_per_favorite_depositor, "verified": courier_per_verified_depositor}
+        self._announce_bytes = announce_bytes
+        self._airtime_bytes = math.inf
+        self._tick_s = 1.0
+        self._announce_load: Dict[int, float] = {}
 
         self._outbox: Dict[int, _Outbox] = {}
         # node -> msg_id -> spooled at, oldest first.
@@ -277,6 +294,32 @@ class BitchatRouting(ManagedFloodRouting):
         state.update(role="courier", copies=copies, sprayed=set(), giver=holder.id, tier=self._tier(holder, contact))
         self._carriers[(contact.id, forwarded_copy.msg_id)] = _NEVER
 
+    def on_ble_config(self, ble_config) -> None:
+        self._tick_s = ble_config.contact_check_interval_s
+        self._airtime_bytes = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+
+    def _component_sizes(self) -> Dict[int, int]:
+        sizes: Dict[int, int] = {}
+        for start in self._neighbors_by_node:
+            if start in sizes:
+                continue
+            component = [start]
+            seen = {start}
+            for node_id in component:
+                for n in self._neighbors_by_node.get(node_id, ()):
+                    if n.id not in seen:
+                        seen.add(n.id)
+                        component.append(n.id)
+            for node_id in component:
+                sizes[node_id] = len(component)
+        return sizes
+
+    def control_broadcasts(self, now: float) -> Dict[int, int]:
+        sizes = super().control_broadcasts(now)
+        for node_id, load in self._announce_load.items():
+            sizes[node_id] = int(min(self._airtime_bytes, sizes.get(node_id, 0) + load))
+        return sizes
+
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
         for node_id, msg_id in self._flush_now:
             self._nodes[node_id].buffer.pop(msg_id, None)
@@ -287,6 +330,8 @@ class BitchatRouting(ManagedFloodRouting):
         super().on_tick(now, neighbors_by_node)
         if now - self._last_announce >= self._announce_interval_s:
             self._last_announce = now
+            per_tick = self._announce_bytes * self._tick_s / self._announce_interval_s
+            self._announce_load = {node_id: size * per_tick for node_id, size in self._component_sizes().items()}
             self._announce_round(now)
         if now - self._last_maintenance >= self._maintenance_interval_s:
             self._last_maintenance = now

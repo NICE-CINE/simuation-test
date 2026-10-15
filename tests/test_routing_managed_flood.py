@@ -31,7 +31,8 @@ def _msg(msg_id=1, src_id=1, dst_id=99, hops=0, ttl_hops=None):
 
 def _energy_model():
     return EnergyModel(
-        EnergyConfig(tx_cost_mah_per_event=0.0, tx_cost_mah_per_byte=0.0, rx_cost_mah_per_event=0.0, rx_cost_mah_per_byte=0.0)
+        EnergyConfig(tx_cost_mah_per_event=0.0, tx_cost_mah_per_byte=0.0, rx_cost_mah_per_event=0.0, rx_cost_mah_per_byte=0.0,
+                     connection_setup_mah=0.0, extra_connection_current_ma=0.0)
     )
 
 
@@ -41,11 +42,8 @@ def _lossless_ble():
         reference_loss_db=40.0, receiver_sensitivity_dbm=-90.0, shadowing_std_db=0.0,
     )
     return BleConfig(
-        phone_radio=radio, beacon_radio=radio, max_concurrent_links=None,
-        packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0,
-        weak_signal_max_probability=0.0, packet_loss_max_probability=0.0,
-        relay_backoff_coefficient=0.0, relay_backoff_max_probability=0.0,
-        collision_loss_coefficient=0.0, collision_loss_max_probability=0.0,
+        phone_radio=radio, beacon_radio=radio, max_concurrent_links=None, connection_setup_s=0.0,
+        packet_loss_base_probability=0.0, weak_signal_max_probability=0.0,
     )
 
 
@@ -186,9 +184,24 @@ def test_ack_hops_cost_energy():
     )
     _run(nodes, algo, until=5.5)
     assert algo.knows_ack(1, 1)
-    # Data PDUs are free here (_energy_model is all zeros): ack hops 3->2->1.
-    assert [nodes[i].energy_consumed_mah for i in (1, 2, 3)] == [1.0, 2.0, 1.0]
+    # Data PDUs and broadcasts are free here (_energy_model is all zeros):
+    # only the destination's ack to the delivering holder (3->2) is charged
+    # by the algorithm, the relay 2->1 is a radio broadcast.
+    assert [nodes[i].energy_consumed_mah for i in (1, 2, 3)] == [0.0, 1.0, 1.0]
 
+
+def test_ack_relays_are_radio_broadcasts_that_can_be_lost():
+    nodes = _line(3)
+    algo = ManagedFloodRouting(relay_window_s=10.0, ack_size_bytes=16)
+    algo.on_simulation_start(nodes)
+    algo._learn_ack(2, 7, 1, 0.0)
+    algo.on_tick(1.0, {})
+    assert algo.control_broadcasts(1.0) == {2: 16}
+    algo.on_control_received(1.0, {}, [2])
+    assert not algo.knows_ack(1, 7)
+    algo.on_tick(2.0, {})
+    algo.on_control_received(2.0, {1: [2]}, [2])
+    assert algo.knows_ack(1, 7)
 
 def test_multi_hop_delivery_along_a_line_takes_one_tick_per_hop():
     nodes = _line(6)
@@ -218,10 +231,12 @@ def test_flood_is_storm_free_each_node_receives_exactly_once_then_goes_quiet():
     env, metrics = _engine(nodes, algo)
     env.run(until=15.5)
     assert all(algo.in_cache(i, 1) for i in nodes)
-    assert metrics.build_report([], 0).total_transmissions == len(nodes) - 1
+    # Advertising bearer: one broadcast per relaying node, never more.
+    sent = metrics.build_report([], 0).total_transmissions
+    assert sent <= len(nodes)
     assert all(not n.buffer for n in nodes.values())
     env.run(until=60.5)
-    assert metrics.build_report([], 0).total_transmissions == len(nodes) - 1
+    assert metrics.build_report([], 0).total_transmissions == sent
 
 
 def test_ack_floods_back_and_purges_copies_at_source():
@@ -259,3 +274,22 @@ def test_explicit_ack_energy_wins_over_the_simulation_one():
     algo = ManagedFloodRouting(energy=explicit)
     algo.on_energy_model(EnergyModel(EnergyConfig(tx_cost_mah_per_event=1.0)))
     assert algo._ack_tx_mah == pytest.approx(EnergyModel(explicit).cost_of_tx(16))
+
+
+def test_pdus_use_the_advertising_bearer_without_waiting_for_a_connection():
+    nodes = _line(3)
+    nodes[1].store_message(_msg(dst_id=3))
+    # A 60 s connection setup: a connectionless bearer must not care.
+    from dataclasses import replace as _replace
+    from festival_ble_sim.network import network_engine as _engine_fn
+    env = simpy.Environment()
+    grid = SpatialGrid(1000.0, 100.0, cell_size_m=20.0)
+    for node in nodes.values():
+        grid.insert(node)
+    metrics = MetricsCollector()
+    algo = ManagedFloodRouting(ttl=7)
+    algo.on_simulation_start(nodes)
+    env.process(_engine_fn(env, nodes, grid, algo, _energy_model(), metrics, contact_check_interval_s=1.0,
+                           ble_config=_replace(_lossless_ble(), connection_setup_s=60.0)))
+    env.run(until=2.5)
+    assert metrics.build_report([], 0).messages_delivered == 1

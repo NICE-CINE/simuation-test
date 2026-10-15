@@ -1,5 +1,41 @@
 # Festival BLE Mesh Simulator
 
+## TODO
+
+Limites connues du simulateur, a traiter dans cet ordre de priorite :
+
+- [ ] **Participation reelle** : tout le monde a l'app et elle tourne au
+  premier plan. A modeliser : taux d'adoption (une partie seulement des
+  festivaliers est un noeud, les autres ne font qu'attenuer le signal),
+  restrictions iOS en arriere-plan (deux iPhone en arriere-plan ne se
+  decouvrent pas), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
+  `docs/energie/consommation.md`).
+- [ ] **Radio** : la portee (30 m telephone, 60 m borne) n'est pas mesuree,
+  elle reprend d'anciens rayons fixes. A faire : mesurer RSSI/distance au
+  banc, ajouter une attenuation par les corps qui croit avec la densite de
+  la foule (l'exposant 2,7 est le meme a 3 m2/personne et sur un site
+  vide), un shadowing correle dans le temps et reciproque par paire (il est
+  tire independamment a chaque tick et par sens), et ne plus tronquer la
+  portee (un fading favorable ne prolonge jamais un lien au-dela du rayon
+  deterministe).
+- [ ] **Valeurs estimees a mesurer** : cout energetique d'une connexion et
+  de chaque connexion en plus (`connection_setup_mah`,
+  `extra_connection_current_ma`), fermeture d'une connexion inactive
+  (`connection_idle_timeout_s`), taille des annonces bitchat et des
+  beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
+  rendez-vous, distance a laquelle on reconnait son groupe).
+- [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
+  sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
+  d'un voisin dans `on_tick` avant toute connexion ; les tables des
+  algorithmes sont facturees une fois par connexion mais lues a jour
+  ensuite ; la joignabilite bitchat ignore les pertes de ses annonces.
+- [ ] **Validation** : comparer les durees de contact, les temps entre
+  contacts et le nombre de voisins a des traces reelles (Infocom/Haggle,
+  etudes de foule) ; rien n'est valide aujourd'hui.
+- [ ] **Resultats chiffres des pages `docs/algorithmes/`** : mesures
+  anterieures au recalage d'octobre 2026 (connexions, canal, ACK payes,
+  groupes, chauffe), a refaire.
+
 Simulateur SimPy de messagerie opportuniste (mesh MANET) via Bluetooth
 Low Energy entre les participants d'un festival.
 
@@ -30,13 +66,14 @@ Options disponibles :
   defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
   `--seed` pour le tirage des relais ; pour faire varier ses parametres,
   voir "Balayer les variantes de band_fanout"
-- `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
-  se repartissent entre scenes, bars et entree, voir plus bas)
+- `--mobility` : `random_waypoint` (defaut), `poi` (les festivaliers
+  se repartissent entre scenes, bars et entree, voir plus bas) ou `group`
+  (comme `poi`, mais les groupes d'amis se deplacent ensemble, voir plus bas)
 - `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
   30 000 / 60 000 festivaliers sur 12 000 / 30 000 / 90 000 / 180 000 m2,
   soit ~3 m2 par personne, ratio 1,4:1). Fixe aussi la repartition de la
   foule (70 % du public cible 15 % de la surface, voir `presets.py`) et
-  active `--mobility poi` par defaut ; refuse un `--num-festivaliers`
+  active `--mobility group` par defaut ; refuse un `--num-festivaliers`
   different. Disponible aussi dans `compare_algorithms.py` et
   `sweep_fresh_spray_tokens.py`. Sans `--size`, le site reste 700x500 m,
   4 000 festivaliers. La part mesuree dans la zone dense est un peu sous
@@ -220,19 +257,20 @@ colonnes du CSV :
 
 | Champ | Definition |
 |---|---|
-| Taux de livraison (`delivery_ratio`) | messages spontanes livres / messages spontanes crees (relances comprises, **reponses exclues** : leur nombre depend de ce que l'algo a deja livre), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
+| Taux de livraison (`delivery_ratio`) | messages spontanes livres / messages spontanes crees (relances comprises, **reponses exclues** : leur nombre depend de ce que l'algo a deja livre), sur les seuls messages crees pendant `--duration` : le run continue ensuite `--cooldown` secondes (defaut : le TTL, 1800 s ; trafic compris) pour leur laisser le temps d'arriver. Avant `--duration`, `--warmup` secondes (defaut : 2700, la pause la plus longue) de mobilite seule (ni radio, ni trafic, ni energie) evitent de mesurer le depart synchronise de toute la foule ; les tables de rencontre des algos repartent vides a la fin de la chauffe. Toutes les colonnes de messages, transmissions et pertes ne comptent que ces messages ; l'energie, les noeuds a plat et les evictions couvrent tout le run |
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages spontanes livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier (messages spontanes) |
 | Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
-| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
+| Surcharge (`overhead`) | (tentatives de transmission - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Une retransmission sur un lien qui perd p compte pour 1/(1-p) tentative. Le backhaul n'y est pas |
+| Octets par message livre (`overhead_bytes`) | tous les octets emis (donnees retransmissions comprises, resumes, ACK, tables des algorithmes, diffusions de controle) / messages livres : **le cout radio a comparer entre algorithmes**. Detail dans `data_bytes`, `summary_bytes`, `ack_bytes`, `table_bytes`, `control_bytes` ; seuls les octets non lies a un message emis avant la fin de `--duration` sont comptes |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
 | Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 82 mA du telephone etant identiques pour tous |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
-| Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
+| Annonces perdues (`packet_loss_count`) | receptions de diffusions de controle perdues (sans connexion, donc sans renvoi) |
+| Octets retransmis (`retransmitted_bytes`) | temps d'antenne des renvois sur les connexions (collisions, signal faible) |
 | Transmissions / pertes backhaul | copies entre bornes par le reseau filaire, et celles perdues |
-| Backoffs | tours sautes par un emetteur a cause de la contention |
 
 ## Valeurs par defaut (festival moyen)
 
@@ -285,30 +323,48 @@ charge de depart. Voir `docs/energie/consommation.md`.
 
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
-- un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`) :
+- un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`,
+  37 ko/s mesures en Bluetooth classique entre deux telephones seuls) :
   emissions et receptions d'un noeud partagent ce budget sur tous ses liens ;
   un message qui ne rentre pas dans le budget de l'emetteur ou du recepteur
   reste en buffer et retente au tick suivant (les emetteurs sont traites dans
   un ordre tire au hasard a chaque tick) ;
-- une **limite de connexions BLE simultanees** (`max_concurrent_links`,
-  defaut 6, realiste pour un smartphone) — au-dela, les contacts les plus
-  proches sont prioritaires ;
-- un **backoff a la CSMA** (`relay_backoff_coefficient` /
-  `relay_backoff_max_probability`) : avant d'emettre, un noeud estime
-  combien d'autres noeuds a sa portee ont aussi quelque chose a envoyer ce
-  tick, et renonce (retente au tick suivant, sans energie ni perte
-  comptabilisee) avec une probabilite qui croit avec ce nombre — c'est ce
-  qui evite que tous les noeuds emettent en meme temps ;
-- une **collision "hidden-terminal"** (`collision_loss_coefficient` /
-  `collision_loss_max_probability`) : meme apres backoff, un recepteur
-  entoure de plusieurs emetteurs qui ne s'entendent pas entre eux peut
-  perdre le paquet — un cout distinct de la congestion normale ;
-- une **perte de paquets probabiliste**, combinant plusieurs composantes :
-  congestion (`packet_loss_congestion_coefficient`), marge de signal
-  faible pres du bord de portee (`signal_margin_cutoff_db` /
-  `weak_signal_max_probability`) et collision ci-dessus, plafonnees par
-  `packet_loss_max_probability` — sauf une vraie panne radio (fading
-  negatif, cf. ci-dessus), qui est une perte garantie et ignore ce plafond ;
+- des **connexions** : un lien n'existe que si les deux telephones s'entendent
+  (portee mutuelle : une borne ne peut pas joindre un telephone qui ne peut
+  pas lui repondre), met `connection_setup_s` (7 s mesurees avec Nearby) a
+  s'etablir, garde sa place tant que la paire reste a portee et se ferme
+  apres `connection_idle_timeout_s` (30 s, estime) sans echange ; un
+  telephone tient au plus `max_concurrent_links` connexions (defaut 6),
+  comptees des deux cotes ;
+- un **canal partage** : un voisin qui emet une part u de son temps
+  d'antenne tombe sur le canal d'un paquet avec une probabilite ~u / canaux
+  (79 canaux du Bluetooth classique pour les donnees, 3 canaux d'annonce BLE
+  pour les diffusions de controle), donc un paquet passe avec une probabilite
+  exp(-charge entendue / canaux), sans plafond : une foule dense sature. La
+  charge est ce que les voisins ont reellement emis au tick precedent ;
+- des **pertes** : collisions ci-dessus, marge de signal faible pres du bord
+  de portee (`signal_margin_cutoff_db` / `weak_signal_max_probability`) et
+  perte residuelle (`packet_loss_base_probability`). Sur une connexion chaque
+  paquet est acquitte et renvoye : une perte p coute 1/(1-p) fois le temps
+  d'antenne et l'energie (`retransmitted_bytes` du rapport) au lieu de perdre
+  le message ; seule une vraie panne radio (fading negatif, cf. ci-dessus)
+  ne laisse rien passer ce tick. Une diffusion de controle, sans connexion,
+  est perdue ou non (`packet_loss_count`) ;
+- un **transport sans connexion** pour les algorithmes qui le declarent
+  (`advertising_bearer`, `managed_flood` comme Bluetooth Mesh) : pas de
+  connexion a etablir, chaque message part une fois vers tous les voisins
+  que l'algo choisit, sur les canaux d'annonce, et chaque reception est
+  perdue ou non (pas de renvoi) ;
+- des **ACK et metadonnees payes** : a chaque tick, sur chaque connexion
+  etablie et avant les donnees, chaque cote envoie son vecteur de resume
+  (4 octets par message pas encore annonce sur cette connexion), les ACK
+  que l'autre demande (messages qu'il annonce et dont celui-ci sait qu'ils
+  sont livres, 8 octets chacun) et, une fois par connexion, les tables de
+  l'algorithme (dates de rencontre, predictibilites...). Tout cela coute du
+  temps d'antenne, des retransmissions et de l'energie comme les donnees.
+  Le destinataire emet l'ACK a la livraison ; un telephone qui l'apprend
+  supprime sa copie, et la source le recoit comme un accuse de reception.
+  Aucun algorithme ne voit plus d'ensemble global des messages livres ;
 - un **TTL reseau en nombre de sauts** (`TrafficConfig.message_ttl_hops`,
   defaut 8, a la Bluetooth Mesh) en plus du TTL temporel `message_ttl_s` :
   un message qui a deja consomme son budget de sauts n'est plus relaye a
@@ -389,6 +445,13 @@ Programmatiquement :
 Principe, diagramme, plans de site, ordres de grandeur, forces et
 faiblesses : un fichier par modele dans `docs/mobilite/`.
 
+- `group` (`mobility/group.py`, defaut avec `--size`) — les groupes
+  d'amis (les memes qui choisissent les destinataires) se deplacent
+  ensemble autour d'un meneur qui suit `poi` ; un membre part parfois seul
+  (bar 5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous
+  ou le groupe l'attend 15 min, sinon il cherche le groupe de point
+  d'interet en point d'interet. Personne n'ecrit a un ami qu'il voit
+  (`TrafficConfig.skip_friends_within_m`, 15 m). Voir `docs/mobilite/group.md`.
 - `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
   uniforme sur toute la zone, puis pause (70 % de chances, 5 a 45 min).
   Voir `docs/mobilite/random_waypoint.md`.
@@ -428,7 +491,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   et heuristique de mule approximes a partir des contacts observes par
   l'instance partagee, politique batterie (refus des pairs a batterie
   critique, evacuation acceleree du porteur a batterie faible), et purge
-  reseau-large des copies une fois le message livre.
+  des copies par l'ACK du moteur (voir "ACK et metadonnees").
 - `gossip_a` (`routing/gossip_a.py`) — GOSSIP-A, gossip probabiliste
   adaptatif a la densite avec anti-entropie, reduit lui aussi au
   sous-ensemble reseau (pas de crypto/etiquettes/PoW/SOS) : probabilite de
@@ -436,7 +499,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   (message, pair) et par session, inondation des `K_FLOOD` premiers sauts,
   borne `H_MAX`, faux positifs du Bloom SUMMARY, suppression par compteur
   (message deja vu chez `K_SUP` voisins), jetons de purge propages de
-  proche en proche, budgets par session et eviction du buffer « plus
+  proche en proche (son propre mecanisme, facture comme un Bloom
+  PURGE_SYNC de 128 octets par connexion), budgets par session et eviction du buffer « plus
   repliques d'abord » (hook `RoutingAlgorithm.choose_eviction`). Les
   interrupteurs `adaptive`, `suppression` et `replicated_first_eviction`
   servent aux ablations.
@@ -525,7 +589,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   defaut 16) + replique vers tout voisin ayant croise la destination depuis
   moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au
   voisin qui a vu la destination plus recemment (FRESH) + une seule replique
-  vers le reseau de bornes + purge globale des messages livres. Vise a la
+  vers le reseau de bornes + purge par l'ACK du moteur. Vise a la
   fois livraison, latence et energie ; details dans
   `docs/algorithmes/fresh_spray.md`.
 - `horizon` (`routing/horizon.py`) — `fresh_spray` + champ de distances
@@ -534,7 +598,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   reconstruit a partir du dernier vecteur entendu de chaque voisin depuis
   moins de 15 s, avec split horizon (chaque entree porte le prochain saut)
   et plafonnes a 1650 octets ; les vecteurs passent par la radio du moteur
-  comme des messages (backoff, temps d'antenne, pertes, energie), et ceux
+  comme des messages (temps d'antenne, charge du canal, pertes, energie), et ceux
   d'un emetteur injoignable (borne de plus grande portee) sont ignores. Une copie dont le
   porteur a un voisin plus proche du destinataire lui est passee (tirage,
   un saut par tick) si le TTL de sauts restant suffit ; hors tirage, une
@@ -548,8 +612,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   voisin au moins 15 m plus pres (sinon a qui a croise le destinataire le
   plus recemment), regle des ilots. La source escalade un message non
   livre : 12 jetons sans geographie a 60 s, puis inondation a 180 s
-  (bornee par le TTL de 8 sauts). Purge au tick suivant la livraison,
-  position du destinataire renvoyee dans l'ACK. `stats` donne la
+  (bornee par le TTL de 8 sauts). Purge par l'ACK du moteur, qui renvoie
+  la position du destinataire a la source. `stats` donne la
   repartition des transmissions par raison. Le gain mesure vient de
   l'inondation tardive, pas de la geographie : variante sans GPS
   `GeoSprayFocusRouting(hint_max_age_s=1e-9, gps_policy="carriers",
@@ -566,12 +630,11 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   pour un message qu'il n'a pas, cooldown de 20 s par paire, plus aucun
   relais apres 10 min (livraison directe seulement), batterie < 20 % :
   refuse les relais, < 10 % : muet sauf message propre, eviction par
-  priorite sans toucher aux messages propres. Omis : Bloom filters (lus
-  comme des ensembles exacts, sans faux positifs), ACK signes (purge
-  globale instantanee), ordre de transfert par priorite, EWMA de la
-  densite, plafond de resets anti-spam. Les beacons n'ont pas de cout
-  energetique propre (le moteur facture un courant de fond fixe) : `stats`
-  compte beacons, resets Trickle, connexions, spray et focus. Spec et
+  priorite sans toucher aux messages propres. Les beacons passent par la
+  radio (diffusions de 64 octets, estime), les ACK par le moteur. Omis :
+  Bloom filters (lus comme des ensembles exacts, sans faux positifs),
+  signature des ACK, ordre de transfert par priorite, EWMA de la densite,
+  plafond de resets anti-spam. `stats` compte beacons, resets Trickle, connexions, spray et focus. Spec et
   resultats dans `docs/algorithmes/specs/ECO-SF.md`.
 - `band_fanout` (`routing/band_fanout.py`) — relais a eventail borne :
   chaque copie peut etre relayee `fanout` fois (3 par defaut), la copie
@@ -585,10 +648,9 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   voisins ; le plafond `max_concurrent_links` (6) reste applique, mais
   l'algo choisit lui-meme ses liaisons via le hook `select_links` (relais
   retenus d'abord, puis les plus proches), sinon la bande serait hors
-  d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Un
-  message livre est purge de tous les buffers au tick suivant
-  (`purge_delivered=True`) ; l'ACK est instantane et global, aucun temps
-  radio n'est facture. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
+  d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Les
+  copies sont purgees par l'ACK du moteur (`purge_delivered=True`), propage
+  et facture sur les connexions. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
   continue d'etre transmis apres la livraison. Pas d'eviction dediee.
   `scripts/sweep_band_fanout.py` (options : voir "Balayer les variantes de
   band_fanout") compare des variantes (`--variant

@@ -98,3 +98,19 @@ def test_replies_are_reported_apart_from_spontaneous_messages():
     assert report.reply_delivery_ratio == pytest.approx(0.5)
     assert report.overhead == pytest.approx((4 - 2) / 2)
     assert "Reponses creees / livrees : 2 / 1" in format_report(report)
+
+
+def test_overhead_counts_resends_and_overhead_bytes_counts_every_byte():
+    collector = MetricsCollector(measure_until=100.0)
+    m = _msg(1, creation_time=0.0, hops=1)
+    collector.record_creation(m)
+    collector.record_transmission(m, airtime=20.0)
+    collector.record_delivery(m, 5.0)
+    collector.record_overhead_bytes("summary", 8.0, now=10.0)
+    collector.record_overhead_bytes("control", 50.0, now=10.0)
+    collector.record_overhead_bytes("control", 999.0, now=150.0)
+    report = collector.build_report([], 0)
+    assert report.overhead == pytest.approx(1.0)
+    assert report.retransmitted_bytes == pytest.approx(10.0)
+    assert (report.data_bytes, report.summary_bytes, report.control_bytes) == (20.0, 8.0, 50.0)
+    assert report.overhead_bytes == pytest.approx(78.0)

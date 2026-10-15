@@ -8,6 +8,7 @@ from .beacons import place_beacons
 from .config import SimulationConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector, SimulationReport
+from .models import Position
 from .mobility.base import MobilityModel
 from .mobility.random_waypoint import RandomWaypointMobility
 from .network import network_engine
@@ -26,6 +27,13 @@ def draw_charge_fraction(bins, weights: List[float], rng: random.Random) -> floa
     return rng.uniform(lo, hi)
 
 
+def _after(env, delay_s: float, process):
+    # Starts `process` (a generator) delay_s into the run: the warm-up.
+    if delay_s > 0:
+        yield env.timeout(delay_s)
+    yield from process
+
+
 def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: SpatialGrid):
     mesh_mah_per_tick = config.energy.background_current_ma * config.mobility.tick_interval_s / 3600.0
     phone_mah_per_tick = config.energy.phone_current_ma * config.mobility.tick_interval_s / 3600.0
@@ -36,8 +44,9 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
             # battery-dead: frozen in place rather than wandering while it
             # can't participate in BLE anyway.
             continue
-        node.consume_energy(mesh_mah_per_tick)
-        node.consume_energy(phone_mah_per_tick, mesh=False)
+        if env.now > config.warmup_s:
+            node.consume_energy(mesh_mah_per_tick)
+            node.consume_energy(phone_mah_per_tick, mesh=False)
         old_x, old_y = node.position.x, node.position.y
         node.move(config.mobility.tick_interval_s, config.area)
         grid.update(node, old_x, old_y)
@@ -88,7 +97,7 @@ def run_simulation(
     if mobility_factory is None:
         mobility_factory = lambda node_rng: RandomWaypointMobility(config.mobility, rng=node_rng)
     energy_model = EnergyModel(config.energy)
-    metrics = MetricsCollector(measure_until=config.duration_s)
+    metrics = MetricsCollector(measure_until=config.warmup_s + config.duration_s)
     env = simpy.Environment()
 
     phone_range_m = max_range_m(config.ble.phone_radio)
@@ -151,18 +160,28 @@ def run_simulation(
         env.process(_mobile_process(env, mobile, config, grid))
 
         if config.churn.enabled:
-            arrival_time_s = rng.uniform(*config.churn.arrival_window_s)
+            # Times count from the end of the warm-up.
+            arrival_time_s = config.warmup_s + rng.uniform(*config.churn.arrival_window_s)
             departure_time_s = arrival_time_s + rng.uniform(*config.churn.session_duration_range_s)
-            if arrival_time_s > 0 or departure_time_s < config.duration_s + config.cooldown_s:
+            if arrival_time_s > 0 or departure_time_s < config.total_s:
                 env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
 
         traffic_rng = random.Random(rng.randrange(1 << 30))
-        env.process(traffic_process(
+        env.process(_after(env, config.warmup_s, traffic_process(
             env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng, followup_rng
-        ))
+        )))
 
     friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
     gps_rng = random.Random(rng.randrange(1 << 30))
+    for node_id, mobile in mobile_nodes.items():
+        group = sorted(friends.get(node_id, set()) | {node_id})
+        if group[0] != node_id:
+            start = mobile.mobility.join_group(mobile_nodes[group[0]])
+            if start is not None:
+                old_x, old_y = mobile.position.x, mobile.position.y
+                mobile.position = Position(min(max(start.x, 0.0), config.area.width_m),
+                                           min(max(start.y, 0.0), config.area.height_m))
+                grid.update(mobile, old_x, old_y)
     for node_id, mobile in mobile_nodes.items():
         mobile.friends = friends.get(node_id, set())
         mobile.gps_noise_std_m = config.gps.noise_std_m
@@ -170,10 +189,13 @@ def run_simulation(
         mobile.gps_fix_failure_probability = config.gps.fix_failure_probability
 
     if history is not None:
-        env.process(_history_recorder(env, history, mobile_nodes, config.mobility.tick_interval_s))
+        env.process(_after(env, config.warmup_s, _history_recorder(
+            env, history, mobile_nodes, config.mobility.tick_interval_s
+        )))
 
     routing_algorithm.on_simulation_start(nodes)
     routing_algorithm.on_energy_model(energy_model)
+    routing_algorithm.on_ble_config(config.ble)
     network_rng = random.Random(rng.randrange(1 << 30))
     on_delivery = None
     if config.traffic.reply_probability > 0:
@@ -187,22 +209,20 @@ def run_simulation(
                 env, mobile_nodes[receiver.id], message.src_id, reply_rng.uniform(*config.traffic.reply_delay_range_s),
                 mobile_nodes, config.traffic, metrics, msg_id_counter, reply_rng,
             ))
-    env.process(
-        network_engine(
-            env, nodes, grid, routing_algorithm, energy_model, metrics,
-            config.ble.contact_check_interval_s,
-            ble_config=config.ble,
-            beacon_config=config.beacons,
-            rng=network_rng,
-            event_log=history.events if history is not None else None,
-            on_delivery=on_delivery,
-        )
-    )
+    env.process(_after(env, config.warmup_s, network_engine(
+        env, nodes, grid, routing_algorithm, energy_model, metrics,
+        config.ble.contact_check_interval_s,
+        ble_config=config.ble,
+        beacon_config=config.beacons,
+        rng=network_rng,
+        event_log=history.events if history is not None else None,
+        on_delivery=on_delivery,
+    )))
 
     if progress_callback is not None:
         env.process(_progress_reporter(env, progress_callback, progress_interval_s))
 
-    end_s = config.duration_s + config.cooldown_s
+    end_s = config.total_s
     env.run(until=end_s)
     if progress_callback is not None:
         progress_callback(end_s)

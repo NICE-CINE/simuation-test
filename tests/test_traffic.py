@@ -54,7 +54,8 @@ def test_sample_interval_s_average_matches_rate():
 
 
 def _FakeNode(node_id):
-    return BaseNode(node_id, Position(float(node_id), 0.0), radio_range_m=10.0, buffer_capacity=1000, battery_mah=100.0)
+    # 100 m apart: friends in sight get no message.
+    return BaseNode(node_id, Position(100.0 * node_id, 0.0), radio_range_m=10.0, buffer_capacity=1000, battery_mah=100.0)
 
 
 def _run_traffic(nodes, config, until=20.0, seed=7):
@@ -130,7 +131,7 @@ def test_traffic_process_carries_src_gps_and_last_known_dst_position():
     nodes[1].record_known_position(2, Position(42.0, 7.0), 3.0)
     _run_traffic(nodes, TrafficConfig(**_FAST))
     for message in nodes[1].buffer.values():
-        assert message.src_position == Position(1.0, 0.0)
+        assert message.src_position == Position(100.0, 0.0)
         assert message.dst_position == Position(42.0, 7.0)
         assert message.dst_position_time == 3.0
 
@@ -156,3 +157,11 @@ def test_replies_are_flagged_and_followups_are_not():
     env.run(until=1000.0)
     assert [m.is_reply for m in dst.buffer.values()] == [True]
     assert src.buffer and not any(m.is_reply for m in src.buffer.values())
+
+
+def test_no_message_to_a_friend_in_sight():
+    nodes = {i: _FakeNode(i) for i in (1, 2, 3)}
+    nodes[1].friends = {2, 3}
+    nodes[2].position = Position(103.0, 0.0)
+    _run_traffic(nodes, TrafficConfig(**_FAST))
+    assert nodes[1].buffer and {m.dst_id for m in nodes[1].buffer.values()} == {3}

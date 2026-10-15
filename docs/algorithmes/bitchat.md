@@ -29,7 +29,7 @@ Trois couches :
 Non modelise : jitter de relais (sous le tick), chiffrement Noise et
 poignees de main, fragmentation, routage par source, passerelles Nostr,
 eviction dans le stock d'un courier plein (refus a la place). Les ACK sont
-ceux de `managed_flood` (inondes, ils purgent aussi les copies).
+ceux de `managed_flood` (diffuses par la radio, ils purgent aussi les copies). Les annonces passent par la radio : chaque noeud relaie toutes celles de sa composante, plafonne a son temps d'antenne.
 
 ## Diagramme
 
@@ -64,8 +64,8 @@ flowchart TD
   qu'un courier la croise ou l'entende.
 - Le moteur compte les sauts de bout en bout : son TTL (`message_ttl_hops`,
   8) borne aussi les copies de couriers, que bitchat relance a TTL plein.
-- Joignabilite calculee sur le graphe des voisins du tick (annonce
-  instantanee), sans pertes.
+- Joignabilite calculee sur le graphe des voisins du tick, sans pertes
+  (le cout radio des annonces est facture, pas leurs pertes).
 - Les bornes ne servent que de relais, jamais de couriers.
 
 ## References

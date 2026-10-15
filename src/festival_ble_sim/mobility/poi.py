@@ -39,7 +39,7 @@ class PoiMobility(MobilityModel):
             y=min(max(poi.y + offset_y, 0.0), area.height_m),
         )
 
-    def _crowd_position(self, area: AreaConfig) -> Position:
+    def crowd_position(self, area: AreaConfig) -> Position:
         bg = self._config.background_probability
         if bg is not None and self._rng.random() < bg:
             return self._uniform_position(area)
@@ -48,10 +48,10 @@ class PoiMobility(MobilityModel):
     def initial_position(self, area: AreaConfig) -> Position:
         if self._config.background_probability is None:
             return self._uniform_position(area)
-        return self._crowd_position(area)
+        return self.crowd_position(area)
 
     def _pick_new_target(self, area: AreaConfig) -> None:
-        self._target = self._crowd_position(area)
+        self._target = self.crowd_position(area)
         self._speed_mps = self._rng.uniform(self._config.speed_min_mps, self._config.speed_max_mps)
 
     def step(self, current: Position, dt: float, area: AreaConfig) -> Position:

@@ -92,14 +92,14 @@ def test_source_reinjects_tokens_without_ack():
     assert msg.routing_state["tokens"] == 12  # 4 + 8, capped at l_max
 
 
-def test_delivered_message_is_purged():
+def test_contact_that_learned_the_ack_is_skipped():
     a, b = _node(1), _node(2)
     algo = _algo_with([a, b], {1: [b], 2: [a]})
     msg = _msg()
     a.store_message(msg)
-    algo.on_delivered(msg, b)
+    b.learn_ack(msg.msg_id, 10000.0)
     assert algo.decide(msg, a, b, 1.0) is RoutingDecision.IGNORE
-    assert msg.msg_id not in a.buffer
+    assert algo.uses_delivery_acks
 
 
 def test_eviction_prefers_late_foreign_copies_and_never_own():

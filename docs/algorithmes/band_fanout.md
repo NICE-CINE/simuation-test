@@ -32,9 +32,9 @@ de portee ou le shadowing fait perdre des paquets.
    directe contourne `decide` mais a besoin d'un lien), puis les relais
    choisis (les plus proches parmi eux si le plafond coupe), puis les plus
    proches du reste. Le plafond reste respecte.
-5. **Purge globale** (`purge_delivered=True`) : a la livraison, le message
-   est marque livre ; a chaque tick il est supprime du buffer de tous les
-   noeuds actifs, et `decide` l'ignore.
+5. **Purge par ACK** (`purge_delivered=True`) : le destinataire emet un ACK
+   que le moteur propage sur les connexions, vers les noeuds qui annoncent
+   le message ; chacun supprime sa copie en l'apprenant.
 
 ## Diagramme
 
@@ -44,7 +44,7 @@ flowchart TD
     S --> K["select_links : relais choisis d'abord, puis plus proches, plafond max_concurrent_links"]
     K --> A["Contact porteur / voisin"]
     A --> B{"Voisin = destination ?"}
-    B -- oui --> L["Livraison (moteur) + purge globale au tick suivant"]
+    B -- oui --> L["Livraison (moteur) + purge par ACK"]
     B -- non --> D{"Deja livre, voisin l'a deja, hops >= max_hops, ou fanout epuise ?"}
     D -- oui --> I["IGNORE"]
     D -- non --> R{"Voisin tire pour ce tick ?"}
@@ -60,7 +60,7 @@ flowchart TD
 | `max_hops` | 4 | sauts maximum (>= 1) |
 | `band` | (0.4, 0.6) | fenetre de distance / portee, `0 <= bas < haut` |
 | `seed` | 0 | RNG du tirage des relais |
-| `purge_delivered` | True | purge globale a la livraison |
+| `purge_delivered` | True | ACK du moteur (`uses_delivery_acks`) |
 
 Un arbre complet de copies peut atteindre `1 + 3 + 3^2 + 3^3 + 3^4 = 121`
 porteurs avec les defauts. Cette borne n'est pas stricte : chaque borne
@@ -70,9 +70,8 @@ s'il la recoit de nouveau.
 
 ## Ecarts avec un vrai protocole
 
-- La purge et la liste des messages livres sont globales et instantanees
-  (instance partagee, aucun temps radio) : c'est optimiste, comme pour
-  `dasfv` ou `fresh_spray`.
+- Les ACK passent par le moteur (resume, ACK et temps d'antenne payes) ; la
+  bande lit encore la position GPS bruitee des voisins sans annonce radio.
 - Le classement des voisins utilise la position GPS bruitee (`gps_position()`)
   du porteur et de chaque voisin, sans cout energetique de fix facture.
 - Le choix des relais se fait dans `on_tick` : sans `ble_config`, le moteur
@@ -129,8 +128,7 @@ les chiffres ne correspondent pas exactement au code actuel.
 - Plus gourmand en energie et en overhead que `spray_wait` : pas de budget
   global de copies, chaque copie relayee repart avec un budget neuf.
 - La bande de distance n'a pas prouve son interet (voir ci-dessus).
-- Purge et ACK globaux et gratuits ; la position GPS est supposee disponible
-  chez tous les voisins.
+- La position GPS des voisins est supposee disponible sans annonce radio.
 - Pas de notion de destination : les relais sont tires au hasard, sans
   utiliser `dst_position` ni l'historique de rencontres.
 

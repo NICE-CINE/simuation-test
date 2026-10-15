@@ -63,38 +63,40 @@ class BleConfig:
     phone_radio: RadioParams = field(default_factory=_default_phone_radio)
     beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
     # Bytes each radio can send + receive per tick, shared by all its links
-    # (network_engine tracks it per node for the whole tick): real effective
-    # GATT throughput in a dense opportunistic-mesh deployment, well below
-    # BLE's raw PHY rate once ATT/connection overhead and 2.4GHz contention
-    # from thousands of nearby devices are accounted for.
-    transfer_rate_bytes_per_s: float = 10_000.0
+    # (network_engine tracks it per node for the whole tick): the ~37 kB/s
+    # Nearby measured over Bluetooth Classic between two phones alone
+    # (docs/energie/consommation.md). A crowd lowers it through the
+    # channel load below, not through this figure.
+    transfer_rate_bytes_per_s: float = 37_000.0
     contact_check_interval_s: float = 1.0
     # Simultaneous GATT-central connections a phone can realistically hold
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
     max_concurrent_links: Optional[int] = 6
+    # A pair must stay in range this long before its connection carries
+    # anything: Nearby measured ~7 s from discovery to connection
+    # (docs/energie/consommation.md). 0 = usable on the first tick.
+    connection_setup_s: float = 7.0
+    # An established connection with no data either way for this long is
+    # closed, freeing both slots (estimated, not measured).
+    connection_idle_timeout_s: float = 30.0
+    # Residual per-packet error on any link.
     packet_loss_base_probability: float = 0.01
-    packet_loss_congestion_coefficient: float = 0.02
-    # Extra loss probability for links near the edge of radio range: fades
+    # Extra per-packet error for links near the edge of radio range: fades
     # linearly from 0 at signal_margin_cutoff_db (or above) to
     # weak_signal_max_probability at a 0 dB margin (received power at the
-    # receiver sensitivity floor), on top of the congestion-based loss above.
+    # receiver sensitivity floor).
     signal_margin_cutoff_db: float = 6.0
     weak_signal_max_probability: float = 0.30
-    packet_loss_max_probability: float = 0.30
-    # CSMA-style channel sensing: before transmitting, a node estimates
-    # how many other nodes within its own radio range also have something
-    # to send this tick, and backs off (skips this tick, retries next one,
-    # no energy spent, no loss counted) with a probability that grows with
-    # that count — this is what keeps a real BLE mesh from having every
-    # node blast a relay at once.
-    relay_backoff_coefficient: float = 0.05
-    relay_backoff_max_probability: float = 0.5
-    # Even after backoff, a receiver can still be hit by two senders that
-    # can't hear each other (hidden-terminal collision): extra loss
-    # probability per other transmitter within the RECEIVER's own range,
-    # on top of (not instead of) congestion/weak-signal loss.
-    collision_loss_coefficient: float = 0.03
-    collision_loss_max_probability: float = 0.4
+    # Collisions: a neighbor transmitting a share u of its airtime lands on a
+    # packet's channel with probability ~u / channels. Data goes over
+    # connections on Bluetooth Classic's 79 hopping channels, connectionless
+    # control broadcasts over BLE's 3 advertising channels. On a connection
+    # a lost packet is resent (airtime and energy), a broadcast is just lost.
+    data_channels: int = 79
+    advertising_channels: int = 3
+    # One message id in a summary vector (what a node holds, sent over each
+    # connection so the peer doesn't resend it).
+    summary_id_bytes: int = 4
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,22 @@ class PointOfInterest:
     y: float
     radius_m: float
     weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class GroupConfig:
+    # mobility.group.GroupMobility only. Every value is an estimate.
+    radius_m: float = 5.0
+    # How far a member recognizes its group.
+    visual_range_m: float = 15.0
+    # Trips a member makes alone (rate per hour while with the group, and
+    # length): bar or toilets, or another stage.
+    short_trips_per_hour: float = 0.5
+    short_trip_s: Tuple[float, float] = (300.0, 1800.0)
+    long_trips_per_hour: float = 0.2
+    long_trip_s: Tuple[float, float] = (1800.0, 7200.0)
+    # How long the leader waits at a rendezvous.
+    rendezvous_max_wait_s: float = 900.0
 
 
 @dataclass(frozen=True)
@@ -122,6 +140,7 @@ class MobilityConfig:
     # POI-only targets); a probability makes initial positions and each new
     # target uniform over the whole area with that probability, POI otherwise.
     background_probability: Optional[float] = None
+    group: GroupConfig = field(default_factory=GroupConfig)
 
 
 @dataclass(frozen=True)
@@ -145,6 +164,10 @@ class TrafficConfig:
     # the sender's SocialConfig group, and friendless people send nothing.
     # False restores a uniformly random destination among active nodes.
     friends_only: bool = True
+    # Nobody texts a friend they can see: friends closer than this are not
+    # drawn as destinations (no candidate left = no message). Matters with
+    # group mobility, where most friends walk alongside. 0 = off.
+    skip_friends_within_m: float = 15.0
     # Conversations: probability that a delivered message gets a reply from
     # its destination, after a delay drawn from reply_delay_range_s. Replies
     # can themselves be replied to. 0.0 = no replies (previous behavior).
@@ -200,6 +223,13 @@ class EnergyConfig:
     # overhead measured 13 Oct over screen off, mean of both phones and three
     # app screens; the 20 % share is an estimate). 0 = count only the mesh.
     phone_current_ma: float = 82.0
+    # Opening a connection: ~7 s of discovery (BleConfig.connection_setup_s)
+    # at the measured "BLE advertising + scan" overhead (+18 / +11 mA, mean
+    # 14.5), on both phones.
+    connection_setup_mah: float = 7.0 * 14.5 / 3600.0
+    # Each connection held beyond the first, per phone (background_current_ma
+    # was measured with one): estimated, not measured.
+    extra_connection_current_ma: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -243,6 +273,11 @@ class SimulationConfig:
     # message_ttl_s is the exact bound; 0 keeps the old cut-off at duration_s.
     duration_s: float = 3600.0
     cooldown_s: float = 0.0
+    # Mobility-only lead-in before the measured window: no radio, traffic or
+    # energy, just walking and pauses, so the window doesn't start with the
+    # whole crowd walking off at once (random waypoint's start-up transient).
+    # Encounter tables start empty when it ends.
+    warmup_s: float = 0.0
     num_festivaliers: int = 4000
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
@@ -256,9 +291,13 @@ class SimulationConfig:
     social: SocialConfig = field(default_factory=SocialConfig)
     gps: GpsConfig = field(default_factory=GpsConfig)
 
+    @property
+    def total_s(self) -> float:
+        return self.warmup_s + self.duration_s + self.cooldown_s
+
     def __post_init__(self) -> None:
-        if self.cooldown_s < 0:
-            raise ValueError("cooldown_s must be >= 0")
+        if self.cooldown_s < 0 or self.warmup_s < 0:
+            raise ValueError("cooldown_s and warmup_s must be >= 0")
         if self.area.width_m <= 0 or self.area.height_m <= 0:
             raise ValueError("area dimensions must be positive")
         if self.num_festivaliers < 2:
@@ -282,6 +321,8 @@ class SimulationConfig:
             raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")
         if self.energy.background_current_ma < 0 or self.energy.phone_current_ma < 0:
             raise ValueError("background_current_ma and phone_current_ma must be >= 0")
+        if self.energy.connection_setup_mah < 0 or self.energy.extra_connection_current_ma < 0:
+            raise ValueError("connection_setup_mah and extra_connection_current_ma must be >= 0")
         if self.energy.battery_capacity_mah <= 0:
             raise ValueError("battery_capacity_mah must be positive")
         if not self.energy.initial_charge_bins:
@@ -293,29 +334,16 @@ class SimulationConfig:
             raise ValueError("transfer_rate_bytes_per_s must be positive")
         if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:
             raise ValueError("max_concurrent_links must be None or >= 1")
-        for prob in (
-            self.ble.packet_loss_base_probability,
-            self.ble.packet_loss_congestion_coefficient,
-            self.ble.packet_loss_max_probability,
-        ):
-            if prob < 0:
-                raise ValueError("packet loss probabilities/coefficients must be >= 0")
-        if self.ble.packet_loss_base_probability > 1 or self.ble.packet_loss_max_probability > 1:
-            raise ValueError("packet loss probabilities must be <= 1")
-        if self.ble.packet_loss_base_probability > self.ble.packet_loss_max_probability:
-            raise ValueError("packet_loss_base_probability must be <= packet_loss_max_probability")
+        if self.ble.connection_setup_s < 0 or self.ble.connection_idle_timeout_s <= 0:
+            raise ValueError("connection_setup_s must be >= 0 and connection_idle_timeout_s > 0")
+        if not 0.0 <= self.ble.packet_loss_base_probability <= 1.0:
+            raise ValueError("packet_loss_base_probability must be within [0, 1]")
         if self.ble.signal_margin_cutoff_db <= 0:
             raise ValueError("signal_margin_cutoff_db must be positive")
         if not (0.0 <= self.ble.weak_signal_max_probability <= 1.0):
             raise ValueError("weak_signal_max_probability must be within [0, 1]")
-        if self.ble.relay_backoff_coefficient < 0:
-            raise ValueError("relay_backoff_coefficient must be >= 0")
-        if not (0.0 <= self.ble.relay_backoff_max_probability <= 1.0):
-            raise ValueError("relay_backoff_max_probability must be within [0, 1]")
-        if self.ble.collision_loss_coefficient < 0:
-            raise ValueError("collision_loss_coefficient must be >= 0")
-        if not (0.0 <= self.ble.collision_loss_max_probability <= 1.0):
-            raise ValueError("collision_loss_max_probability must be within [0, 1]")
+        if self.ble.data_channels < 1 or self.ble.advertising_channels < 1:
+            raise ValueError("data_channels and advertising_channels must be >= 1")
         if self.beacons.backhaul_latency_s <= 0:
             raise ValueError("backhaul_latency_s must be positive")
         if not (0.0 <= self.beacons.backhaul_loss_probability <= 1.0):
@@ -331,6 +359,14 @@ class SimulationConfig:
             raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
         if not (0.0 <= self.social.no_friend_fraction <= 1.0):
             raise ValueError("no_friend_fraction must be within [0, 1]")
+        group = self.mobility.group
+        if group.radius_m < 0 or group.visual_range_m <= 0 or group.rendezvous_max_wait_s < 0:
+            raise ValueError("group radius_m and rendezvous_max_wait_s must be >= 0, visual_range_m > 0")
+        if group.short_trips_per_hour < 0 or group.long_trips_per_hour < 0:
+            raise ValueError("group trip rates must be >= 0")
+        for lo, hi in (group.short_trip_s, group.long_trip_s):
+            if not 0 < lo <= hi:
+                raise ValueError("group trip durations must satisfy 0 < lo <= hi")
         if self.gps.noise_std_m < 0:
             raise ValueError("gps noise_std_m must be >= 0")
         if not 0.0 <= self.gps.fix_failure_probability < 1.0:

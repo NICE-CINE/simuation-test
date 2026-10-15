@@ -19,7 +19,7 @@ derniere position connue du destinataire (`message.dst_position`) :
 - escalade par la source (qui garde une copie fantome) : 12 jetons sans
   geographie a 60 s, puis inondation a 180 s, bornee par le TTL de 8
   sauts du moteur ;
-- purge de toutes les copies au tick suivant la livraison ; l'ACK renvoie
+- purge des copies par l'ACK du moteur, qui renvoie aussi
   la position du destinataire a la source (comme `tide_g2`).
 
 `stats` repartit les transmissions par raison (`island`, `flood`, `spray`,

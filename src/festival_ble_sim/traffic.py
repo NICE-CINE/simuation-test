@@ -63,7 +63,12 @@ def traffic_process(
         if config.friends_only:
             if not node.friends:
                 return
-            candidate_ids = sorted(f for f in node.friends if f in nodes and nodes[f].is_active)
+            reach_sq = config.skip_friends_within_m ** 2
+            candidate_ids = sorted(
+                f for f in node.friends
+                if f in nodes and nodes[f].is_active
+                and node.position.distance_squared_to(nodes[f].position) >= reach_sq
+            )
         else:
             candidate_ids = [dst_id for dst_id, other in nodes.items() if dst_id != node.id and other.is_active]
         if not candidate_ids:
@@ -75,6 +80,7 @@ def traffic_process(
             dst_known=node.known_positions.get(dst_id),
         )
         node.store_message(message)
+        node.outbox[message.msg_id] = message.creation_time + message.ttl_s
         metrics.record_creation(message)
         if followup_rng is not None and config.followup_probability > 0:
             env.process(followup_process(env, node, dst_id, nodes, config, metrics, id_generator, followup_rng))
@@ -123,4 +129,5 @@ def reply_process(
         is_reply=is_reply,
     )
     node.store_message(message)
+    node.outbox[message.msg_id] = message.creation_time + message.ttl_s
     metrics.record_creation(message)

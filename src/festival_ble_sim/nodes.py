@@ -42,6 +42,11 @@ class BaseNode:
         self.gps_rng: Optional[random.Random] = None
         self.gps_fix_failure_probability = 0.0
         self.known_positions: Dict[int, Tuple[Position, float]] = {}
+        # msg_id -> expiry. acked: delivery acks this node has learned (only
+        # spread when the routing algorithm uses them); outbox: its own
+        # messages, whose acks it asks for even once it dropped the copy.
+        self.acked: Dict[int, float] = {}
+        self.outbox: Dict[int, float] = {}
 
     def gps_position(self) -> Position:
         if self.gps_noise_std_m <= 0 or self.gps_rng is None:
@@ -66,7 +71,12 @@ class BaseNode:
             self.known_positions[node_id] = (position, time)
 
     def has_message(self, msg_id: int) -> bool:
-        return msg_id in self.buffer or msg_id in self.delivered_ids
+        return msg_id in self.buffer or msg_id in self.delivered_ids or msg_id in self.acked
+
+    def learn_ack(self, msg_id: int, expiry: float) -> None:
+        self.acked[msg_id] = expiry
+        self.buffer.pop(msg_id, None)
+        self.outbox.pop(msg_id, None)
 
     def store_message(
         self, message: Message, choose_victim: Optional[Callable[["BaseNode"], Optional[int]]] = None

@@ -79,12 +79,13 @@ def test_one_replica_to_beacon_only():
     assert algo.decide(msg, holder, beacon2, 0.0) is RoutingDecision.IGNORE
 
 
-def test_delivery_purges_every_buffer():
+def test_delivery_purges_nothing_by_itself_acks_travel_through_the_engine():
     algo, holder, contact, msg = _setup()
     _forward(algo, msg, holder, contact)
     algo.on_delivered(msg, holder)
     algo.on_tick(1.0, {2: []})
-    assert not holder.buffer and not contact.buffer
+    assert holder.buffer and contact.buffer
+    assert algo.uses_delivery_acks
 
 
 def test_low_battery_contact_skipped():

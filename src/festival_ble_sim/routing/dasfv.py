@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
-from .base import RoutingAlgorithm, RoutingDecision
+from .base import RoutingAlgorithm, RoutingDecision, per_destination_table_bytes
 
 if TYPE_CHECKING:
     from ..nodes import BaseNode
@@ -21,6 +21,11 @@ class DasfVRouting(RoutingAlgorithm):
     # seen whom" check and the mule turnover heuristic work without any
     # beacon/bloom-filter wire format -- they're all read off the same
     # cross-node observation the engine already gives this object for free.
+    # Delivery acks are not part of that: the engine spreads them over
+    # connections and bills them, and what decide() reads about the contact
+    # (encounter time, predictability per destination) is billed as a table.
+    uses_delivery_acks = True
+
     def __init__(
         self,
         l_base: int = 8,
@@ -88,10 +93,6 @@ class DasfVRouting(RoutingAlgorithm):
         # crowd (or a beacon) has high turnover and reads as a mule.
         self._motion_anchor: Dict[int, Tuple[float, float, float]] = {}
         self._speed: Dict[int, float] = {}
-        # Network-wide ACK purge, modelled as instant/reliable propagation
-        # (the spec's own ACK gossip is cheap/epidemic) rather than
-        # simulating bloom-filter dissemination over BLE.
-        self._delivered_ids: Set[int] = set()
         self._prev_tick: Optional[float] = None
 
     def _decayed(self, a: int, b: int, now: float) -> float:
@@ -207,10 +208,6 @@ class DasfVRouting(RoutingAlgorithm):
         )
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered_ids:
-            holder.buffer.pop(message.msg_id, None)
-            return RoutingDecision.IGNORE
-
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
 
@@ -250,8 +247,9 @@ class DasfVRouting(RoutingAlgorithm):
 
         return RoutingDecision.IGNORE
 
-    def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        self._delivered_ids.add(message.msg_id)
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # Last-met time and predictability (4 + 4 bytes) per destination.
+        return per_destination_table_bytes(peer, entry_bytes=12)
 
     def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
         reason = message.routing_state.pop(_FORWARD_REASON, "spray")

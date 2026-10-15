@@ -224,15 +224,13 @@ class _Announcer(EpidemicRouting):
 def _lossless_ble(**kw):
     from dataclasses import replace
     from festival_ble_sim.config import BleConfig
-    ble = BleConfig()
+    ble = BleConfig(connection_setup_s=0.0)
     params = dict(shadowing_std_db=0.0)
     return replace(
         ble,
         phone_radio=replace(ble.phone_radio, **params),
         beacon_radio=replace(ble.beacon_radio, **params),
-        packet_loss_base_probability=0.0,
-        collision_loss_coefficient=0.0,
-        **kw,
+        **{"packet_loss_base_probability": 0.0, **kw},
     )
 
 
@@ -281,19 +279,13 @@ def test_control_broadcast_skips_a_receiver_that_died_this_tick():
     assert received == {} and b.battery_mah == 100.0
 
 
-def test_announce_and_data_share_one_backoff_draw():
+def test_control_broadcast_is_lost_not_resent():
     import random
-    env = simpy.Environment()
+    from festival_ble_sim.network import _send_control_broadcast
     a, b = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0)
-    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
-    grid.insert(a)
-    grid.insert(b)
-    a.store_message(Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=0.0, ttl_s=100.0))
-    b.store_message(Message(msg_id=2, src_id=2, dst_id=1, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    received = {}
     metrics = MetricsCollector()
-    ble = _lossless_ble(relay_backoff_coefficient=1.0, relay_backoff_max_probability=1.0)
-    env.process(network_engine(env, {1: a, 2: b}, grid, _Announcer({1: 50}), _energy_model(), metrics,
-                               contact_check_interval_s=1.0, ble_config=ble, rng=random.Random(0)))
-    env.run(until=1.5)
-    assert metrics.build_report([], 0).backoff_count == 2
-    assert a.battery_mah == 100.0
+    _send_control_broadcast(a, 50, [b], _energy_model(), metrics, _lossless_ble(packet_loss_base_probability=1.0),
+                            random.Random(0), None, {}, received)
+    assert received == {} and b.battery_mah == 100.0
+    assert metrics.build_report([], 0).packet_loss_count == 1

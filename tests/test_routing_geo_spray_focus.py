@@ -140,7 +140,7 @@ def test_escalated_copy_sprays_without_geography():
     assert algo.decide(msg, a, far, 1.0) is RoutingDecision.FORWARD
 
 
-def test_eviction_drops_delivered_then_fewest_tokens_then_most_hops_never_own():
+def test_eviction_drops_fewest_tokens_then_most_hops_never_own():
     node, d = _node(5, 0.0), _node(99, 900.0)
     algo = _algo_with([node, d], {5: [], 99: []})
     own = _msg(tokens=1, msg_id=10, src_id=5)
@@ -150,11 +150,9 @@ def test_eviction_drops_delivered_then_fewest_tokens_then_most_hops_never_own():
     for m in (own, rich, poor_near, poor_far):
         node.store_message(m)
     assert algo.choose_eviction(node, 1.0) == 13
-    algo.on_delivered(rich, node)
-    assert algo.choose_eviction(node, 1.0) == 11
 
 
-def test_delivery_purges_every_copy_and_returns_the_destination_position():
+def test_ack_purges_nothing_itself_and_brings_the_destination_position_to_the_source():
     src, relay, other, d = _node(1, 0.0), _node(2, 20.0), _node(3, 40.0), _node(99, 60.0)
     ticks = {1: [relay], 2: [src, other], 3: [relay, d], 99: [other]}
     algo = _algo_with([src, relay, other, d], ticks)
@@ -164,11 +162,11 @@ def test_delivery_purges_every_copy_and_returns_the_destination_position():
     algo.on_tick(10.0, ticks)
     algo.on_delivered(msg, other)
     algo.on_tick(11.0, ticks)
-    assert not relay.buffer and not other.buffer
-    algo.on_tick(15.0, ticks)
-    assert 99 not in src.known_positions
-    algo.on_tick(16.0, ticks)
+    assert relay.buffer and 99 not in src.known_positions
+    src.learn_ack(msg.msg_id, msg.creation_time + msg.ttl_s)
+    algo.on_tick(12.0, ticks)
     assert src.known_positions[99] == (Position(60.0, 0.0), 1.0) and algo.stats["ack_hints"] == 1
+    assert algo.uses_delivery_acks and algo.ack_size_bytes == 20
 
 
 def test_carriers_policy_only_fixes_nodes_carrying_a_hinted_message():

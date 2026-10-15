@@ -5,8 +5,15 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 from ..models import Message
 
 if TYPE_CHECKING:
+    from ..config import BleConfig
     from ..energy import EnergyModel
     from ..nodes import BaseNode
+
+
+def per_destination_table_bytes(peer: "BaseNode", entry_bytes: int = 8) -> int:
+    # The usual table answer: one entry (id + value) per destination the
+    # peer carries messages for, e.g. when this node last met it.
+    return entry_bytes * len({m.dst_id for m in peer.buffer.values()})
 
 
 class RoutingDecision(Enum):
@@ -15,6 +22,17 @@ class RoutingDecision(Enum):
 
 
 class RoutingAlgorithm(ABC):
+    # True: the engine spreads delivery acks over connections (the
+    # destination mints one, each side acks the ids the other advertises, a
+    # node that learns one drops its copy), billing ack_size_bytes each.
+    # Never a global "delivered" set: a node only knows what reached it.
+    uses_delivery_acks = False
+    ack_size_bytes = 8
+    # True: data goes out connectionless (Bluetooth Mesh's advertising
+    # bearer): no connection setup or slots, one broadcast per message to
+    # the neighbors decide() picks, receptions lost rather than resent.
+    advertising_bearer = False
+
     @abstractmethod
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         # FORWARD is only an intention: the engine may still drop the copy
@@ -33,6 +51,11 @@ class RoutingAlgorithm(ABC):
         # beacons) themselves instead of letting the engine charge it.
         pass
 
+    def on_ble_config(self, ble_config: "BleConfig") -> None:
+        # The run's radio settings (airtime per tick), for algorithms that
+        # size their own control traffic.
+        pass
+
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
         # Every in-range pair this tick, whether or not anything is sent:
         # decide() alone only sees contacts where the holder has a message,
@@ -42,8 +65,9 @@ class RoutingAlgorithm(ABC):
     def control_broadcasts(self, now: float) -> Dict[int, int]:
         # {node_id: bytes} each node broadcasts this tick (announces, distance
         # vectors), called right after on_tick. The engine sends each one at
-        # its node's turn, before that node's data, with the same backoff,
-        # airtime budget, loss and tx/rx energy as data.
+        # its node's turn, before that node's data, with the same airtime
+        # budget and tx/rx energy as data, on the advertising channels'
+        # load, lost rather than resent (no connection).
         return {}
 
     def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:
@@ -55,6 +79,12 @@ class RoutingAlgorithm(ABC):
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
         pass
 
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # Bytes `node` sends `peer` once their connection is up for the
+        # algorithm's own state (encounter times, predictabilities,
+        # utilities) that decide() then reads about the peer.
+        return 0
+
     def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
         # Called right after `forwarded_copy` has been created (independent
         # routing_state dict) and stored in `contact`'s buffer. Lets an
@@ -65,11 +95,16 @@ class RoutingAlgorithm(ABC):
     def select_links(self, sender: "BaseNode", neighbors: List["BaseNode"], max_links: int) -> List["BaseNode"]:
         # Which neighbors get the sender's limited concurrent links
         # (BleConfig.max_concurrent_links). Real BLE stacks only sustain a
-        # handful of simultaneous GATT connections; by default the closest
-        # contacts (stronger link/RSSI proxy) win the slots. Squared distance
-        # sorts identically to real distance (sqrt is monotonic) without paying
-        # for the sqrt on every candidate.
-        ranked = sorted(neighbors, key=lambda n: sender.position.distance_squared_to(n.position))
+        # handful of simultaneous GATT connections. By default the
+        # destinations of what the sender carries come first (a phone
+        # recognizes them in their advertisements; in a packed crowd the
+        # destination is otherwise never among the few nearest), then the
+        # closest contacts (stronger link/RSSI proxy). Squared distance sorts
+        # identically to real distance without paying for the sqrt.
+        dst_ids = {m.dst_id for m in sender.buffer.values()}
+        ranked = sorted(
+            neighbors, key=lambda n: (n.id not in dst_ids, sender.position.distance_squared_to(n.position))
+        )
         return ranked[:max_links]
 
     def choose_eviction(self, node: "BaseNode", now: float) -> Optional[int]:

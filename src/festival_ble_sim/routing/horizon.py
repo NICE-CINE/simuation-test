@@ -15,7 +15,7 @@ class HorizonRouting(FreshSprayRouting):
     # bounded to horizon_hops). Each node broadcasts its vector once per
     # announce_period_s at its own phase (jittered, so the whole crowd never
     # announces in the same tick) through the engine's control_broadcasts
-    # path (backoff, airtime, loss, energy). Right before broadcasting it
+    # path (airtime, channel load, loss, energy). Right before broadcasting it
     # rebuilds its vector from the last one heard from each neighbor within
     # entry_ttl_s: one lost announce doesn't erase a route, a neighbor gone
     # quiet drops out after entry_ttl_s. Rebuilding from scratch only from
@@ -155,7 +155,7 @@ class HorizonRouting(FreshSprayRouting):
         return ([n for n in ranked if n.id in wanted] + [n for n in ranked if n.id not in wanted])[:max_links]
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered or contact.has_message(message.msg_id):
+        if contact.has_message(message.msg_id):
             return super().decide(message, holder, contact, now)
         target = self._pull_target(message, holder)
         if target is not None:

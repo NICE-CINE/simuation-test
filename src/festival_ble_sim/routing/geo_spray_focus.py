@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 from typing import Dict, List, NamedTuple, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message, Position
-from .base import RoutingAlgorithm, RoutingDecision
+from .base import RoutingAlgorithm, RoutingDecision, per_destination_table_bytes
 
 if TYPE_CHECKING:
     from ..nodes import BaseNode
@@ -25,10 +25,12 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
     # destination's last known position (message.dst_position), falling back
     # to encounter-based Spray-and-Focus without a usable hint. The source
     # escalates an undelivered message: l_max tokens and no geography, then
-    # flooding. One shared instance holds the encounter table, GPS fixes and
-    # delivered set instead of simulating summary exchanges; ACKs purge
-    # network-wide on the next tick (as dasfv/fresh_spray), only the ACK's
-    # position travels back with a delay. Spec: docs/algorithmes/specs/GSF.md.
+    # flooding. One shared instance holds the encounter table and GPS fixes
+    # (what decide() reads about a contact is billed as a per-destination
+    # table); delivery acks go through the engine and carry the
+    # destination's position back to the source. Spec: docs/algorithmes/specs/GSF.md.
+    uses_delivery_acks = True
+
     def __init__(
         self,
         hint_max_age_s: float = 900.0,
@@ -50,7 +52,6 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         gps_current_ma: float = 10.0,
         gps_policy: str = "all",
         ack_hint: bool = True,
-        ack_hint_delay_factor: float = 1.0,
         refresh_hint: bool = True,
     ) -> None:
         if l_min < 1 or l_max < l_min:
@@ -61,8 +62,6 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             raise ValueError("gps_policy must be 'all' or 'carriers'")
         if escalation_schedule_s is not None and not 0 < escalation_schedule_s[0] <= escalation_schedule_s[1]:
             raise ValueError("escalation_schedule_s must be None or 0 < first <= second")
-        if ack_hint_delay_factor < 0:
-            raise ValueError("ack_hint_delay_factor must be >= 0")
         self._hint_max_age_s = hint_max_age_s
         self._hint_cell_m = hint_cell_m
         self._hint_r0_m = hint_r0_m
@@ -82,7 +81,8 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         self._gps_current_ma = gps_current_ma
         self._gps_policy = gps_policy
         self._ack_hint = ack_hint
-        self._ack_hint_delay_factor = ack_hint_delay_factor
+        if ack_hint:
+            self.ack_size_bytes = 20
         self._refresh_hint = refresh_hint
 
         self._nodes: Dict[int, "BaseNode"] = {}
@@ -90,10 +90,10 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         self._last_met: Dict[int, Dict[int, float]] = {}
         self._fixes: Dict[int, Tuple[Position, float]] = {}
         self._next_gps_round = 0.0
-        self._delivered: Set[int] = set()
-        self._to_purge: Set[int] = set()
-        # (available_at, src_id, dst_id, dst position, fix time)
-        self._pending_ack_hints: List[Tuple[float, int, int, Position, float]] = []
+        self._hinted: Set[int] = set()
+        # (msg_id, expiry, src_id, dst_id, dst position, fix time): the
+        # position reaches the source when the engine's ack for msg_id does.
+        self._pending_ack_hints: List[Tuple[int, float, int, int, Position, float]] = []
         self._prev_tick: Optional[float] = None
         self._seen: Set[int] = set()
         self.stats = {
@@ -113,14 +113,6 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             met = self._last_met.setdefault(nid, {})
             for n in ns:
                 met[n.id] = now
-        if self._to_purge:
-            # Only newly delivered ids: decide() drops any copy missed here.
-            for nid in neighbors_by_node:
-                node = self._nodes.get(nid)
-                if node is not None and node.buffer:
-                    for mid in [mid for mid in node.buffer if mid in self._to_purge]:
-                        del node.buffer[mid]
-            self._to_purge.clear()
         self._flush_ack_hints(now)
         if now < self._next_gps_round:
             return
@@ -212,9 +204,6 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
             state[_TOKENS] = max(state[_TOKENS], self._l_max)
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered:
-            holder.buffer.pop(message.msg_id, None)
-            return RoutingDecision.IGNORE
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
         self._prepare(message, holder, now)
@@ -270,11 +259,14 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
 
     # --- ACK --------------------------------------------------------------
 
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # When node last met each destination the peer carries.
+        return per_destination_table_bytes(peer)
+
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        if message.msg_id in self._delivered:
+        if message.msg_id in self._hinted:
             return
-        self._delivered.add(message.msg_id)
-        self._to_purge.add(message.msg_id)
+        self._hinted.add(message.msg_id)
         if self._ack_hint:
             # No `now` in this hook: on_tick stamps _prev_tick before any contact.
             now = self._prev_tick if self._prev_tick is not None else message.creation_time
@@ -297,20 +289,23 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
                     self._fixes[dst.id] = fix
         if fix is None:
             return
-        available_at = now + self._ack_hint_delay_factor * max(0.0, now - message.creation_time)
-        self._pending_ack_hints.append((available_at, message.src_id, message.dst_id, fix[0], fix[1]))
+        self._pending_ack_hints.append(
+            (message.msg_id, message.creation_time + message.ttl_s, message.src_id, message.dst_id, fix[0], fix[1])
+        )
 
     def _flush_ack_hints(self, now: float) -> None:
         if not self._pending_ack_hints:
             return
         pending = []
         for item in self._pending_ack_hints:
-            available_at, src_id, dst_id, pos, fix_time = item
-            if available_at > now:
+            msg_id, expiry, src_id, dst_id, pos, fix_time = item
+            src = self._nodes.get(src_id)
+            if src is None or now > expiry:
+                continue
+            if msg_id not in src.acked:
                 pending.append(item)
                 continue
-            src = self._nodes.get(src_id)
-            if src is not None and src.is_active:
+            if src.is_active:
                 # Engine-owned table on purpose: it fills the next message's
                 # dst_position, exactly as a reply would.
                 src.record_known_position(dst_id, pos, fix_time)
@@ -323,7 +318,7 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         for mid, m in node.buffer.items():
             if m.src_id == node.id:
                 continue  # never evict own messages
-            key = (mid not in self._delivered, not m.is_expired(now), m.routing_state.get(_TOKENS, 1), -m.hops)
+            key = (not m.is_expired(now), m.routing_state.get(_TOKENS, 1), -m.hops)
             if best_key is None or key < best_key:
                 best_id, best_key = mid, key
         return best_id

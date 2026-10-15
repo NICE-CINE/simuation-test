@@ -44,14 +44,17 @@ def _pair_with_destination(**kwargs):
     return algo, src, relay, dst
 
 
-def test_ack_hint_reaches_the_source_after_the_return_trip():
+def test_ack_hint_reaches_the_source_with_the_engines_ack():
     algo, src, relay, dst = _pair_with_destination(ack_hint=True)
     algo.on_tick(10.0, {1: [relay], 2: [src], 99: []})
-    algo.on_delivered(_msg(creation_time=4.0), relay)
-    algo.on_tick(15.0, {1: [relay], 2: [src], 99: []})
+    msg = _msg(creation_time=4.0)
+    algo.on_delivered(msg, relay)
+    algo.on_tick(500.0, {1: [relay], 2: [src], 99: []})
     assert 99 not in src.known_positions
-    algo.on_tick(16.0, {1: [relay], 2: [src], 99: []})
+    src.learn_ack(msg.msg_id, msg.creation_time + msg.ttl_s)
+    algo.on_tick(501.0, {1: [relay], 2: [src], 99: []})
     assert src.known_positions[99] == (Position(500.0, 0.0), 1.0)
+    assert algo.ack_size_bytes == 20
     assert algo.hint_stats["ack_hints_sent"] == algo.hint_stats["ack_hints_received"] == 1
 
 
@@ -173,9 +176,9 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     report = run_simulation(config, routing_algorithm=algo)
     created = report.messages_created + report.replies_created
     delivered = report.messages_delivered + report.replies_delivered
-    assert (created, delivered, report.total_transmissions) == (87, 70, 1345)
+    assert (created, delivered, report.total_transmissions) == (97, 90, 2118)
     assert {k: algo.hint_stats[k] for k in ("routed", "hinted", "delivered", "delivered_hinted", "gps_fixes")} == {
-        "routed": 84, "hinted": 50, "delivered": 70, "delivered_hinted": 47, "gps_fixes": 1200,
+        "routed": 95, "hinted": 63, "delivered": 90, "delivered_hinted": 62, "gps_fixes": 1200,
     }
 
 

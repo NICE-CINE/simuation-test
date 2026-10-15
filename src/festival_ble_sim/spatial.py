@@ -37,16 +37,22 @@ class SpatialGrid:
         self._cells.setdefault(new_cell, {})[node] = None
 
     def get_nearby(self, node: "BaseNode", radius_m: float) -> List["BaseNode"]:
-        cx, cy = self._cell_of(node.position.x, node.position.y)
+        px, py = node.position.x, node.position.y
+        cx, cy = self._cell_of(px, py)
         cell_radius = max(1, math.ceil(radius_m / self.cell_size_m))
         radius_squared = radius_m * radius_m
         found: List["BaseNode"] = []
+        # Inlined distance: with ~1000 neighbors per node in a packed crowd,
+        # the method call alone was half the run time.
         for dc in range(-cell_radius, cell_radius + 1):
             for dr in range(-cell_radius, cell_radius + 1):
                 cell = (cx + dc, cy + dr)
                 for other in self._cells.get(cell, ()):
                     if other is node:
                         continue
-                    if node.position.distance_squared_to(other.position) <= radius_squared:
+                    p = other.position
+                    dx = p.x - px
+                    dy = p.y - py
+                    if dx * dx + dy * dy <= radius_squared:
                         found.append(other)
         return found

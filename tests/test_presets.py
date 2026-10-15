@@ -102,7 +102,7 @@ def test_resolve_cli_args_is_idempotent_with_a_size():
     args = argparse.Namespace(size="small", num_festivaliers=None, mobility=None)
     resolve_cli_args(args, 200, ValueError)
     resolve_cli_args(args, 200, ValueError)
-    assert (args.num_festivaliers, args.mobility) == (4000, "poi")
+    assert (args.num_festivaliers, args.mobility) == (4000, "group")
 
 
 def test_resolve_cli_args_applies_script_defaults_without_size():

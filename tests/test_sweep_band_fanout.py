@@ -33,7 +33,7 @@ def test_build_algorithm_applies_band_and_flags():
     algo = sweep.build_algorithm({"fanout": 2, "band_low": 0.0, "band_high": 1.0, "purge_delivered": False}, seed=5)
     assert algo._fanout == 2
     assert algo._band == (0.0, 1.0)
-    assert algo._purge_delivered is False
+    assert algo.uses_delivery_acks is False
     assert sweep.build_algorithm({"band_high": 0.8}, seed=5)._band == (0.4, 0.8)
 
 

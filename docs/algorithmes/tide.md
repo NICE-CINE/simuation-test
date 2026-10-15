@@ -21,7 +21,7 @@ du fichier) :
 - au plus K pairs synchronises par minute et par porteur ;
 - la source garde une copie fantome et reinjecte des jetons a 3, 6 et
   20 min sans ACK ;
-- purge reseau-large a la livraison, eviction : acquittes, expires, en
+- purge par ACK propage par le moteur, eviction : acquittes, expires, en
   retard, copies a 1 jeton de faible utilite, jamais les messages propres.
 
 ## Diagramme
@@ -31,7 +31,7 @@ Decision prise pour chaque message du porteur a chaque contact :
 ```mermaid
 flowchart TD
     A["Contact entre porteur et voisin"] --> B{"Voisin = destination ?"}
-    B -- oui --> L["Livraison (moteur) puis purge reseau-large"]
+    B -- oui --> L["Livraison (moteur) puis ACK propage"]
     B -- non --> P{"Message deja livre ?"}
     P -- oui --> X["Purge de la copie locale, IGNORE"]
     P -- non --> C{"Voisin a deja le message ?"}
@@ -62,8 +62,8 @@ flowchart TD
 ## Faiblesses
 
 - Beaucoup de parametres, calibration delicate.
-- Vues exactes de l'instance partagee (2 sauts, densite, purge
-  instantanee) optimistes par rapport aux annonces BLE reelles.
+- Vues exactes de l'instance partagee (2 sauts, densite ; la table d'utilite
+  est facturee une fois par connexion) optimistes par rapport aux annonces BLE reelles.
 - Le moteur ne modelise ni l'energie de decouverte ni le cout des
   connexions : les gains attendus des digests et du cycle de scan ne
   sont pas mesurables ici.

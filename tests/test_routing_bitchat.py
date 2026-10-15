@@ -89,3 +89,17 @@ def test_isolated_relay_spools_for_the_spool_window(wake_at, relayed):
     nodes[5].is_active = True
     env.run(until=wake_at + 10.5)
     assert (1 in nodes[5].buffer) is relayed
+
+
+def test_announce_flood_goes_over_the_radio_capped_at_the_airtime():
+    from festival_ble_sim.config import BleConfig
+    nodes = _line(3)
+    lonely = {9: _node(9, x=500.0)}
+    algo = BitchatRouting(announce_bytes=100, announce_interval_s=4.0)
+    algo.on_simulation_start({**nodes, **lonely})
+    algo.on_ble_config(BleConfig(transfer_rate_bytes_per_s=50.0))
+    neighbors = {1: [nodes[2]], 2: [nodes[1], nodes[3]], 3: [nodes[2]], 9: []}
+    algo.on_tick(0.0, neighbors)
+    # Each of the 3 linked nodes relays 3 announces of 100 bytes per 4 s
+    # (75 bytes a tick), capped at 50; the lonely node only sends its own.
+    assert algo.control_broadcasts(0.0) == {1: 50, 2: 50, 3: 50, 9: 25}

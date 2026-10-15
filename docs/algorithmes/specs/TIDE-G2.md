@@ -36,7 +36,7 @@ Principe directeur, hérité de TIDE-G : **sans indice utilisable, on retombe ex
 
 **Modèle dans le simulateur.**
 
-- TIDE purge l'ACK instantanément dans tout le réseau (simplification existante). La position, elle, ne revient pas instantanément : elle est rendue disponible chez la source après `ack_hint_delay_factor × (latence aller)`. Valeur par défaut 1,0 : le retour prend autant de temps que l'aller.
+- TIDE purge l'ACK instantanément dans tout le réseau (simplification existante). La position, elle, ne revient pas instantanément : elle est rendue disponible chez la source après `ack_hint_delay_factor × (latence aller)`. Valeur par défaut 1,0 : le retour prend autant de temps que l'aller. **Oct. 2026 :** l'ACK est maintenant un vrai paquet du moteur (`uses_delivery_acks`, propagé et facturé sur les connexions, 20 octets avec la position) ; `ack_hint_delay_factor` a disparu, la position arrive quand l'ACK atteint la source.
 - Le fix du destinataire réutilise son fix périodique s'il a moins de `fix_max_age_s` (**avec l'horodatage de ce fix**, pas celui de la livraison), sinon il prend un fix ponctuel (§2.5).
 - La position arrive dans `source.known_positions[dst]` via `record_known_position` (la plus récente gagne). Le moteur l'utilise ensuite tout seul pour remplir `dst_position` des messages suivants, et le rafraîchissement d'indice de TIDE-G (`refresh_hint`) met à jour la copie fantôme de la source.
 
@@ -571,7 +571,7 @@ Ablations, sur la densité où TIDE-G2 se distingue le plus :
 ## 8. Points d'attention
 
 - **Le gain dépend du trafic.** Tout repose sur la part de messages qui ont un indice. Elle dépend des relances et des réponses, dont les taux réels en festival sont inconnus. À instrumenter dans l'appli (de façon anonyme) dès les premiers tests terrain.
-- **ACK instantané dans le moteur.** La purge réseau reste instantanée ; seule la position de l'ACK est retardée. Si un jour l'ACK est simulé comme un vrai paquet, `ack_hint_delay_factor` disparaît au profit de son temps de trajet réel.
+- **ACK instantané dans le moteur.** La purge réseau reste instantanée ; seule la position de l'ACK est retardée. C'est fait (oct. 2026) : l'ACK est un paquet du moteur, `ack_hint_delay_factor` a disparu au profit de son temps de trajet réel.
 - **Coût GPS.** Les fixes ponctuels s'ajoutent aux fixes périodiques des relais. Avec `gps_for_relays=True`, la plupart des sources et destinataires ont déjà un fix frais, donc le surcoût est faible ; avec `gps_for_relays=False`, il devient le coût principal.
 - **Fix d'envoi découplé de `src_position`.** Le fix facturé (§2.5) est pris au premier routage par la source, pas à la création, et c'est un tirage distinct du `gps_fix()` qui remplit `src_position`. Avec `fix_failure_probability > 0`, l'un peut échouer sans l'autre, et un message livré directement au destinataire (sans `decide`) ne paie rien. Effet négligeable sur l'énergie, à garder en tête pour les ablations d'échec de fix.
 - **Échecs de fix indépendants.** Le modèle tire chaque échec indépendamment. En réalité, ils sont corrélés (une personne sous une tente échoue plusieurs fois de suite), ce qui est plus défavorable.

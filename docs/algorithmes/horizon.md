@@ -20,9 +20,9 @@ purge). S'y ajoutent :
    deux voisins quand la destination part). Une annonce est plafonnee a
    `max_announce_bytes` (1650 o, advertising etendu BLE 5), destinations
    les plus proches d'abord. Les vecteurs passent par la radio du moteur
-   (`control_broadcasts`) avec les memes regles qu'un message : backoff
-   (un seul tirage par tick pour l'annonce et les donnees), budget
-   d'antenne, congestion, pertes, energie tx/rx ; seuls ceux recus sont
+   (`control_broadcasts`) avec les memes regles qu'un message : budget
+   d'antenne, charge des canaux d'annonce, pertes (sans renvoi : pas de
+   connexion), energie tx/rx ; seuls ceux recus sont
    fusionnes, et pas ceux d'un emetteur hors de portee du recepteur (borne
    entendue mais injoignable). Le tirage lit ces vecteurs recus, jamais la
    table courante du voisin.

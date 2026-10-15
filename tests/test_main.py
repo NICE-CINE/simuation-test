@@ -51,10 +51,10 @@ def test_routing_factories_cover_every_cli_choice():
 
 
 def test_mobility_factories_cover_every_cli_choice():
-    for name in ["random_waypoint", "poi"]:
+    for name in main_module.MOBILITY_MODELS:
         args = main_module.build_arg_parser().parse_args(["--mobility", name])
         config = main_module.build_config(args)
-        factory = main_module.MOBILITY_FACTORIES[name](config)
+        factory = main_module.mobility_factory(name, config.mobility)
         mobility = factory(random.Random(0))
         assert mobility is not None
 
@@ -133,7 +133,7 @@ def test_main_replay_flags_shape_the_replay_data(tmp_path):
     archive_dir = tmp_path / "archives"
     main_module.main(
         ["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10", "--seed", "1",
-         "--cooldown", "0", "--replay-html", "--replay-frame-step", "10", "--replay-max-messages", "1",
+         "--cooldown", "0", "--warmup", "0", "--replay-html", "--replay-frame-step", "10", "--replay-max-messages", "1",
          "--archive-dir", str(archive_dir)]
     )
     replay = next((archive_dir / "replay").glob("*_epidemic.html"))
@@ -195,7 +195,7 @@ def test_size_sets_festivaliers_area_and_crowd_layout():
     assert (config.area.width_m, config.area.height_m) == (205.0, 146.0)
     assert len(config.mobility.points_of_interest) == 4
     assert config.mobility.background_probability == pytest.approx(0.30 / 0.85)
-    assert args.mobility == "poi"
+    assert args.mobility == "group"
 
 
 def test_size_with_explicit_random_waypoint_only_changes_count_and_area():

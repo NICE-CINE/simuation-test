@@ -20,7 +20,11 @@ class GossipARouting(RoutingAlgorithm):
     # kept is everything that changes who holds which copy: adaptive p,
     # K_FLOOD/H_MAX, per-(message, peer) draws, SUMMARY bloom false
     # positives, counter-based suppression, epidemic purge tokens, per-session
-    # byte/bundle budgets and "most replicated first" eviction.
+    # byte/bundle budgets and "most replicated first" eviction. Its own purge
+    # tokens (not the engine's acks) keep the spec's epidemic PURGE_SYNC,
+    # billed as its Bloom (1024 bits) once per connection.
+    purge_sync_bytes = 128
+
     def __init__(
         self,
         c: float = 4.0,
@@ -120,6 +124,9 @@ class GossipARouting(RoutingAlgorithm):
             self._density[node_id] = raw if previous is None else alpha * raw + (1 - alpha) * previous
             self._density_tick[node_id] = now
         return self._density[node_id]
+
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        return self.purge_sync_bytes
 
     def knows_purge(self, node_id: int, msg_id: int) -> bool:
         return msg_id in self._purges.get(node_id, {})

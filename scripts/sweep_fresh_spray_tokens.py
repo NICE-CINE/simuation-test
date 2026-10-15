@@ -9,13 +9,13 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from compare_algorithms import REPORT_FIELDS, STATUS_REFRESH_S, build_config, format_duration, render_status
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import SITE_PRESETS, resolve_cli_args
 from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.simulation import run_simulation
 
 HEADERS = ["initial_tokens", "seed", "beacons"] + REPORT_FIELDS + ["wall_s"]
-SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "total_energy_consumed_mah"]
+SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "overhead_bytes", "total_energy_consumed_mah"]
 
 _worker_progress: Optional[MutableMapping[str, float]] = None
 
@@ -43,7 +43,7 @@ def _run_one(
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, size=size
     )
-    total_s = config.duration_s + config.cooldown_s
+    total_s = config.total_s
     label = run_label(tokens, seed)
     progress_callback = None
     if progress is not None:
@@ -56,7 +56,7 @@ def _run_one(
     report = run_simulation(
         config,
         routing_algorithm=FreshSprayRouting(initial_tokens=tokens),
-        mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
+        mobility_factory=mobility_factory(mobility, config.mobility),
         progress_callback=progress_callback,
         progress_interval_s=max(total_s / 1000, 1.0),
     )
@@ -158,7 +158,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument(
-        "--mobility", choices=["random_waypoint", "poi"], default=None, help="random_waypoint par defaut, poi avec --size",
+        "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
     )
     parser.add_argument(
         "--size", choices=sorted(SITE_PRESETS), default=None,

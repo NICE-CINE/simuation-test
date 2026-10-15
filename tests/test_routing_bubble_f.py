@@ -76,14 +76,14 @@ def test_ignores_when_contact_already_has_message():
     assert algo.decide(msg, holder, contact, now=0.0) is RoutingDecision.IGNORE
 
 
-def test_purges_copy_once_message_is_delivered_elsewhere():
+def test_contact_that_learned_the_ack_is_skipped_and_the_exchange_is_billed():
     algo = BubbleFRouting()
     holder, contact = _node(1), _node(2)
     msg = _msg()
     holder.store_message(msg)
-    algo.on_delivered(msg, holder)
+    contact.learn_ack(msg.msg_id, 1000.0)
     assert algo.decide(msg, holder, contact, now=0.0) is RoutingDecision.IGNORE
-    assert msg.msg_id not in holder.buffer
+    assert algo.uses_delivery_acks and algo.connection_table_bytes(holder, contact) == 198
 
 
 def test_entering_the_bubble_splits_tokens():

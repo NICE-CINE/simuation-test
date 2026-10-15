@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from ..models import Message
-from .base import RoutingAlgorithm, RoutingDecision
+from .base import RoutingAlgorithm, RoutingDecision, per_destination_table_bytes
 
 if TYPE_CHECKING:
     from ..nodes import BaseNode
@@ -30,6 +30,10 @@ class ProphetRouting(RoutingAlgorithm):
         self._last_seen: Dict[_Pair, float] = {}
         self._in_contact_at: Dict[_Pair, float] = {}
         self._prev_tick: Optional[float] = None
+
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # Node's predictability for each destination the peer carries.
+        return per_destination_table_bytes(peer)
 
     def _decayed(self, pair: _Pair, now: float) -> float:
         p = self._predictability.get(pair, 0.0)

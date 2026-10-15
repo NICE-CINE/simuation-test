@@ -12,8 +12,10 @@ from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
-from festival_ble_sim.mobility.poi import PoiMobility
-from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
+from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
+from festival_ble_sim.presets import (
+    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site, energy_config, resolve_cli_args,
+)
 from festival_ble_sim.progress import MINI_BAR_WIDTH, format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
@@ -27,6 +29,8 @@ REPORT_FIELDS = [
     "p95_latency_s",
     "avg_hops",
     "overhead",
+    "overhead_bytes",
+    "retransmitted_bytes",
     "total_energy_consumed_mah",
     "total_mesh_energy_consumed_mah",
     "buffer_eviction_count",
@@ -89,6 +93,7 @@ def build_config(
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
     random_charge: bool = False,
+    warmup_s: Optional[float] = None,
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     traffic = TrafficConfig(reply_probability=reply_probability, followup_probability=followup_probability)
@@ -96,6 +101,7 @@ def build_config(
         duration_s=duration_s,
         # Default: the message TTL, so every counted message gets its full lifetime.
         cooldown_s=cooldown_s if cooldown_s is not None else traffic.message_ttl_s,
+        warmup_s=warmup_s if warmup_s is not None else DEFAULT_WARMUP_S,
         num_festivaliers=num_festivaliers,
         random_seed=seed,
         area=area,
@@ -131,13 +137,14 @@ def _run_one(
     size: Optional[str] = None,
     cooldown_s: Optional[float] = None,
     random_charge: bool = False,
+    warmup_s: Optional[float] = None,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-        followup_probability, gps_fix_failure, size, cooldown_s, random_charge,
+        followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s,
     )
-    total_s = config.duration_s + config.cooldown_s
+    total_s = config.total_s
     label = run_label(algo_name, beacon_count, seed)
     progress_callback = None
     if progress is not None:
@@ -150,7 +157,7 @@ def _run_one(
     report: SimulationReport = run_simulation(
         config,
         routing_algorithm=build_routing(algo_name, seed),
-        mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
+        mobility_factory=mobility_factory(mobility, config.mobility),
         progress_callback=progress_callback,
         progress_interval_s=max(total_s / 1000, 1.0),
     )
@@ -175,6 +182,7 @@ def run_matrix(
     cooldown_s: Optional[float] = None,
     algorithms: Optional[List[str]] = None,
     random_charge: bool = False,
+    warmup_s: Optional[float] = None,
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
@@ -188,7 +196,7 @@ def run_matrix(
         futures: Dict[Future, int] = {
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
-                followup_probability, gps_fix_failure, size, cooldown_s, random_charge,
+                followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s,
             ): index
             for index, (algo_name, count, seed) in enumerate(tasks)
         }
@@ -274,10 +282,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     parser.add_argument("--duration", type=float, default=3600.0)
     parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
+    parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument(
-        "--mobility", choices=["random_waypoint", "poi"], default=None, help="random_waypoint par defaut, poi avec --size",
+        "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
     )
     parser.add_argument(
         "--size", choices=sorted(SITE_PRESETS), default=None,
@@ -321,6 +330,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         build_config(
             args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
             args.followup_probability, args.gps_fix_failure, args.size, args.cooldown, args.random_charge,
+            args.warmup,
         ),
     )
     rows = run_matrix(
@@ -339,6 +349,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         cooldown_s=args.cooldown,
         algorithms=args.algorithms,
         random_charge=args.random_charge,
+        warmup_s=args.warmup,
     )
     write_csv(rows, archive_csv)
     if args.csv:
