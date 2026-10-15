@@ -121,6 +121,14 @@ def _link_loss_probability(
     )
 
 
+def _radio_budget_bytes(ble_config: BleConfig) -> float:
+    return ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+
+
+def _congestion_loss_probability(ble_config: BleConfig, links: int) -> float:
+    return ble_config.packet_loss_base_probability + ble_config.packet_loss_congestion_coefficient * max(0, links - 1)
+
+
 def _backs_off(
     sender: BaseNode,
     ble_config: Optional[BleConfig],
@@ -162,7 +170,7 @@ def _send_control_broadcast(
     # the sender's data links would see, and the same per-receiver loss.
     if not sender.is_active:
         return False
-    budget = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+    budget = _radio_budget_bytes(ble_config)
     left = airtime_left.get(sender.id, budget)
     if size > left:
         return False
@@ -171,7 +179,7 @@ def _send_control_broadcast(
     links = len(neighbors)
     if ble_config.max_concurrent_links is not None:
         links = min(links, ble_config.max_concurrent_links)
-    congestion_loss_prob = ble_config.packet_loss_base_probability + ble_config.packet_loss_congestion_coefficient * max(0, links - 1)
+    congestion_loss_prob = _congestion_loss_probability(ble_config, links)
     radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
     for contact in neighbors:
         # Neighbors are listed at tick start; a battery may have died since.
@@ -235,10 +243,7 @@ def process_node_contacts(
 
     congestion_loss_prob = 0.0
     if ble_config is not None and neighbors:
-        congestion_loss_prob = (
-            ble_config.packet_loss_base_probability
-            + ble_config.packet_loss_congestion_coefficient * max(0, len(neighbors) - 1)
-        )
+        congestion_loss_prob = _congestion_loss_probability(ble_config, len(neighbors))
 
     radio = None
     if ble_config is not None:
@@ -249,7 +254,7 @@ def process_node_contacts(
     # a receiver busy with one sender has less left for the others.
     radio_budget_bytes = None
     if ble_config is not None:
-        radio_budget_bytes = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
+        radio_budget_bytes = _radio_budget_bytes(ble_config)
     if airtime_left is None:
         airtime_left = {}
 
