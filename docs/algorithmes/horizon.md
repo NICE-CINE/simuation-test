@@ -11,16 +11,25 @@ purge). S'y ajoutent :
 
 1. **Champ de distances** : toutes les `announce_period_s` (5 s), a sa
    propre phase, chaque noeud diffuse son vecteur de distances
-   (destinations a `horizon_hops` sauts ou moins, 5 octets par entree),
-   reconstruit juste avant a partir du dernier vecteur entendu de chaque
-   voisin depuis moins de `entry_ttl_s` (15 s). Une annonce perdue
-   n'efface donc pas la route ; un voisin muet disparait apres 15 s. Les vecteurs passent par la radio du moteur
-   (`control_broadcasts`) avec les memes regles qu'un message : backoff,
-   budget d'antenne, congestion, pertes, energie tx/rx ; seuls ceux recus
-   sont fusionnes.
+   (destinations a `horizon_hops` sauts ou moins, 9 octets par entree :
+   id, distance, prochain saut), reconstruit juste avant a partir du
+   dernier vecteur entendu de chaque voisin depuis moins de `entry_ttl_s`
+   (15 s). Une annonce perdue n'efface donc pas la route ; un voisin muet
+   disparait apres 15 s. Split horizon : un noeud ignore les routes dont
+   le prochain saut est lui-meme (pas de route fantome qui s'allonge entre
+   deux voisins quand la destination part). Une annonce est plafonnee a
+   `max_announce_bytes` (1650 o, advertising etendu BLE 5), destinations
+   les plus proches d'abord. Les vecteurs passent par la radio du moteur
+   (`control_broadcasts`) avec les memes regles qu'un message : backoff
+   (un seul tirage par tick pour l'annonce et les donnees), budget
+   d'antenne, congestion, pertes, energie tx/rx ; seuls ceux recus sont
+   fusionnes, et pas ceux d'un emetteur hors de portee du recepteur (borne
+   entendue mais injoignable). Le tirage lit ces vecteurs recus, jamais la
+   table courante du voisin.
 2. **Tirage** : si un voisin est plus proche du destinataire que le
    porteur (selon le champ), la copie lui passe (le porteur la supprime,
-   les jetons suivent), un saut par tick. Seul le meilleur voisin (plus
+   les jetons suivent ; une borne garde la sienne et ne donne qu'un
+   jeton), un saut par tick. Seul le meilleur voisin (plus
    petite distance, puis le plus proche physiquement) est vise ; les autres
    contacts sont ignores pour ce message. Le tirage n'a lieu que si le TTL
    de sauts restant permet d'arriver (`hops + h <= ttl_hops`).
@@ -32,7 +41,8 @@ purge). S'y ajoutent :
 
 `stats` compte `pull` (tirages reussis), `announces_sent`,
 `announces_received`, `announce_bytes` et `announce_rx_bytes` (part
-d'antenne des annonces).
+d'antenne des annonces) ; `announces_sent` et `announce_bytes` ne
+comptent que les annonces reellement emises.
 
 ## Diagramme
 
@@ -71,6 +81,8 @@ flowchart TD
 - La reserve de sauts bride le spray de `fresh_spray` (3 sauts DTN avec
   H = 5 et TTL 8) : en zone clairsemee, des copies qui auraient pu se
   rapprocher par relais restent sur place.
+- Sans numeros de sequence, une boucle d'au moins trois noeuds peut
+  encore faire grandir une route fantome, jusqu'a `horizon_hops`.
 - Champ en retard de jusqu'a H x 5 s : un chemin tire peut casser en route
   (la copie reste alors chez le dernier porteur, qui redevient DTN).
 - Le prochain saut est souvent en bord de portee, ou la perte de paquet

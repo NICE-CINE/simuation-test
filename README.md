@@ -532,8 +532,10 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   en sauts : toutes les 5 s, a sa propre phase, chaque noeud diffuse son
   vecteur de distances (destinations a `horizon_hops` = 5 sauts ou moins),
   reconstruit a partir du dernier vecteur entendu de chaque voisin depuis
-  moins de 15 s ; les vecteurs passent par la radio du moteur comme des
-  messages (backoff, temps d'antenne, pertes, energie). Une copie dont le
+  moins de 15 s, avec split horizon (chaque entree porte le prochain saut)
+  et plafonnes a 1650 octets ; les vecteurs passent par la radio du moteur
+  comme des messages (backoff, temps d'antenne, pertes, energie), et ceux
+  d'un emetteur injoignable (borne de plus grande portee) sont ignores. Une copie dont le
   porteur a un voisin plus proche du destinataire lui est passee (tirage,
   un saut par tick) si le TTL de sauts restant suffit ; hors tirage, une
   copie a `hops >= ttl_hops - horizon_hops` ne se replique plus (reserve
