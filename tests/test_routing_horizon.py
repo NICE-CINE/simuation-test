@@ -82,7 +82,7 @@ def test_each_node_announces_once_per_period_at_its_own_phase():
         assert len(sizes) < len(links)
         for node_id, size in sizes.items():
             seen[node_id] = seen.get(node_id, 0) + 1
-            assert size == 5 * len(algo._dist[node_id])
+            assert size == 5 * len(algo._vectors[node_id])
     assert seen == {node_id: 1 for node_id in links}
 
 
@@ -143,3 +143,12 @@ def test_pull_uses_the_vector_heard_not_the_neighbors_live_table():
     nodes[1].buffer[1] = msg
     assert algo._dist[2][5] == 3
     assert algo._next_hop(nodes[1], 5) is None
+
+
+def test_announce_is_capped_to_the_nearest_destinations():
+    algo = HorizonRouting(announce_entry_bytes=5, max_announce_bytes=10)
+    nodes, links = _line(algo)
+    _settle(algo, links)
+    assert len(algo._dist[1]) > 2
+    assert algo._vectors[1] == {1: 0, 2: 1}
+    assert algo._heard[2][1][0] == {1: 0, 2: 1}

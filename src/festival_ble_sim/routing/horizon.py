@@ -31,6 +31,7 @@ class HorizonRouting(FreshSprayRouting):
         announce_period_s: float = 5.0,
         entry_ttl_s: float = 15.0,
         announce_entry_bytes: int = 5,
+        max_announce_bytes: int = 1650,
         **fresh_spray_kwargs,
     ) -> None:
         if horizon_hops < 1:
@@ -40,7 +41,9 @@ class HorizonRouting(FreshSprayRouting):
         self._period = announce_period_s
         self._entry_ttl = entry_ttl_s
         self._entry_bytes = announce_entry_bytes
+        self._max_entries = max(1, max_announce_bytes // announce_entry_bytes)
         self._dist: Dict[int, Dict[int, int]] = {}
+        self._vectors: Dict[int, Dict[int, int]] = {}
         self._heard: Dict[int, Dict[int, Tuple[Dict[int, int], float]]] = {}
         self._next_due: Dict[int, float] = {}
         self._neighbors: Dict[int, List["BaseNode"]] = {}
@@ -78,8 +81,14 @@ class HorizonRouting(FreshSprayRouting):
             self._next_due[node_id] = due + self._period * max(1, math.ceil((now - due) / self._period))
             # A new dict every time: neighbors keep a reference to it as
             # "the last vector heard", so it must never be mutated.
-            self._dist[node_id] = self._rebuild(node_id, now)
-            sizes[node_id] = len(self._dist[node_id]) * self._entry_bytes
+            row = self._dist[node_id] = self._rebuild(node_id, now)
+            # The engine never sends what exceeds a tick's airtime, and BLE 5
+            # extended advertising stops at 1650 bytes: past the cap, only
+            # the nearest destinations are announced.
+            if len(row) > self._max_entries:
+                row = dict(sorted(row.items(), key=lambda e: (e[1], e[0]))[:self._max_entries])
+            self._vectors[node_id] = row
+            sizes[node_id] = len(row) * self._entry_bytes
         self._sizes = sizes
         self.stats["announces_sent"] += len(sizes)
         self.stats["announce_bytes"] += sum(sizes.values())
@@ -91,7 +100,7 @@ class HorizonRouting(FreshSprayRouting):
             self.stats["announces_received"] += len(senders)
             for sender_id in senders:
                 self.stats["announce_rx_bytes"] += self._sizes.get(sender_id, 0)
-                heard[sender_id] = (self._dist[sender_id], now)
+                heard[sender_id] = (self._vectors[sender_id], now)
 
     def _next_hop(self, holder: "BaseNode", dst_id: int) -> Optional[Tuple[int, int]]:
         key = (holder.id, dst_id)
