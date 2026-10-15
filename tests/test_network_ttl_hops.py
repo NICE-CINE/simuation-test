@@ -1,4 +1,3 @@
-import pytest
 from festival_ble_sim.config import EnergyConfig
 from festival_ble_sim.energy import EnergyModel
 from festival_ble_sim.metrics import MetricsCollector

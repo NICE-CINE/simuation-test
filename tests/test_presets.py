@@ -1,6 +1,5 @@
 import random
 import pytest
-from festival_ble_sim.config import AreaConfig
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.presets import (
     SITE_PRESETS,
