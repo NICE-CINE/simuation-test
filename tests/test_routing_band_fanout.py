@@ -1,3 +1,5 @@
+import random
+
 import pytest
 from festival_ble_sim.config import BleConfig, EnergyConfig
 from festival_ble_sim.energy import EnergyModel
@@ -59,6 +61,8 @@ def _selected(algo, holder, contacts, message=None):
         {"band": (0.6, 0.4)},
         {"band": (-0.1, 0.5)},
         {"band": (0.4, 0.4)},
+        {"met_dst_window_s": 0.0},
+        {"met_dst_window_s": -5.0},
     ],
 )
 def test_invalid_parameters_are_rejected(kwargs):
@@ -318,3 +322,89 @@ def test_engine_integration_relay_beyond_the_link_cap_receives_the_copy():
         ble_config=BleConfig(max_concurrent_links=6),
     )
     assert [c.id for c in contacts if c.has_message(1)] == [contacts[6].id]
+
+
+DST_ID = 99
+
+
+def _met_world(algo, distances, met_index=0, met_at=0.0):
+    holder, contacts = _world(algo, distances)
+    destination = _node(DST_ID, 80.0)
+    holder.store_message(_msg(dst_id=DST_ID))
+    algo.on_tick(met_at, {contacts[met_index].id: [destination]})
+    return holder, contacts
+
+
+def test_neighbor_that_met_the_destination_is_relayed_even_with_budget_spent():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _met_world(algo, [3.0, 15.0])
+    _spend(algo, holder, contacts[1], 1)
+    algo.on_tick(1.0, {holder.id: list(contacts)})
+    message = _msg(dst_id=DST_ID)
+    assert algo.decide(message, holder, contacts[0], now=1.0) is RoutingDecision.FORWARD
+    assert algo.decide(message, holder, contacts[1], now=1.0) is RoutingDecision.IGNORE
+
+
+def test_informed_relay_does_not_spend_the_holders_budget_and_its_copy_cannot_spray():
+    algo = BandFanoutRouting(fanout=2)
+    holder, contacts = _met_world(algo, [3.0, 15.0])
+    algo.on_tick(1.0, {holder.id: list(contacts)})
+    message = _msg(dst_id=DST_ID)
+    assert algo.decide(message, holder, contacts[0], now=1.0) is RoutingDecision.FORWARD
+    algo.on_forward(message, holder, contacts[0], message)
+    assert algo._relayed.get(holder.id, {}).get(1, 0) == 0
+    assert algo._relayed[contacts[0].id][1] == 2
+    contacts[0].store_message(message)
+    algo.on_tick(2.0, {contacts[0].id: [contacts[1]]})
+    assert algo.decide(message, contacts[0], contacts[1], now=2.0) is RoutingDecision.IGNORE
+
+
+def test_knowledge_of_the_destination_expires_after_the_window():
+    algo = BandFanoutRouting(fanout=1, met_dst_window_s=100.0)
+    holder, contacts = _met_world(algo, [3.0, 15.0])
+    message = _msg(dst_id=DST_ID)
+    algo.on_tick(100.0, {holder.id: list(contacts)})
+    assert algo._informed[holder.id] == {contacts[0].id}
+    algo.on_tick(101.0, {holder.id: list(contacts)})
+    assert holder.id not in algo._informed
+    assert algo.decide(message, holder, contacts[0], now=101.0) is RoutingDecision.IGNORE
+
+
+def test_met_destination_relays_can_be_disabled():
+    algo = BandFanoutRouting(fanout=1, met_dst_window_s=None)
+    holder, contacts = _met_world(algo, [3.0, 15.0])
+    algo.on_tick(1.0, {holder.id: list(contacts)})
+    assert algo._informed == {}
+    assert algo.decide(_msg(dst_id=DST_ID), holder, contacts[0], now=1.0) is RoutingDecision.IGNORE
+
+
+def test_informed_neighbor_does_not_receive_a_message_it_already_holds():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _met_world(algo, [3.0, 15.0])
+    contacts[0].store_message(_msg(dst_id=DST_ID))
+    algo.on_tick(1.0, {holder.id: list(contacts)})
+    assert holder.id not in algo._informed
+
+
+def test_select_links_gives_informed_neighbors_a_link_ahead_of_nearer_ones():
+    algo = BandFanoutRouting(fanout=1)
+    holder, contacts = _met_world(algo, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 25.0], met_index=6)
+    algo.on_tick(1.0, {holder.id: list(contacts)})
+    kept = algo.select_links(holder, contacts, 3)
+    assert contacts[6] in kept
+    assert len(kept) == 3
+
+
+def test_selection_does_not_depend_on_the_order_neighbors_are_listed():
+    def run(reverse):
+        algo = BandFanoutRouting(fanout=2, seed=5)
+        holder, contacts = _world(algo, [10.0, 12.0, 14.0, 15.0, 16.0, 18.0, 20.0, 22.0])
+        shared_rng = random.Random(1)
+        for node in [holder] + contacts:
+            node.gps_noise_std_m = 5.0
+            node.gps_rng = shared_rng
+        ordered = list(reversed(contacts)) if reverse else contacts
+        _tick(algo, holder, ordered)
+        return algo._selected[holder.id]
+
+    assert run(False) == run(True)

@@ -2,7 +2,7 @@
 
 Relais à éventail borné : chaque copie est relayée au plus `fanout` fois, vers des voisins tirés au hasard dans une bande de distance (ni trop près, ni au bord de la portée), avec un plafond de sauts et une purge globale à la livraison.
 
-> **Statut** : implémenté dans `src/festival_ble_sim/routing/band_fanout.py` (`--routing band_fanout`), 30 tests dans `tests/test_routing_band_fanout.py` et 2 dans `tests/test_routing_select_links.py` (hook moteur `select_links`), balayage de variantes par `scripts/sweep_band_fanout.py`. Algorithme conçu pour ce simulateur, sans document d'origine : spec rédigée a posteriori à partir du code (après le correctif `d775dbc`). Fiche courte : `docs/algorithmes/band_fanout.md`.
+> **Statut** : implémenté dans `src/festival_ble_sim/routing/band_fanout.py` (`--routing band_fanout`), 43 tests dans `tests/test_routing_band_fanout.py` et 2 dans `tests/test_routing_select_links.py` (hook moteur `select_links`), balayage de variantes par `scripts/sweep_band_fanout.py`. Algorithme conçu pour ce simulateur, sans document d'origine : spec rédigée a posteriori à partir du code (après le correctif `d775dbc`). Fiche courte : `docs/algorithmes/band_fanout.md`.
 
 ---
 
@@ -14,7 +14,8 @@ Objectif : étendre la diffusion sans inonder, en évitant de relayer vers des v
 2. **Éventail borné** : un porteur relaie chaque message au plus `fanout` fois ; la copie reçue repart avec un budget neuf.
 3. **Plafond de sauts** : au-delà de `max_hops` sauts, il ne reste que la livraison directe.
 4. **Liaisons choisies par l'algo** : le hook `select_links` réserve les liaisons aux destinataires, puis aux relais tirés.
-5. **Purge globale** : un message livré disparaît de tous les buffers au tick suivant.
+5. **Relais « a croisé le destinataire »** : un voisin qui a été à portée du destinataire dans les `met_dst_window_s` dernières secondes reçoit la copie sans entamer le budget du porteur ; la copie qu'il reçoit ne repart qu'à d'autres voisins de ce type.
+6. **Purge globale** : un message livré disparaît de tous les buffers au tick suivant.
 
 ---
 
@@ -33,6 +34,8 @@ Variante du gossip à éventail fixe (*k*-fanout gossip) : chaque nœud transmet
 | `_selected[holder]` | global, recalculé à chaque tick | relais tirés pour ce porteur à ce tick |
 | `_relayed[holder][msg]` | global | nombre de relais déjà faits par ce porteur pour ce message |
 | `_delivered` | global | identifiants des messages livrés (si `purge_delivered`) |
+| `_last_seen[nœud][autre]` | global | dernier tick où `autre` était dans les voisins de `nœud` (seulement si `met_dst_window_s` n'est pas `None`) |
+| `_informed[porteur]` | global, recalculé à chaque tick | voisins du porteur qui ont croisé le destinataire d'un message relayable |
 | `_nodes` | global | dictionnaire des nœuds, pour la purge |
 
 Rien n'est stocké dans `routing_state` : une copie clonée par le backhaul des bornes repart donc avec un budget neuf au lieu d'hériter du budget épuisé de la borne source.
@@ -52,6 +55,8 @@ Tirage (`_select`) :
 3. Si au moins `fanout` voisins ont un ratio dans `[band[0], band[1]]`, on en tire `fanout` au hasard (RNG de graine `seed`).
 4. Sinon, on prend tous ceux de la bande et on complète avec les voisins hors bande les plus proches de ses bords (écart `band[0] - ratio` ou `ratio - band[1]`).
 
+Après le tirage, `_informed[porteur]` reçoit les voisins qui, pour au moins un message du buffer (`hops < max_hops`), ne l'ont pas déjà, n'en sont pas le destinataire et ont vu le destinataire dans la fenêtre. Ce calcul se fait même si le budget `fanout` du porteur est épuisé.
+
 Le tirage vaut pour **tous** les messages du porteur à ce tick : il n'y a pas de tirage par message.
 
 ### 3.3 `select_links` : qui obtient une liaison
@@ -62,7 +67,7 @@ Le moteur limite chaque émetteur à `max_concurrent_links` (6 par défaut) vois
 2. les relais tirés à ce tick ;
 3. les autres voisins, du plus proche au plus loin.
 
-Puis il coupe à `max_links`. À l'intérieur de chaque groupe, l'ordre reste celui de la distance réelle. Sans destinataire ni relais tiré, c'est le comportement par défaut.
+Les relais tirés et les voisins informés partagent le deuxième groupe. Puis il coupe à `max_links`. À l'intérieur de chaque groupe, l'ordre reste celui de la distance réelle. Sans destinataire ni relais tiré, c'est le comportement par défaut.
 
 ### 3.4 Décision (`decide`)
 
@@ -71,14 +76,16 @@ Appelée par le moteur seulement pour un voisin qui n'est pas le destinataire, e
 | Condition | Décision |
 |---|---|
 | message livré (`_delivered`) ou déjà détenu par le voisin | IGNORE |
-| `hops >= max_hops` ou `_relayed[porteur][msg] >= fanout` | IGNORE |
+| `hops >= max_hops` | IGNORE |
+| le voisin a croisé le destinataire dans la fenêtre | FORWARD (sans condition de budget ni de tirage) |
+| `_relayed[porteur][msg] >= fanout` | IGNORE |
 | voisin absent de `_selected[porteur]` | IGNORE |
 | sinon | FORWARD |
 
 ### 3.5 Effet d'un transfert (`on_forward`)
 
-- `_relayed[porteur][msg] += 1` ; le porteur garde sa copie.
-- `_relayed[voisin][msg]` est effacé : la copie reçue repart avec `fanout` relais.
+- Voisin informé : le budget du porteur n'est pas entamé et `_relayed[voisin][msg] = fanout` (la copie ne repart que vers d'autres voisins informés, ou vers le destinataire).
+- Sinon : `_relayed[porteur][msg] += 1` ; le porteur garde sa copie, et `_relayed[voisin][msg]` est effacé : la copie reçue repart avec `fanout` relais.
 
 Le moteur appelle `on_forward` juste après chaque transfert, avant le `decide` suivant : un porteur à qui il reste 1 relais et qui a 3 relais tirés n'en sert qu'un.
 
@@ -101,6 +108,7 @@ Pas de `choose_eviction` : FIFO du moteur.
 | `band` | `(0.4, 0.6)` | `0 ≤ bas < haut` | fenêtre de distance, en fraction de la portée du porteur |
 | `seed` | 0 | | RNG du tirage (`main.py` passe `--seed`) |
 | `purge_delivered` | `True` | | purge globale à la livraison |
+| `met_dst_window_s` | 1200 | `None` ou > 0 | fenêtre « a croisé le destinataire » en s ; `None` désactive |
 
 Avec les défauts, un arbre de copies issu d'une seule source compte au plus `1 + 3 + 9 + 27 + 81 = 121` porteurs (mais voir §8 : cette borne n'est pas stricte).
 
@@ -118,6 +126,7 @@ Avec les défauts, un arbre de copies issu d'une seule source compte au plus `1 
 ## 6. Ce qui est simplifié
 
 - `_delivered` est global et instantané (instance partagée) : aucun ACK n'est transmis ni facturé. C'est optimiste, comme pour `dasfv`, `fresh_spray` ou `geo_spray_focus`.
+- La mémoire « qui a croisé qui » est globale et lue chez le voisin sans échange radio ni coût (comme `fresh_spray`).
 - Les positions GPS du porteur et des voisins sont lues sans fix facturé, et sans échec de fix (`gps_position()`, pas `gps_fix()`). Un vrai téléphone devrait mesurer la distance au RSSI ou recevoir la position du voisin.
 - `select_links` classe par position réelle, la bande par position bruitée : un relais tiré peut se trouver un peu hors bande en réalité.
 
@@ -125,7 +134,9 @@ Avec les défauts, un arbre de copies issu d'une seule source compte au plus `1 
 
 ## 7. Résultats
 
-Balayage `scripts/sweep_band_fanout.py` : voir la fiche `docs/algorithmes/band_fanout.md` (tableau, archive et lecture). Ces chiffres (`archives/2026-10-09_09-47-35_sweep_band_fanout.csv`) et la comparaison `archives/2026-10-09_10-22-41_comparaison.csv` ont été mesurés **avant** le correctif `d775dbc` (liaisons réservées aux destinataires, budget par porteur, voisins inutiles écartés) : ils ne reflètent pas exactement le code actuel.
+Mesure du 15 octobre 2026 (300 festivaliers, `poi`, 6 graines appariées) : les relais « a croisé le destinataire » donnent +2,7 points de livraison (0,941 → 0,968), −44 s de latence moyenne, overhead inchangé (60,5 → 61,9) ; `fresh_spray` reste à 0,963 pour un overhead de 32,4. Détails et limites dans la fiche `docs/algorithmes/band_fanout.md`.
+
+Balayage `scripts/sweep_band_fanout.py` : voir la fiche `docs/algorithmes/band_fanout.md` (tableau, archive et lecture). Ces chiffres (`archives/2026-10-09_09-47-35_sweep_band_fanout.csv`) et la comparaison `archives/2026-10-09_10-22-41_comparaison.csv` ont été mesurés **avant** le correctif `d775dbc`, les corrections du moteur du 12 octobre et les relais « a croisé le destinataire » (liaisons réservées aux destinataires, budget par porteur, voisins inutiles écartés) : ils ne reflètent pas exactement le code actuel.
 
 ---
 

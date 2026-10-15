@@ -232,15 +232,16 @@ termine, donc un run interrompu garde les resultats deja obtenus.
 Compare plusieurs configurations de `BandFanoutRouting` (avec
 `--beacon-count` bornes) sur plusieurs graines, dans un seul pool de processus, puis
 affiche la moyenne par variante (livraison, latence moyenne et p95,
-overhead, energie).
+overhead, paquets perdus, energie du mesh).
 
 - `--variant "cle=val,cle=val"` : une variante, option repetable ;
   `--variant ""` = les defauts. Cles : `fanout` (entier), `max_hops`
   (entier), `band_low` et `band_high` (flottants, fractions de la portee),
-  `purge_delivered` (`0` ou `1`). Une cle inconnue ou une valeur invalide
+  `purge_delivered` (`0` ou `1`), `met_dst_window_s` (secondes, ou `none`
+  pour desactiver les relais "a croise le destinataire"). Une cle inconnue ou une valeur invalide
   arrete le script avant de lancer quoi que ce soit.
-- Sans `--variant`, le script teste 7 variantes : les defauts,
-  `purge_delivered=0`, `band_low=0,band_high=1` (pas de bande), `fanout=2`,
+- Sans `--variant`, le script teste 8 variantes : les defauts,
+  `purge_delivered=0`, `met_dst_window_s=none`, `band_low=0,band_high=1` (pas de bande), `fanout=2`,
   `fanout=4`, `max_hops=3` et `max_hops=5`.
 - `--seeds` (defaut `1 2 3`), `--duration` (defaut 3600), `--num-festivaliers`
   (defaut 200), `--beacon-count` (defaut 6), `--mobility`
@@ -778,11 +779,15 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Les
   copies sont purgees par l'ACK du moteur (`purge_delivered=True`), propage
   et facture sur les connexions. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
-  continue d'etre transmis apres la livraison. Pas d'eviction dediee.
+  continue d'etre transmis apres la livraison. Les voisins qui ont ete a
+  portee du destinataire dans les `met_dst_window_s` dernieres secondes
+  (1200 par defaut, `None` desactive) recoivent la copie sans entamer le
+  budget du porteur ; la copie qu'ils recoivent n'est ensuite relayee qu'a
+  d'autres voisins de ce type (ou livree). Pas d'eviction dediee.
   `scripts/sweep_band_fanout.py` (options : voir "Balayer les variantes de
   band_fanout") compare des variantes (`--variant
   "fanout=2,max_hops=4"`, cles : `fanout`, `max_hops`, `band_low`,
-  `band_high`, `purge_delivered`) sur plusieurs graines ;
+  `band_high`, `purge_delivered`, `met_dst_window_s`) sur plusieurs graines ;
   sans `--variant`, il teste les defauts, l'absence de purge, la bande
   0-100 %, `fanout` 2 et 4, `max_hops` 3 et 5. Resultats et diagramme dans
   `docs/algorithmes/band_fanout.md`, spec dans
