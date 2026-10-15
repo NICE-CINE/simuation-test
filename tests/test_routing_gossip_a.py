@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import replace
 import pytest
-from festival_ble_sim.config import AreaConfig, SimulationConfig
+from festival_ble_sim.config import AreaConfig, SimulationConfig, SocialConfig
 from festival_ble_sim.models import Message, Position
 from festival_ble_sim.nodes import BaseNode
 from festival_ble_sim.routing.base import RoutingDecision
@@ -269,6 +269,8 @@ def test_decide_cache_leaves_results_unchanged():
         duration_s=300.0, num_festivaliers=80, random_seed=11, node_buffer_capacity=10,
         area=AreaConfig(width_m=100.0, height_m=100.0), beacons=BeaconConfig(count=4),
         traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5),
+        # Friends = group: these values predate outside friends.
+        social=SocialConfig(outside_friends_range=(0, 0)),
     )
     r = run_simulation(config, routing_algorithm=GossipARouting(seed=11))
     assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (54, 51, 3899)
