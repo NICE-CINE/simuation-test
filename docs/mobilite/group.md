@@ -41,6 +41,28 @@ Les personnes sans amis (`no_friend_fraction`, 20 %) se deplacent comme
 (`simulation.run_simulation` appelle `MobilityModel.join_group` une fois
 les groupes tires).
 
+## Effet sur le trafic
+
+On n'ecrit pas a un ami qu'on voit : au moment d'un envoi, les amis a
+moins de `TrafficConfig.skip_friends_within_m` (15 m, position reelle)
+sont ecartes, le destinataire est tire parmi les autres, et s'il n'en
+reste aucun l'envoi est **annule** (pas reporte). Les amis etant les
+membres du groupe (`social.assign_friend_groups` fait des groupes
+disjoints, et ce sont eux qui se deplacent ensemble) :
+
+- tant que tout le groupe est reuni, personne n'ecrit ;
+- les messages naissent d'une **separation** : le membre parti ecrit au
+  groupe, ou le groupe ecrit au membre parti (sortie, retour au
+  rendez-vous, recherche) ;
+- a taux personnel egal (`messages_per_hour_range`), beaucoup moins de
+  messages sont crees qu'avec `poi`, ou les amis sont disperses et le
+  filtre n'ecarte presque personne. Le taux reel depend donc de
+  `GroupConfig` (frequence et duree des sorties).
+
+Les reponses (`--reply-probability`) et relances (`--followup-probability`)
+ne repassent pas par ce filtre : elles partent meme si le destinataire est
+revenu a moins de 15 m entre-temps (20 a 180 s plus tard, c'est rare).
+
 ## Diagramme
 
 ```mermaid
@@ -70,12 +92,15 @@ flowchart TD
 
 ## Faiblesses
 
-- Toutes les valeurs de `GroupConfig` sont estimees, pas mesurees.
+- Toutes les valeurs de `GroupConfig` sont estimees, pas mesurees ; comme
+  elles fixent le nombre de separations, elles fixent aussi la charge du
+  reseau (voir "Effet sur le trafic").
 - Le groupe entier suit le meneur au rendez-vous ; dans la realite le
   groupe peut aussi se scinder.
-- Un message envoye a un ami a cote reste un message comme un autre : le
-  trafic ne tient pas compte de la proximite (on ecrit autant a l'ami a
-  cote qu'a celui qui est parti).
+- Tous les amis d'une personne sont dans son groupe : personne n'a d'ami
+  venu separement, a l'autre bout du site depuis le debut. Les
+  destinataires sont donc toujours un membre parti ou un groupe a un
+  rendez-vous connu, jamais un ami qu'on n'a pas vu de la journee.
 
 ## References
 

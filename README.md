@@ -199,11 +199,15 @@ selon `SimulationConfig.social` :
   (`no_friend_fraction`) et **n'envoient rien** ;
 - les autres sont repartis en groupes disjoints de 2 a 8 personnes
   (`group_size_range`), ou tout le monde est ami avec tout le monde ;
-- a chaque envoi, le destinataire est un ami actif tire au hasard (envoi
-  saute si aucun ami n'est present).
+- a chaque envoi, le destinataire est un ami actif tire au hasard parmi
+  ceux a plus de 15 m (`skip_friends_within_m` : on n'ecrit pas a un ami
+  qu'on voit) ; envoi annule si aucun ne reste.
 
-Le meme graphe sert a `bubble_f`. Les amis ne se deplacent **pas**
-ensemble : la mobilite ignore le graphe. `friends_only=False` revient a un
+Le meme graphe sert a `bubble_f` et, avec `--mobility group` (defaut de
+`--size`), aux groupes qui se deplacent ensemble : les messages naissent
+alors des separations, et bien moins de messages sont crees qu'avec `poi`
+(voir `docs/mobilite/group.md`). Avec `random_waypoint` et `poi`, la
+mobilite ignore le graphe. `friends_only=False` revient a un
 destinataire tire parmi tous les festivaliers actifs.
 
 **Reponses** (`--reply-probability P`, defaut 0) : un message livre a un
@@ -516,8 +520,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   progres, admission restreinte des buffers pleins a 80 %, epoques
   optionnelles (`epoch_s`). Les Bloom, `rankCap`, SOS et RSSI ne sont pas
   modelises (instance partagee = vues exactes, pas d'attaquant). Avec
-  `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
-  apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
+  `random_waypoint` ou `poi`, les amis ne se deplacent pas ensemble et la
+  bulle apporte peu ; elle prend son sens avec `--mobility group`.
 - `managed_flood` (`routing/managed_flood.py`) — inondation geree du
   Bluetooth Mesh (couche reseau), sans stockage-transport : un noeud ne
   relaie un PDU que pendant `relay_window_s` apres l'avoir recu, puis
