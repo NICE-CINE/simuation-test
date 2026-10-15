@@ -67,3 +67,11 @@ flowchart TD
 - Joignabilite calculee sur le graphe des voisins du tick (annonce
   instantanee), sans pertes.
 - Les bornes ne servent que de relais, jamais de couriers.
+
+## References
+
+Origine : Reduction au niveau reseau du code de bitchat (ecarts dans la spec).
+
+- bitchat, application iOS, depot `github.com/permissionlesstech/bitchat`, commit `5e9287f`. — source des constantes et du comportement (`RelayController`, `BLEService`, `MessageRouter`, `CourierStore`).
+- Bluetooth SIG, *Mesh Profile Specification* 1.0, 2017 (remplacee par *Mesh Protocol Specification* 1.1, 2023). — inondation geree heritee de `managed_flood`.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Wait: An Efficient Routing Scheme for Intermittently Connected Mobile Networks*, ACM SIGCOMM WDTN, p. 252-259, 2005. — budget des couriers (division binaire des copies).

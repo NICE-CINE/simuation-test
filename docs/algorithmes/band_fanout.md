@@ -133,3 +133,12 @@ les chiffres ne correspondent pas exactement au code actuel.
   chez tous les voisins.
 - Pas de notion de destination : les relais sont tires au hasard, sans
   utiliser `dst_position` ni l'historique de rencontres.
+
+## References
+
+Origine : Spec `docs/algorithmes/specs/BAND-FANOUT.md`. Variante du gossip a eventail fixe ; la bande de distance, le budget par porteur et la purge sont propres a ce simulateur (spec, §2).
+
+- A. Demers et al., *Epidemic Algorithms for Replicated Database Maintenance*, ACM PODC, p. 1-12, 1987. — gossip a eventail fixe (chaque noeud relaie a `k` pairs tires au hasard).
+- A.-M. Kermarrec, L. Massoulie, A. J. Ganesh, *Probabilistic Reliable Dissemination in Large-Scale Systems*, IEEE Transactions on Parallel and Distributed Systems 14(3), p. 248-258, 2003. — analyse de la fiabilite selon l'eventail.
+- S.-Y. Ni, Y.-C. Tseng, Y.-S. Chen, J.-P. Sheu, *The Broadcast Storm Problem in a Mobile Ad Hoc Network*, ACM MobiCom, p. 151-162, 1999. — choix des relais par la distance (*distance-based scheme*) ; ici on vise le milieu de portee plutot que le bord, a cause des pertes par shadowing.
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — purge des copies apres livraison : schemas de recuperation (IMMUNE, VACCINE) du routage epidemique.

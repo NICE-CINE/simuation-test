@@ -36,3 +36,10 @@ flowchart TD
 - En foule dense, la saturation se retourne contre lui : evictions de
   buffer et collisions radio font chuter le taux de livraison.
 - Aucun nettoyage apres livraison : les copies continuent de circuler.
+
+## References
+
+Origine : Algorithme de la litterature, reproduit sans ajout (ecarts dans la spec, §6).
+
+- A. Vahdat, D. Becker, *Epidemic Routing for Partially-Connected Ad Hoc Networks*, rapport technique CS-2000-06, Duke University, 2000. — article d'origine (summary vectors, compteur de sauts).
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — modele analytique du routage epidemique et de ses variantes.

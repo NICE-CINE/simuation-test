@@ -72,3 +72,9 @@ buffers, les ACK se propagent d'un saut, et une source sans ACK apres
 - Le cache de taille fixe peut oublier un PDU sous forte charge et le
   laisser repasser.
 - Les ACK ne consomment pas de bande passante dans le modele.
+
+## References
+
+Origine : Reduction au niveau reseau d'un protocole standardise (ecarts dans la spec).
+
+- Bluetooth SIG, *Mesh Profile Specification* 1.0, 2017 (remplacee par *Mesh Protocol Specification* 1.1, 2023). — couche reseau : relais (*Relay feature*), TTL, cache de messages reseau ; messages acquittes de la couche transport.

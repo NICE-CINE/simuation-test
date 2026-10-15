@@ -40,3 +40,10 @@ flowchart TD
 - `L` fixe, independant de la densite : trop peu en zone clairsemee, trop
   en zone dense.
 - N'exploite pas les bornes.
+
+## References
+
+Origine : Algorithme de la litterature, variante binaire (ecarts dans la spec, §6).
+
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Wait: An Efficient Routing Scheme for Intermittently Connected Mobile Networks*, ACM SIGCOMM WDTN, p. 252-259, 2005. — article d'origine : phases spray et wait, division binaire des jetons.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Efficient Routing in Intermittently Connected Mobile Networks: The Multiple-Copy Case*, IEEE/ACM Transactions on Networking 16(1), 2008. — version journal : choix de `L` selon la taille du reseau, analyse du delai.

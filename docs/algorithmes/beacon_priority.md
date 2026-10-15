@@ -38,3 +38,10 @@ flowchart TD
 - Le marquage ne coupe que les copies qui ont vu une borne : les autres
   continuent d'inonder, l'overhead reste proche d'`epidemic`.
 - Depend fortement du nombre et du placement des bornes.
+
+## References
+
+Origine : Baseline ecrite pour ce simulateur, sans reference directe dans la litterature (spec, §2).
+
+- A. Vahdat, D. Becker, *Epidemic Routing for Partially-Connected Ad Hoc Networks*, rapport technique CS-2000-06, Duke University, 2000. — inondation entre telephones.
+- W. Zhao, Y. Chen, M. Ammar, M. Corner, B. Levine, E. Zegura, *Capacity Enhancement using Throwboxes in DTNs*, IEEE MASS, 2006. — idee voisine : des noeuds fixes ajoutes au DTN pour multiplier les contacts.

@@ -87,3 +87,11 @@ flowchart TD
   (la copie reste alors chez le dernier porteur, qui redevient DTN).
 - Le prochain saut est souvent en bord de portee, ou la perte de paquet
   est plus forte : un echec est retente au tick suivant.
+
+## References
+
+Origine : Sous-classe de `fresh_spray` (voir ses references) ; le champ de distances est propre a ce simulateur (spec, §2).
+
+- J. Whitbeck, V. Conan, *HYMAD: Hybrid DTN-MANET Routing for Dense and Highly Dynamic Wireless Networks*, Computer Communications 33(13), p. 1483-1492, 2010. — hybride MANET/DTN : routage par table dans les groupes connexes, stockage-transport entre eux.
+- C. E. Perkins, P. Bhagwat, *Highly Dynamic Destination-Sequenced Distance-Vector Routing (DSDV) for Mobile Computers*, ACM SIGCOMM, 1994. — vecteurs de distances (ici sans numeros de sequence).
+- G. Malkin, *RIP Version 2*, RFC 2453, 1998. — *split horizon* contre le comptage a l'infini.
