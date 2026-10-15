@@ -187,3 +187,13 @@ def test_route_to_a_departed_node_does_not_count_up():
         _tick(algo, float(t), links)
         assert all(algo._dist[i].get(5, 0) <= {1: 4, 2: 3, 3: 2, 4: 1, 6: 5}[i] for i in algo._dist if i != 5)
     assert not any(5 in algo._dist[i] for i in algo._dist if i != 5)
+
+
+def test_node_back_from_a_gap_does_not_announce_twice_in_a_row():
+    algo = HorizonRouting(announce_period_s=5.0)
+    nodes, links = _line(algo)
+    _settle(algo, links, until=15)
+    away = {k: v for k, v in links.items() if k != 3}
+    _settle(algo, away, start=15, until=24)
+    times = [t for t in range(24, 40) if 3 in _tick(algo, float(t), links)]
+    assert all(b - a >= 5 for a, b in zip(times, times[1:]))

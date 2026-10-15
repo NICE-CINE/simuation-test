@@ -1,5 +1,4 @@
 from __future__ import annotations
-import math
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingDecision
@@ -84,7 +83,9 @@ class HorizonRouting(FreshSprayRouting):
                 due = self._next_due[node_id] = now + (node_id * 0.6180339887 % 1.0) * self._period
             if now < due:
                 continue
-            self._next_due[node_id] = due + self._period * max(1, math.ceil((now - due) / self._period))
+            # From now, not from the missed slot: a node back from a gap would
+            # otherwise catch up and announce again a tick later.
+            self._next_due[node_id] = now + self._period
             # A new dict every time: neighbors keep a reference to it as
             # "the last vector heard", so it must never be mutated.
             row, via = self._rebuild(node_id, now)
