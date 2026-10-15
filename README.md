@@ -1,5 +1,41 @@
 # Festival BLE Mesh Simulator
 
+## TODO
+
+Limites connues du simulateur, a traiter dans cet ordre de priorite :
+
+- [ ] **Participation reelle** : tout le monde a l'app et elle tourne au
+  premier plan. A modeliser : taux d'adoption (une partie seulement des
+  festivaliers est un noeud, les autres ne font qu'attenuer le signal),
+  restrictions iOS en arriere-plan (deux iPhone en arriere-plan ne se
+  decouvrent pas), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
+  `docs/energie/consommation.md`).
+- [ ] **Radio** : la portee (30 m telephone, 60 m borne) n'est pas mesuree,
+  elle reprend d'anciens rayons fixes. A faire : mesurer RSSI/distance au
+  banc, ajouter une attenuation par les corps qui croit avec la densite de
+  la foule (l'exposant 2,7 est le meme a 3 m2/personne et sur un site
+  vide), un shadowing correle dans le temps et reciproque par paire (il est
+  tire independamment a chaque tick et par sens), et ne plus tronquer la
+  portee (un fading favorable ne prolonge jamais un lien au-dela du rayon
+  deterministe).
+- [ ] **Valeurs estimees a mesurer** : cout energetique d'une connexion et
+  de chaque connexion en plus (`connection_setup_mah`,
+  `extra_connection_current_ma`), fermeture d'une connexion inactive
+  (`connection_idle_timeout_s`), taille des annonces bitchat et des
+  beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
+  rendez-vous, distance a laquelle on reconnait son groupe).
+- [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
+  sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
+  d'un voisin dans `on_tick` avant toute connexion ; les tables des
+  algorithmes sont facturees une fois par connexion mais lues a jour
+  ensuite ; la joignabilite bitchat ignore les pertes de ses annonces.
+- [ ] **Validation** : comparer les durees de contact, les temps entre
+  contacts et le nombre de voisins a des traces reelles (Infocom/Haggle,
+  etudes de foule) ; rien n'est valide aujourd'hui.
+- [ ] **Resultats chiffres des pages `docs/algorithmes/`** : mesures
+  anterieures au recalage d'octobre 2026 (connexions, canal, ACK payes,
+  groupes, chauffe), a refaire.
+
 Simulateur SimPy de messagerie opportuniste (mesh MANET) via Bluetooth
 Low Energy entre les participants d'un festival.
 
