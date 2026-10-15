@@ -44,6 +44,8 @@ Every run of these scripts is archived in `archives/` (`--archive-dir` to overri
 
 Pre-naming archives without a `.json`: `archives/2026-09-21-comparaison.csv` (formerly `comparaison.csv` at the repo root). Replays (`archives/replay/`, the `.html` and its `.data.js` together) are meant to be committed.
 
+CI: `.github/workflows/tests.yml` runs `pytest` on Python 3.9 and 3.12 on every push and PR.
+
 No lint/format tooling is configured (no ruff/black/mypy config in `pyproject.toml`).
 
 ## Architecture
