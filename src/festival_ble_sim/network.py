@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from dataclasses import replace
-from typing import Any, Callable, Collection, Dict, List, Optional
+from typing import Any, Callable, Collection, Dict, List, Optional, Set
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -41,22 +41,18 @@ def _active_nearby(node: BaseNode, grid: SpatialGrid) -> List[BaseNode]:
 def _compute_contention_counts(
     nodes: Dict[int, BaseNode],
     neighbors_by_node: Dict[int, List[BaseNode]],
-    snapshot: Dict[int, List[Message]],
-    broadcasters: Collection[int] = (),
+    transmitters: Collection[int],
 ) -> Dict[int, int]:
-    # For each active node, how many other nodes within ITS OWN radio range
-    # have something to send this tick — a proxy for the local shared-medium
-    # activity a real BLE radio would sense. Used both for the sender's own
-    # channel-sense backoff and for the receiver's hidden-terminal collision
-    # risk (see process_node_contacts).
+    # For each active node, how many nodes within ITS OWN radio range
+    # actually transmitted (data or control) last tick: a node merely
+    # holding messages it won't send (spray-and-wait's wait phase) doesn't
+    # occupy the medium. One tick of lag keeps it causal.
     counts: Dict[int, int] = {}
     for node_id, node in nodes.items():
         if not node.is_active:
             counts[node_id] = 0
             continue
-        counts[node_id] = sum(
-            1 for n in neighbors_by_node.get(node_id, ()) if n.is_active and (snapshot.get(n.id) or n.id in broadcasters)
-        )
+        counts[node_id] = sum(1 for n in neighbors_by_node.get(node_id, ()) if n.is_active and n.id in transmitters)
     return counts
 
 
@@ -162,6 +158,7 @@ def _send_control_broadcast(
     contention_counts: Optional[Dict[int, int]],
     airtime_left: Dict[int, float],
     received: Dict[int, List[int]],
+    sender_was_transmitting: bool = True,
 ) -> bool:
     # One broadcast to every active node in range: no link slot (no
     # connection needed), otherwise the same rules as data so control-heavy
@@ -190,7 +187,7 @@ def _send_control_broadcast(
             continue
         airtime_left[contact.id] = contact_left - size
         loss_prob = _link_loss_probability(
-            sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, True
+            sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, sender_was_transmitting
         )
         if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
             continue
@@ -215,11 +212,13 @@ def process_node_contacts(
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
     airtime_left: Optional[Dict[int, float]] = None,
     backed_off: Optional[bool] = None,
-) -> None:
+    sender_was_transmitting: bool = True,
+) -> bool:
+    # Returns whether the sender put anything on the air (lost copies included).
     _purge_expired_messages(sender, now)
 
     if not sender.buffer or not sender.is_active:
-        return
+        return False
 
     # Process only what sender held at tick start (or what the caller
     # passes explicitly). A message received from another node earlier
@@ -233,7 +232,7 @@ def process_node_contacts(
     if backed_off is None:
         backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
     if backed_off:
-        return
+        return False
 
     if neighbors is None:
         neighbors = _active_nearby(sender, grid)
@@ -258,6 +257,7 @@ def process_node_contacts(
     if airtime_left is None:
         airtime_left = {}
 
+    transmitted = False
     for contact in neighbors:
         if not contact.is_active:
             continue
@@ -265,12 +265,12 @@ def process_node_contacts(
         loss_prob = 0.0
         if ble_config is not None:
             loss_prob = _link_loss_probability(
-                sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, bool(messages)
+                sender, contact, radio, ble_config, rng, contention_counts, congestion_loss_prob, sender_was_transmitting
             )
 
         for message in messages:
             if not sender.is_active:
-                return
+                return transmitted
             if message.msg_id not in sender.buffer:
                 continue
             if not contact.is_active:
@@ -303,6 +303,7 @@ def process_node_contacts(
                 airtime_left[sender.id] = sender_left - message.size_bytes
                 airtime_left[contact.id] = contact_left - message.size_bytes
 
+            transmitted = True
             if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
                 sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
                 metrics.record_packet_loss(message)
@@ -325,6 +326,7 @@ def process_node_contacts(
                 routing_algorithm.on_forward(message, sender, contact, copy)
             if event_log is not None:
                 event_log.append(_relay_event(now, sender.id, contact.id, copy, is_delivery))
+    return transmitted
 
 def _relay_event(now: float, from_id: int, to_id: int, message: Message, delivered: bool, backhaul: bool = False) -> Dict[str, Any]:
     event = {
@@ -409,6 +411,7 @@ def network_engine(
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
+    transmitters: Set[int] = set()
     while True:
         yield env.timeout(contact_check_interval_s)
         now = env.now
@@ -426,8 +429,9 @@ def network_engine(
             routing_algorithm.on_tick(now, neighbors_by_node)
             broadcasts = routing_algorithm.control_broadcasts(now)
         contention_counts = (
-            _compute_contention_counts(nodes, neighbors_by_node, snapshot, broadcasts) if ble_config is not None else None
+            _compute_contention_counts(nodes, neighbors_by_node, transmitters) if ble_config is not None else None
         )
+        previous_transmitters, transmitters = transmitters, set()
         airtime_left: Dict[int, float] = {}
         received: Dict[int, List[int]] = {}
         sent: List[int] = []
@@ -441,14 +445,16 @@ def network_engine(
             # data: no global priority of control over data or the reverse.
             # One channel sense covers both, as a radio senses once per turn.
             backed_off = None
+            was_transmitting = node_id in previous_transmitters
             if node_id in broadcasts and sender.is_active:
                 backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
                 if not backed_off and _send_control_broadcast(
                     sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                    ble_config, rng, contention_counts, airtime_left, received,
+                    ble_config, rng, contention_counts, airtime_left, received, was_transmitting,
                 ):
                     sent.append(node_id)
-            process_node_contacts(
+                    transmitters.add(node_id)
+            if process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
                 ble_config=ble_config,
@@ -459,6 +465,8 @@ def network_engine(
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
                 backed_off=backed_off,
-            )
+                sender_was_transmitting=was_transmitting,
+            ):
+                transmitters.add(node_id)
         if broadcasts:
             routing_algorithm.on_control_received(now, received, sent)

@@ -292,8 +292,12 @@ def test_announce_and_data_share_one_backoff_draw():
     b.store_message(Message(msg_id=2, src_id=2, dst_id=1, size_bytes=10, creation_time=0.0, ttl_s=100.0))
     metrics = MetricsCollector()
     ble = _lossless_ble(relay_backoff_coefficient=1.0, relay_backoff_max_probability=1.0)
-    env.process(network_engine(env, {1: a, 2: b}, grid, _Announcer({1: 50}), _energy_model(), metrics,
+    env.process(network_engine(env, {1: a, 2: b}, grid, _Announcer({1: 50, 2: 50}), _energy_model(), metrics,
                                contact_check_interval_s=1.0, ble_config=ble, rng=random.Random(0)))
     env.run(until=1.5)
+    assert metrics.build_report([], 0).backoff_count == 0
+    battery_after_first_tick = a.battery_mah
+    # Both transmitted on tick 1, so each hears one transmitter on tick 2.
+    env.run(until=2.5)
     assert metrics.build_report([], 0).backoff_count == 2
-    assert a.battery_mah == 100.0
+    assert a.battery_mah == battery_after_first_tick

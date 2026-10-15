@@ -146,10 +146,10 @@ def test_no_contention_counts_disables_backoff_and_collision():
     assert metrics.build_report([], 0).backoff_count == 0
 
 
-def test_network_engine_computes_contention_from_live_buffers():
-    # Five nodes clustered together, each with a message to send: every
-    # sender should see the other four as contention, driving backoff_count
-    # up over a run with a non-trivial backoff coefficient.
+def test_network_engine_counts_only_last_ticks_actual_transmitters():
+    # Five clustered nodes all transmit on tick 1 (nothing heard yet, no
+    # backoff), so each hears four transmitters on tick 2 and backs off. On
+    # tick 3 they still hold messages but nobody sent anything on tick 2.
     env = simpy.Environment()
     grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
     nodes = {}
@@ -171,6 +171,10 @@ def test_network_engine_computes_contention_from_live_buffers():
         )
     )
     env.run(until=1.5)
+    assert metrics.build_report([], 0).backoff_count == 0
+    env.run(until=2.5)
+    assert metrics.build_report([], 0).backoff_count == 5
+    env.run(until=3.5)
     assert metrics.build_report([], 0).backoff_count == 5
 
 
