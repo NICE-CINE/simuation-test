@@ -1,5 +1,4 @@
 import random
-import pytest
 from festival_ble_sim.config import BleConfig, EnergyConfig, RadioParams
 from festival_ble_sim.energy import EnergyModel
 from festival_ble_sim.metrics import MetricsCollector

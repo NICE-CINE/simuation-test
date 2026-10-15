@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingDecision
 from .managed_flood import ManagedFloodRouting

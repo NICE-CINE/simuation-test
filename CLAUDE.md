@@ -44,9 +44,9 @@ Every run of these scripts is archived in `archives/` (`--archive-dir` to overri
 
 Pre-naming archives without a `.json`: `archives/2026-09-21-comparaison.csv` (formerly `comparaison.csv` at the repo root). Replays (`archives/replay/`, the `.html` and its `.data.js` together) are meant to be committed.
 
-CI: `.github/workflows/tests.yml` runs `pytest` on Python 3.9 and 3.12 on every push and PR.
+CI: `.github/workflows/tests.yml` runs `ruff check .` then `pytest` on Python 3.9 and 3.12 on every push and PR.
 
-No lint/format tooling is configured (no ruff/black/mypy config in `pyproject.toml`).
+Lint: `ruff check .` (`--fix` for the auto-fixable ones), errors only (`select = ["F"]`: undefined names, unused imports/variables…); ruff's broader defaults fight the conventions below (e.g. they push `X | None`), so widen the selection rule by rule. No formatter.
 
 ## Architecture
 
