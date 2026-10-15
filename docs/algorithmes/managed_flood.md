@@ -14,7 +14,7 @@ stockage-transport :
   `(msg_id, SEQ)`) : tout PDU deja vu est rejete, meme apres oubli du
   contenu ;
 - mode acquitte (`acknowledged=True`, defaut) : la destination emet un ACK
-  propage par inondation geree (memes regles TTL/fenetre) qui purge les
+  propage par inondation geree (memes regles TTL/fenetre, en diffusions radio qui peuvent se perdre) qui purge les
   copies ; sans ACK apres `ack_timeout_s`, la source reemet avec un
   nouveau SEQ (nouveau PDU pour les caches), au plus
   `max_source_retransmissions` fois.

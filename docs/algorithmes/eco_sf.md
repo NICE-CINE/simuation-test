@@ -27,8 +27,8 @@ connexions :
 - eviction : acquittes/expires d'abord, puis plus faible priorite
   (utilite x temps restant), jamais un message propre s'il reste un tiers.
 
-Omis : Bloom filters (ensembles exacts), ACK signes (purge globale
-instantanee), ordre de transfert par priorite, EWMA de la densite, plafond
+Les beacons Trickle passent par la radio (64 octets, estime) et les ACK par
+le moteur. Omis : Bloom filters (ensembles exacts), signature des ACK, ordre de transfert par priorite, EWMA de la densite, plafond
 anti-spam des resets. `stats` compte `beacons`, `trickle_resets`,
 `connections`, `spray`, `focus`.
 

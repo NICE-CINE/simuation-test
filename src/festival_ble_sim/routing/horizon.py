@@ -155,7 +155,7 @@ class HorizonRouting(FreshSprayRouting):
         return ([n for n in ranked if n.id in wanted] + [n for n in ranked if n.id not in wanted])[:max_links]
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered or contact.has_message(message.msg_id):
+        if contact.has_message(message.msg_id):
             return super().decide(message, holder, contact, now)
         target = self._pull_target(message, holder)
         if target is not None:

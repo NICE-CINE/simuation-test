@@ -3,7 +3,7 @@ import math
 import random
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
-from .base import RoutingAlgorithm, RoutingDecision
+from .base import RoutingAlgorithm, RoutingDecision, per_destination_table_bytes
 
 if TYPE_CHECKING:
     from ..nodes import BaseNode
@@ -19,12 +19,15 @@ class TideRouting(RoutingAlgorithm):
     # TIDE (Tokens, Islands, Density, Energy), reduced to the network level
     # like dasfv.py: one shared instance reads every node's neighbourhood off
     # on_tick, so the 2-hop view, density, neighbours' energy and the
-    # encounter table need no advertisement/GATT wire format. ACKs purge
-    # network-wide instantly (same as dasfv). Not modelled: crypto,
+    # encounter table need no advertisement/GATT wire format (the utility
+    # read about a contact is billed as a per-destination table). Delivery
+    # acks go through the engine. Not modelled: crypto,
     # ephemeral IDs, buffer digests, advertising interval / scan duty cycle
     # (no discovery energy in the engine), clock skew (age = now - creation),
     # per-sender buffer quota, reputation and "late first" transmit order
     # (the engine owns send order).
+    uses_delivery_acks = True
+
     def __init__(
         self,
         w: float = 0.5,
@@ -97,7 +100,6 @@ class TideRouting(RoutingAlgorithm):
         self._last_relay_seen: Dict[int, float] = {}
         # holder -> [window start, peers synced in this window]
         self._syncs: Dict[int, List] = {}
-        self._delivered_ids: Set[int] = set()
         self._now = 0.0
 
     # --- node state -------------------------------------------------------
@@ -212,9 +214,6 @@ class TideRouting(RoutingAlgorithm):
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now
-        if message.msg_id in self._delivered_ids:
-            holder.buffer.pop(message.msg_id, None)
-            return RoutingDecision.IGNORE
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
 
@@ -304,8 +303,9 @@ class TideRouting(RoutingAlgorithm):
         message.routing_state[_TOKENS] = tokens - k_b
         forwarded_copy.routing_state[_TOKENS] = k_b
 
-    def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        self._delivered_ids.add(message.msg_id)
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # Utility per destination the peer carries, plus energy/relay flags.
+        return per_destination_table_bytes(peer) + 2
 
     def choose_eviction(self, node: "BaseNode", now: float) -> Optional[int]:
         best_id = None
@@ -314,7 +314,6 @@ class TideRouting(RoutingAlgorithm):
             if m.src_id == node.id:
                 continue  # never evict own messages
             key = (
-                mid not in self._delivered_ids,
                 not m.is_expired(now),
                 now - m.creation_time <= self._late_after_s,
                 m.routing_state.get(_TOKENS, 1) > 1,

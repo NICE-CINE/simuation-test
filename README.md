@@ -312,6 +312,16 @@ la portee radio :
   le message ; seule une vraie panne radio (fading negatif, cf. ci-dessus)
   ne laisse rien passer ce tick. Une diffusion de controle, sans connexion,
   est perdue ou non (`packet_loss_count`) ;
+- des **ACK et metadonnees payes** : a chaque tick, sur chaque connexion
+  etablie et avant les donnees, chaque cote envoie son vecteur de resume
+  (4 octets par message pas encore annonce sur cette connexion), les ACK
+  que l'autre demande (messages qu'il annonce et dont celui-ci sait qu'ils
+  sont livres, 8 octets chacun) et, une fois par connexion, les tables de
+  l'algorithme (dates de rencontre, predictibilites...). Tout cela coute du
+  temps d'antenne, des retransmissions et de l'energie comme les donnees.
+  Le destinataire emet l'ACK a la livraison ; un telephone qui l'apprend
+  supprime sa copie, et la source le recoit comme un accuse de reception.
+  Aucun algorithme ne voit plus d'ensemble global des messages livres ;
 - un **TTL reseau en nombre de sauts** (`TrafficConfig.message_ttl_hops`,
   defaut 8, a la Bluetooth Mesh) en plus du TTL temporel `message_ttl_s` :
   un message qui a deja consomme son budget de sauts n'est plus relaye a
@@ -431,7 +441,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   et heuristique de mule approximes a partir des contacts observes par
   l'instance partagee, politique batterie (refus des pairs a batterie
   critique, evacuation acceleree du porteur a batterie faible), et purge
-  reseau-large des copies une fois le message livre.
+  des copies par l'ACK du moteur (voir "ACK et metadonnees").
 - `gossip_a` (`routing/gossip_a.py`) — GOSSIP-A, gossip probabiliste
   adaptatif a la densite avec anti-entropie, reduit lui aussi au
   sous-ensemble reseau (pas de crypto/etiquettes/PoW/SOS) : probabilite de
@@ -439,7 +449,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   (message, pair) et par session, inondation des `K_FLOOD` premiers sauts,
   borne `H_MAX`, faux positifs du Bloom SUMMARY, suppression par compteur
   (message deja vu chez `K_SUP` voisins), jetons de purge propages de
-  proche en proche, budgets par session et eviction du buffer « plus
+  proche en proche (son propre mecanisme, facture comme un Bloom
+  PURGE_SYNC de 128 octets par connexion), budgets par session et eviction du buffer « plus
   repliques d'abord » (hook `RoutingAlgorithm.choose_eviction`). Les
   interrupteurs `adaptive`, `suppression` et `replicated_first_eviction`
   servent aux ablations.
@@ -528,7 +539,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   defaut 16) + replique vers tout voisin ayant croise la destination depuis
   moins de `met_dst_window_s` (1200 s) + passage de la derniere copie au
   voisin qui a vu la destination plus recemment (FRESH) + une seule replique
-  vers le reseau de bornes + purge globale des messages livres. Vise a la
+  vers le reseau de bornes + purge par l'ACK du moteur. Vise a la
   fois livraison, latence et energie ; details dans
   `docs/algorithmes/fresh_spray.md`.
 - `horizon` (`routing/horizon.py`) — `fresh_spray` + champ de distances
@@ -537,7 +548,7 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   reconstruit a partir du dernier vecteur entendu de chaque voisin depuis
   moins de 15 s, avec split horizon (chaque entree porte le prochain saut)
   et plafonnes a 1650 octets ; les vecteurs passent par la radio du moteur
-  comme des messages (backoff, temps d'antenne, pertes, energie), et ceux
+  comme des messages (temps d'antenne, charge du canal, pertes, energie), et ceux
   d'un emetteur injoignable (borne de plus grande portee) sont ignores. Une copie dont le
   porteur a un voisin plus proche du destinataire lui est passee (tirage,
   un saut par tick) si le TTL de sauts restant suffit ; hors tirage, une
@@ -551,8 +562,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   voisin au moins 15 m plus pres (sinon a qui a croise le destinataire le
   plus recemment), regle des ilots. La source escalade un message non
   livre : 12 jetons sans geographie a 60 s, puis inondation a 180 s
-  (bornee par le TTL de 8 sauts). Purge au tick suivant la livraison,
-  position du destinataire renvoyee dans l'ACK. `stats` donne la
+  (bornee par le TTL de 8 sauts). Purge par l'ACK du moteur, qui renvoie
+  la position du destinataire a la source. `stats` donne la
   repartition des transmissions par raison. Le gain mesure vient de
   l'inondation tardive, pas de la geographie : variante sans GPS
   `GeoSprayFocusRouting(hint_max_age_s=1e-9, gps_policy="carriers",
@@ -569,12 +580,11 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   pour un message qu'il n'a pas, cooldown de 20 s par paire, plus aucun
   relais apres 10 min (livraison directe seulement), batterie < 20 % :
   refuse les relais, < 10 % : muet sauf message propre, eviction par
-  priorite sans toucher aux messages propres. Omis : Bloom filters (lus
-  comme des ensembles exacts, sans faux positifs), ACK signes (purge
-  globale instantanee), ordre de transfert par priorite, EWMA de la
-  densite, plafond de resets anti-spam. Les beacons n'ont pas de cout
-  energetique propre (le moteur facture un courant de fond fixe) : `stats`
-  compte beacons, resets Trickle, connexions, spray et focus. Spec et
+  priorite sans toucher aux messages propres. Les beacons passent par la
+  radio (diffusions de 64 octets, estime), les ACK par le moteur. Omis :
+  Bloom filters (lus comme des ensembles exacts, sans faux positifs),
+  signature des ACK, ordre de transfert par priorite, EWMA de la densite,
+  plafond de resets anti-spam. `stats` compte beacons, resets Trickle, connexions, spray et focus. Spec et
   resultats dans `docs/algorithmes/specs/ECO-SF.md`.
 - `band_fanout` (`routing/band_fanout.py`) — relais a eventail borne :
   chaque copie peut etre relayee `fanout` fois (3 par defaut), la copie
@@ -588,10 +598,9 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   voisins ; le plafond `max_concurrent_links` (6) reste applique, mais
   l'algo choisit lui-meme ses liaisons via le hook `select_links` (relais
   retenus d'abord, puis les plus proches), sinon la bande serait hors
-  d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Un
-  message livre est purge de tous les buffers au tick suivant
-  (`purge_delivered=True`) ; l'ACK est instantane et global, aucun temps
-  radio n'est facture. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
+  d'atteinte en foule dense. Plafond de `max_hops` (4) sauts en plus du TTL du moteur. Les
+  copies sont purgees par l'ACK du moteur (`purge_delivered=True`), propage
+  et facture sur les connexions. Sans purge, l'arbre de copies (jusqu'a 121 porteurs)
   continue d'etre transmis apres la livraison. Pas d'eviction dediee.
   `scripts/sweep_band_fanout.py` (options : voir "Balayer les variantes de
   band_fanout") compare des variantes (`--variant

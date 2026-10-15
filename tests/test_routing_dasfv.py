@@ -42,23 +42,21 @@ def test_ignores_when_contact_already_has_message():
     assert algo.decide(msg, holder, contact, now=0.0) is RoutingDecision.IGNORE
 
 
-def test_purges_stale_copy_once_message_is_delivered_elsewhere():
+def test_contact_that_learned_the_ack_is_skipped():
     algo = DasfVRouting()
-    holder = _node(1)
-    contact = _node(2)
+    holder, contact = _node(1), _node(2)
     msg = _msg()
     holder.store_message(msg)
-    algo._delivered_ids.add(msg.msg_id)
+    contact.learn_ack(msg.msg_id, 1000.0)
     assert algo.decide(msg, holder, contact, now=0.0) is RoutingDecision.IGNORE
-    assert msg.msg_id not in holder.buffer
 
 
-def test_on_delivered_marks_message_as_globally_delivered():
+def test_acks_and_tables_go_through_the_engine():
     algo = DasfVRouting()
-    holder = _node(1)
-    msg = _msg(dst_id=1)
-    algo.on_delivered(msg, holder)
-    assert msg.msg_id in algo._delivered_ids
+    peer = _node(2)
+    peer.store_message(_msg())
+    assert algo.uses_delivery_acks
+    assert algo.connection_table_bytes(_node(1), peer) == 12
 
 
 def test_lazy_token_budget_is_capped_at_l_max_when_holder_is_isolated():

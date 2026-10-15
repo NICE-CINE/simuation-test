@@ -49,7 +49,6 @@ class TideGRouting(TideRouting):
         zone_search: bool = True,
         refresh_hint: bool = True,
         ack_hint: bool = False,
-        ack_hint_delay_factor: float = 1.0,
         geo_giveup_s: Optional[float] = None,
         hint_scaled_tokens: bool = False,
         hint_tokens_ref_m: float = 120.0,
@@ -63,8 +62,8 @@ class TideGRouting(TideRouting):
             raise ValueError("hint_max_age_s, hint_tau_s, geo_lambda_m and gps_period_s must be > 0")
         if zone_tokens < 1:
             raise ValueError("zone_tokens must be >= 1")
-        if ack_hint_delay_factor < 0 or hint_tokens_ref_m <= 0 or message_fix_s < 0:
-            raise ValueError("ack_hint_delay_factor and message_fix_s must be >= 0, hint_tokens_ref_m > 0")
+        if hint_tokens_ref_m <= 0 or message_fix_s < 0:
+            raise ValueError("message_fix_s must be >= 0, hint_tokens_ref_m > 0")
         if geo_giveup_s is not None and geo_giveup_s <= 0:
             raise ValueError("geo_giveup_s must be None or > 0")
         self._hint_max_age_s = hint_max_age_s
@@ -84,7 +83,9 @@ class TideGRouting(TideRouting):
         self._zone_search = zone_search
         self._refresh_hint = refresh_hint
         self._ack_hint = ack_hint
-        self._ack_hint_delay_factor = ack_hint_delay_factor
+        # The destination's position rides on its delivery ack (+12 bytes).
+        if ack_hint:
+            self.ack_size_bytes = 20
         self._geo_giveup_s = geo_giveup_s
         self._hint_scaled_tokens = hint_scaled_tokens
         self._hint_tokens_ref_m = hint_tokens_ref_m
@@ -93,9 +94,10 @@ class TideGRouting(TideRouting):
         self._message_fix_s = message_fix_s
         self._fixes: Dict[int, Tuple[Position, float]] = {}
         self._next_gps_round = 0.0
-        # (available_at, src_id, dst_id, dst position, fix time): the ACK is
-        # purged network-wide instantly, but its position must still travel back.
-        self._pending_ack_hints: List[Tuple[float, int, int, Position, float]] = []
+        # (msg_id, expiry, src_id, dst_id, dst position, fix time): the
+        # position reaches the source when the engine's ack for msg_id does.
+        self._pending_ack_hints: List[Tuple[int, float, int, int, Position, float]] = []
+        self._counted_deliveries: Set[int] = set()
         self._ack_hint_times: Dict[Tuple[int, int], float] = {}
         self.hint_stats = {
             "routed": 0, "hinted": 0, "delivered": 0, "delivered_hinted": 0, "gps_fixes": 0,
@@ -283,7 +285,8 @@ class TideGRouting(TideRouting):
     # --- ACK -------------------------------------------------------------
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        first = message.msg_id not in self._delivered_ids
+        first = message.msg_id not in self._counted_deliveries
+        self._counted_deliveries.add(message.msg_id)
         # No `now` in this hook: TIDE's on_tick stamps _prev_tick before any contact.
         now = self._prev_tick if self._prev_tick is not None else message.creation_time
         if first:
@@ -303,8 +306,9 @@ class TideGRouting(TideRouting):
         fix = self._message_fix(dst, now)
         if fix is None:
             return
-        available_at = now + self._ack_hint_delay_factor * max(0.0, now - message.creation_time)
-        self._pending_ack_hints.append((available_at, message.src_id, message.dst_id, fix[0], fix[1]))
+        self._pending_ack_hints.append(
+            (message.msg_id, message.creation_time + message.ttl_s, message.src_id, message.dst_id, fix[0], fix[1])
+        )
         self.hint_stats["ack_hints_sent"] += 1
 
     def _flush_ack_hints(self, now: float) -> None:
@@ -312,12 +316,14 @@ class TideGRouting(TideRouting):
             return
         pending = []
         for item in self._pending_ack_hints:
-            available_at, src_id, dst_id, pos, fix_time = item
-            if available_at > now:
+            msg_id, expiry, src_id, dst_id, pos, fix_time = item
+            src = self._nodes.get(src_id)
+            if src is None or now > expiry:
+                continue
+            if msg_id not in src.acked:
                 pending.append(item)
                 continue
-            src = self._nodes.get(src_id)
-            if src is not None and src.is_active:
+            if src.is_active:
                 # Engine-owned table on purpose: it is how the next message's
                 # dst_position gets filled, exactly as for a reply.
                 src.record_known_position(dst_id, pos, fix_time)

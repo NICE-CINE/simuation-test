@@ -24,8 +24,10 @@ class ManagedFloodRouting(RoutingAlgorithm):
     # relay (so it can't carry it to the destination later), and if no ack
     # arrives within ack_timeout_s it re-originates with a new SEQ, which
     # caches treat as a fresh PDU. Acks flood back as tokens (same TTL/window
-    # rules) and purge copies; each ack hop is charged tx/rx energy for
-    # ack_size_bytes, but not airtime (the engine's link budget never sees it).
+    # rules) and purge copies: each node relaying acks broadcasts them over
+    # the radio (control_broadcasts, ack_size_bytes each), so they take
+    # airtime and can be lost. Only the destination's ack to the holder that
+    # just delivered rides on their connection, charged here.
     def __init__(
         self,
         ttl: int = 7,
@@ -66,6 +68,8 @@ class ManagedFloodRouting(RoutingAlgorithm):
         self._acks: Dict[int, "OrderedDict[int, None]"] = {}
         # (node_id, msg_id, hops, learned_at) still inside their relay window.
         self._relaying_acks: List[Tuple[int, int, int, float]] = []
+        # node_id -> [(msg_id, hops)] it broadcasts this tick.
+        self._ack_broadcasts: Dict[int, List[Tuple[int, int]]] = {}
         # msg_id -> (source, PDU as last sent, first sent at), awaiting an ack.
         self._pending: Dict[int, Tuple["BaseNode", Message, float]] = {}
         self._now = 0.0
@@ -169,6 +173,16 @@ class ManagedFloodRouting(RoutingAlgorithm):
             self._charge_ack_hop(self._nodes.get(message.dst_id), holder)
             self._learn_ack(holder.id, message.msg_id, 1, self._now)
 
+    def control_broadcasts(self, now: float) -> Dict[int, int]:
+        return {node_id: self._ack_size_bytes * len(acks) for node_id, acks in self._ack_broadcasts.items()}
+
+    def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:
+        for receiver_id, senders in received.items():
+            for sender_id in senders:
+                for msg_id, hops in self._ack_broadcasts.get(sender_id, ()):
+                    self._learn_ack(receiver_id, msg_id, hops + 1, now)
+        self._ack_broadcasts = {}
+
     def _charge_ack_hop(self, sender: Optional["BaseNode"], receiver: "BaseNode") -> None:
         # Per pair, like the engine charges data PDUs.
         if sender is not None:
@@ -178,22 +192,16 @@ class ManagedFloodRouting(RoutingAlgorithm):
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
         self._now = now
         # Two-phase like the engine's buffer snapshot: an ack learned this
-        # tick is relayed further only from next tick on.
+        # tick is relayed further only from next tick on (it is broadcast
+        # now, received after the data, see on_control_received).
         still_relaying: List[Tuple[int, int, int, float]] = []
-        learned: List[Tuple["BaseNode", "BaseNode", int, int]] = []
+        self._ack_broadcasts = {}
         for node_id, msg_id, hops, learned_at in self._relaying_acks:
             if now - learned_at > self._relay_window_s or hops >= self._ttl:
                 continue
             still_relaying.append((node_id, msg_id, hops, learned_at))
-            for neighbor in neighbors_by_node.get(node_id, ()):
-                if neighbor.is_active and not self.knows_ack(neighbor.id, msg_id):
-                    learned.append((self._nodes.get(node_id), neighbor, msg_id, hops + 1))
+            self._ack_broadcasts.setdefault(node_id, []).append((msg_id, hops))
         self._relaying_acks = still_relaying
-        for sender, receiver, msg_id, hops in learned:
-            if self.knows_ack(receiver.id, msg_id):
-                continue
-            self._charge_ack_hop(sender, receiver)
-            self._learn_ack(receiver.id, msg_id, hops, now)
 
         # Without this sweep an isolated node would keep an expired PDU until
         # its next contact, and the engine's direct-delivery branch (which

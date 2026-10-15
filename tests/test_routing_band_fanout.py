@@ -288,52 +288,19 @@ def test_engine_integration_still_delivers_to_destination_after_budget_is_spent(
     assert destination.has_message(1)
 
 
-def test_delivery_removes_the_holders_copy():
-    algo = BandFanoutRouting()
-    holder, _ = _world(algo, [15.0])
-    holder.store_message(_msg())
-    algo.on_delivered(_msg(), holder)
-    assert not holder.has_message(1)
+def test_purge_flag_switches_the_engine_delivery_acks():
+    assert BandFanoutRouting().uses_delivery_acks
+    assert not BandFanoutRouting(purge_delivered=False).uses_delivery_acks
 
 
-def test_next_tick_purges_delivered_message_from_every_buffer():
-    algo = BandFanoutRouting()
-    holder, contacts = _world(algo, [15.0, 16.0])
-    for node in [holder] + contacts:
-        node.store_message(_msg())
-    algo.on_delivered(_msg(), contacts[1])
-    assert holder.has_message(1) and contacts[0].has_message(1)
-    algo.on_tick(1.0, {node.id: [] for node in [holder] + contacts})
-    assert not any(node.has_message(1) for node in [holder] + contacts)
-
-
-def test_purge_leaves_other_messages_alone():
-    algo = BandFanoutRouting()
-    holder, _ = _world(algo, [15.0])
-    other = Message(msg_id=2, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=1000.0)
-    holder.store_message(_msg())
-    holder.store_message(other)
-    algo.on_delivered(_msg(), holder)
-    algo.on_tick(1.0, {holder.id: []})
-    assert holder.has_message(2)
-
-
-def test_delivered_message_is_never_forwarded_again():
+def test_message_whose_ack_reached_the_holder_is_dropped_and_never_relayed():
     algo = BandFanoutRouting(fanout=1)
     holder, contacts = _world(algo, [15.0])
     _tick(algo, holder, contacts)
-    algo.on_delivered(_msg(), contacts[0])
+    holder.learn_ack(1, 1000.0)
+    assert 1 not in holder.buffer
+    algo.on_tick(2.0, {holder.id: list(contacts)})
     assert _selected(algo, holder, contacts) == set()
-
-
-def test_purge_can_be_disabled():
-    algo = BandFanoutRouting(fanout=1, purge_delivered=False)
-    holder, contacts = _world(algo, [15.0])
-    holder.store_message(_msg())
-    algo.on_delivered(_msg(), contacts[0])
-    algo.on_tick(1.0, {holder.id: list(contacts)})
-    assert holder.has_message(1)
-    assert _selected(algo, holder, contacts) == {contacts[0].id}
 
 
 def test_engine_integration_relay_beyond_the_link_cap_receives_the_copy():

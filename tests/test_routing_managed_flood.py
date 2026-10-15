@@ -183,9 +183,24 @@ def test_ack_hops_cost_energy():
     )
     _run(nodes, algo, until=5.5)
     assert algo.knows_ack(1, 1)
-    # Data PDUs are free here (_energy_model is all zeros): ack hops 3->2->1.
-    assert [nodes[i].energy_consumed_mah for i in (1, 2, 3)] == [1.0, 2.0, 1.0]
+    # Data PDUs and broadcasts are free here (_energy_model is all zeros):
+    # only the destination's ack to the delivering holder (3->2) is charged
+    # by the algorithm, the relay 2->1 is a radio broadcast.
+    assert [nodes[i].energy_consumed_mah for i in (1, 2, 3)] == [0.0, 1.0, 1.0]
 
+
+def test_ack_relays_are_radio_broadcasts_that_can_be_lost():
+    nodes = _line(3)
+    algo = ManagedFloodRouting(relay_window_s=10.0, ack_size_bytes=16)
+    algo.on_simulation_start(nodes)
+    algo._learn_ack(2, 7, 1, 0.0)
+    algo.on_tick(1.0, {})
+    assert algo.control_broadcasts(1.0) == {2: 16}
+    algo.on_control_received(1.0, {}, [2])
+    assert not algo.knows_ack(1, 7)
+    algo.on_tick(2.0, {})
+    algo.on_control_received(2.0, {1: [2]}, [2])
+    assert algo.knows_ack(1, 7)
 
 def test_multi_hop_delivery_along_a_line_takes_one_tick_per_hop():
     nodes = _line(6)

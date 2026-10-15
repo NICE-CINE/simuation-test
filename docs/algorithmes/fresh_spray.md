@@ -18,9 +18,10 @@ Objectif : maximiser la livraison tout en minimisant latence et energie.
 4. **Bornes** : une seule replique vers la premiere borne croisee ; le
    backhaul la diffuse aux autres, qui gardent leur copie jusqu'au passage de
    la destination.
-5. **Purge globale** : des qu'un message est livre, toutes ses copies sont
-   supprimees (`on_tick`). Moins de copies en buffer = moins d'energie
-   gaspillee sur les pertes et moins de contention.
+5. **Purge par ACK** : le destinataire emet un ACK que le moteur propage sur
+   les connexions vers les porteurs ; chacun supprime sa copie en
+   l'apprenant. La date de derniere rencontre du contact avec chaque
+   destination est facturee a l'ouverture de la connexion.
 6. Les voisins avec moins de 15 % de batterie ne recoivent pas de relais.
 
 ## Diagramme
@@ -28,7 +29,7 @@ Objectif : maximiser la livraison tout en minimisant latence et energie.
 ```mermaid
 flowchart TD
     A["Contact porteur / voisin"] --> B{"Voisin = destination ?"}
-    B -- oui --> L["Livraison (moteur) + purge globale"]
+    B -- oui --> L["Livraison (moteur) + purge par ACK"]
     B -- non --> P{"Deja livre ?"}
     P -- oui --> X["Supprime la copie, IGNORE"]
     P -- non --> C{"Voisin a deja le message ?"}
@@ -99,8 +100,8 @@ mobilite `poi`, avec une latence du meme ordre.
 
 ## Faiblesses
 
-- La table "qui a vu qui" et la purge sont globales et instantanees (instance
-  partagee), pas diffusees sur BLE : c'est optimiste, comme pour `dasfv`.
+- La table "qui a vu qui" reste celle de l'instance partagee : son echange
+  est facture une fois par connexion, mais sa valeur est lue a jour.
 - Plus gourmand que `spray_wait` sur l'energie (plus de copies).
 - `met_dst_window_s` n'est calibre que sur un seul scenario (500 noeuds,
   random waypoint) ; `initial_tokens` a ete re-verifie a 5000 noeuds en

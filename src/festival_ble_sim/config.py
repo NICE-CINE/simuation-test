@@ -94,6 +94,9 @@ class BleConfig:
     # a lost packet is resent (airtime and energy), a broadcast is just lost.
     data_channels: int = 79
     advertising_channels: int = 3
+    # One message id in a summary vector (what a node holds, sent over each
+    # connection so the peer doesn't resend it).
+    summary_id_bytes: int = 4
 
 
 @dataclass(frozen=True)

@@ -20,6 +20,12 @@ class BubbleFRouting(RoutingAlgorithm):
     # exact per-node sets instead of simulating the wire format: no Bloom
     # false positives, no falsified ranks/Blooms (rankCap and plausibility
     # checks are adversarial protections with nothing to defend against here).
+    # The exchange still costs its wire size (spec §3: ranks + familiar and
+    # community Blooms, ~198 bytes) once per connection, and delivery acks
+    # go through the engine.
+    uses_delivery_acks = True
+    social_exchange_bytes = 198
+
     def __init__(
         self,
         l_base: int = 8,
@@ -89,7 +95,6 @@ class BubbleFRouting(RoutingAlgorithm):
         self._window_history: Dict[int, Deque[Tuple[int, int]]] = {}
         self._rank_cache: Dict[int, Tuple[float, int, int]] = {}
 
-        self._delivered_ids: Set[int] = set()
         self._now = 0.0
         self.stuck_replications = 0
         self.relays_by_node: Dict[int, int] = {}
@@ -238,10 +243,6 @@ class BubbleFRouting(RoutingAlgorithm):
         )
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
-        if message.msg_id in self._delivered_ids:
-            holder.buffer.pop(message.msg_id, None)
-            return RoutingDecision.IGNORE
-
         self._now = now
         self._last_seen.setdefault(holder.id, {})[contact.id] = now
         self._last_seen.setdefault(contact.id, {})[holder.id] = now
@@ -287,8 +288,8 @@ class BubbleFRouting(RoutingAlgorithm):
         state[_FORWARD_REASON] = reason
         return RoutingDecision.FORWARD
 
-    def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        self._delivered_ids.add(message.msg_id)
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        return self.social_exchange_bytes
 
     def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
         reason = message.routing_state.pop(_FORWARD_REASON, "bubble")

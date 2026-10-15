@@ -174,6 +174,7 @@ def run_simulation(
 
     routing_algorithm.on_simulation_start(nodes)
     routing_algorithm.on_energy_model(energy_model)
+    routing_algorithm.on_ble_config(config.ble)
     network_rng = random.Random(rng.randrange(1 << 30))
     on_delivery = None
     if config.traffic.reply_probability > 0:

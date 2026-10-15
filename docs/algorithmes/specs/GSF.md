@@ -113,8 +113,8 @@ Les seuils 60 s et 180 s visent l'objectif du cahier des charges : livraison par
 
 ### 2.6 ACK et purge
 
-- **Purge** : à la livraison, le message est marqué livré ; toutes ses copies sont supprimées au tick suivant, partout. C'est la même simplification que `dasfv` et `fresh_spray` (ACK instantané et gratuit).
-- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) arrive chez la source après `ack_hint_delay_factor × latence aller`, comme dans TIDE-G2 (`docs/algorithmes/specs/TIDE-G2.md` §2.1). Elle alimente `known_positions`, donc l'indice du message suivant.
+- **Purge** : par l'ACK du moteur (`uses_delivery_acks`), propagé et facturé sur les connexions vers les nœuds qui annoncent le message (oct. 2026 ; avant : purge globale instantanée au tick suivant).
+- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) voyage dans l'ACK (20 octets) et arrive chez la source quand l'ACK l'atteint (oct. 2026 ; avant : après `ack_hint_delay_factor × latence aller`).
 - **Rafraîchissement** : la source remplace l'indice de sa propre copie si elle a reçu une position plus récente entre-temps.
 
 ### 2.7 Éviction
@@ -140,7 +140,7 @@ Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, pu
 | `gps_period_s`, `fix_max_age_s` | 30 s, 60 s | Fixes périodiques |
 | `gps_current_ma` | 10 mA | Coût d'un fix (hypothèse à mesurer) |
 | `gps_policy` | `"all"` | `"all"` ou `"carriers"` |
-| `ack_hint`, `ack_hint_delay_factor` | `True`, 1,0 | Position dans l'ACK |
+| `ack_hint` | `True` | Position dans l'ACK |
 | `refresh_hint` | `True` | Rafraîchissement par la source |
 
 ---
@@ -246,7 +246,7 @@ Statistiques exposées dans `algo.stats` : `routed`, `hinted`, `spray`, `focus_g
 
 ## 4. Ce qui est simplifié dans le simulateur
 
-- **ACK instantané et gratuit** pour la purge (comme `dasfv`, `fresh_spray`, TIDE) : seule la position de l'ACK est retardée. Ça favorise tous les algorithmes à purge de la même manière.
+- **ACK** : depuis oct. 2026, l'ACK est un paquet du moteur, payé sur la radio ; il n'atteint que les nœuds qui annoncent le message ou en sont la source.
 - **Escalade non propagée** aux copies déjà distribuées (§2.4). Dans l'appli, on pourrait la propager dans l'en-tête des copies que la source rencontre, mais ça ne change rien ici.
 - **Position des voisins** lue dans la table globale des fixes, au lieu d'être échangée au handshake.
 - Pas de chiffrement, de signature, de pseudonymes ni de coût de handshake (comme pour les autres algorithmes).

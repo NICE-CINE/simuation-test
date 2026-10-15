@@ -2,7 +2,7 @@ from __future__ import annotations
 import heapq
 import math
 import random
-from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from ..models import Message
 from .base import RoutingAlgorithm, RoutingDecision
 
@@ -34,11 +34,17 @@ class _NodeState:
 
 
 class EcoSfRouting(RoutingAlgorithm):
-    # Network-level reduction of ECO-SF (docs/algorithmes/specs/ECO-SF.md). Beacons are not
-    # simulated as BLE frames: a Trickle-timed beacon is "heard" by every
-    # active node in the sender's range that tick, and the Bloom digests are
-    # read as exact sets. What the Trickle timer does model is discovery:
-    # a pair can only open a connection once one side has heard the other.
+    # Network-level reduction of ECO-SF (docs/algorithmes/specs/ECO-SF.md). Trickle-timed
+    # beacons go over the radio as control broadcasts (beacon_bytes each,
+    # heard only where they get through), with their Bloom digests read as
+    # exact sets. The Trickle timer models discovery: a pair can only open
+    # a connection once one side has heard the other. The utility views
+    # exchanged on a connection are billed as a table, delivery acks go
+    # through the engine.
+    uses_delivery_acks = True
+    # Not fixed by the spec: a legacy advertisement plus epoch and digest.
+    beacon_bytes = 64
+    utility_entry_bytes = 6
     def __init__(
         self,
         seed: int = 0,
@@ -100,9 +106,7 @@ class EcoSfRouting(RoutingAlgorithm):
         self._last_prune = 0.0
         self._connections: Dict[Tuple[int, int], Tuple[float, _Views]] = {}
         self._refused: Dict[Tuple[int, int], float] = {}
-        # Signed ACKs gossip epidemically in the spec; modelled as an instant,
-        # reliable network-wide purge, like every other purge in this repo.
-        self._delivered: Set[int] = set()
+        self._beaconing: Dict[int, int] = {}
         self._now = 0.0
         self.stats = {"beacons": 0, "trickle_resets": 0, "connections": 0, "spray": 0, "focus": 0}
 
@@ -188,11 +192,8 @@ class EcoSfRouting(RoutingAlgorithm):
             if node is None:
                 continue
             state = self._state(node_id, now)
-            for mid, message in list(node.buffer.items()):
-                if mid in self._delivered:
-                    del node.buffer[mid]
-                    self._buffer_changed(node_id, now)
-                elif _COPIES not in message.routing_state:
+            for message in node.buffer.values():
+                if _COPIES not in message.routing_state:
                     message.routing_state[_COPIES] = self._initial_copies(state, now)
                     self._buffer_changed(node_id, now)
             if now >= state.tx_at:
@@ -202,11 +203,21 @@ class EcoSfRouting(RoutingAlgorithm):
                 )
                 if state.heard < self._k and not silent:
                     self.stats["beacons"] += 1
-                    for neighbor in neighbors:
-                        if neighbor.is_active:
-                            self._hear(neighbor.id, node, now)
+                    self._beaconing[node_id] = self.beacon_bytes
             if now >= state.end:
                 self._start_interval(state, now, min(2 * state.interval, self._node_i_max(node)))
+
+    def control_broadcasts(self, now: float) -> Dict[int, int]:
+        return self._beaconing
+
+    def on_control_received(self, now: float, received: Dict[int, List[int]], sent: List[int]) -> None:
+        self._beaconing = {}
+        for receiver_id, senders in received.items():
+            for sender_id in senders:
+                self._hear(receiver_id, self._nodes[sender_id], now)
+
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        return self.utility_entry_bytes * min(self._exchange_size, len(self._state(node.id, self._now).utility))
 
     def _initial_copies(self, state: _NodeState, now: float) -> int:
         density = sum(1 for heard, _, _ in state.neighbors.values() if now - heard <= self._density_window)
@@ -231,8 +242,7 @@ class EcoSfRouting(RoutingAlgorithm):
             if message.dst_id == peer.id:
                 return True
             if (
-                message.msg_id not in self._delivered
-                and now - message.creation_time <= self._late_after
+                now - message.creation_time <= self._late_after
                 and not peer.has_message(message.msg_id)
                 and self._u(peer_state, message.dst_id, now) > self._bloom_threshold
             ):
@@ -274,9 +284,6 @@ class EcoSfRouting(RoutingAlgorithm):
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now
-        if message.msg_id in self._delivered:
-            holder.buffer.pop(message.msg_id, None)
-            return RoutingDecision.IGNORE
         if contact.has_message(message.msg_id):
             return RoutingDecision.IGNORE
         # Past late_after_s a copy only waits for the destination itself,
@@ -316,14 +323,11 @@ class EcoSfRouting(RoutingAlgorithm):
             self.stats["focus"] += 1
         self._buffer_changed(contact.id, now, wake_radio=now - message.creation_time <= self._late_after)
 
-    def on_delivered(self, message: Message, holder: "BaseNode") -> None:
-        self._delivered.add(message.msg_id)
-
     def choose_eviction(self, node: "BaseNode", now: float) -> Optional[int]:
         if not node.buffer:
             return None
         for mid, message in node.buffer.items():
-            if mid in self._delivered or message.is_expired(now):
+            if message.is_expired(now):
                 return mid
         state = self._state(node.id, now)
         others = [m for m in node.buffer.values() if m.src_id != node.id]

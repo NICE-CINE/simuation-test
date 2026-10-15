@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -17,6 +17,22 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
     expired_ids = [mid for mid, m in node.buffer.items() if m.is_expired(now)]
     for mid in expired_ids:
         del node.buffer[mid]
+    for table in (node.acked, node.outbox):
+        for mid in [mid for mid, expiry in table.items() if expiry < now]:
+            del table[mid]
+
+
+class _Connection:
+    __slots__ = ("ready_at", "last_used", "advertised", "acks_sent", "tables_sent")
+
+    def __init__(self, ready_at: float) -> None:
+        self.ready_at = ready_at
+        self.last_used = ready_at
+        # Per side: message ids already listed in its summary vector, and
+        # acks already sent, so each tick only sends what's new.
+        self.advertised: Dict[int, Set[int]] = {}
+        self.acks_sent: Dict[int, Set[int]] = {}
+        self.tables_sent = False
 
 
 def _compute_neighbors(nodes: Dict[int, BaseNode], grid: SpatialGrid) -> Dict[int, List[BaseNode]]:
@@ -57,9 +73,9 @@ def _update_connections(
     snapshot: Dict[int, List[Message]],
     routing_algorithm: RoutingAlgorithm,
     ble_config: BleConfig,
-    connections: Dict[Tuple[int, int], List[float]],
+    connections: Dict[Tuple[int, int], _Connection],
 ) -> Dict[int, List[BaseNode]]:
-    # connections: (low id, high id) -> [ready_at, last_used], kept across
+    # connections: (low id, high id) -> _Connection, kept across
     # ticks. A pair must stay in range connection_setup_s before it can carry
     # anything (discovery + connection), keeps its slot on both ends while
     # in range, and is closed after connection_idle_timeout_s without data.
@@ -68,12 +84,12 @@ def _update_connections(
     nodes_by_id = dict(order)
     for key in list(connections):
         a, b = nodes_by_id[key[0]], nodes_by_id[key[1]]
-        ready_at, last_used = connections[key]
+        conn = connections[key]
         reach = min(a.radio_range_m, b.radio_range_m)
         if (
             not a.is_active or not b.is_active
             or a.position.distance_squared_to(b.position) > reach * reach
-            or (ready_at <= now and now - last_used >= ble_config.connection_idle_timeout_s)
+            or (conn.ready_at <= now and now - conn.last_used >= ble_config.connection_idle_timeout_s)
         ):
             del connections[key]
     partners: Dict[int, List[int]] = {}
@@ -93,13 +109,14 @@ def _update_connections(
             if n.id not in taken and (max_links is None or len(partners.get(n.id, ())) < max_links)
         ]
         for contact in routing_algorithm.select_links(node, candidates, free)[:free]:
-            ready_at = now + ble_config.connection_setup_s
-            connections[(min(node_id, contact.id), max(node_id, contact.id))] = [ready_at, ready_at]
+            connections[(min(node_id, contact.id), max(node_id, contact.id))] = _Connection(
+                now + ble_config.connection_setup_s
+            )
             taken.append(contact.id)
             partners.setdefault(contact.id, []).append(node_id)
     links: Dict[int, List[BaseNode]] = {}
-    for (a_id, b_id), (ready_at, _) in connections.items():
-        if ready_at <= now:
+    for (a_id, b_id), conn in connections.items():
+        if conn.ready_at <= now:
             links.setdefault(a_id, []).append(nodes_by_id[b_id])
             links.setdefault(b_id, []).append(nodes_by_id[a_id])
     return links
@@ -232,6 +249,74 @@ def _send_control_broadcast(
     return True
 
 
+def _exchange_metadata(
+    a: BaseNode,
+    b: BaseNode,
+    conn: _Connection,
+    routing_algorithm: RoutingAlgorithm,
+    energy_model: EnergyModel,
+    ble_config: BleConfig,
+    rng: Optional[random.Random],
+    channel: Optional[ChannelState],
+    airtime_left: Dict[int, float],
+) -> None:
+    # What decide() and has_message() read about the peer has to cross the
+    # link first, every tick, before any data: each side's summary vector
+    # (only ids it hasn't listed yet on this connection), the acks the peer
+    # asks for (ids it advertises that this side knows were delivered), and
+    # once per connection the algorithm's tables. Billed like data on the
+    # same link; if it doesn't fit this tick nothing is exchanged and it is
+    # retried next tick.
+    acks = routing_algorithm.uses_delivery_acks
+    sides = []
+    total = 0.0
+    for x, y in ((a, b), (b, a)):
+        ids = x.buffer.keys() | x.delivered_ids
+        if acks:
+            ids |= x.outbox.keys()
+        new_ids = ids - conn.advertised.get(x.id, set())
+        acks_out: List[int] = []
+        if acks and x.acked:
+            sent = conn.acks_sent.get(x.id, set())
+            asked = y.buffer.keys() | y.outbox.keys()
+            acks_out = [mid for mid in asked if mid in x.acked and mid not in sent]
+        size = ble_config.summary_id_bytes * len(new_ids) + routing_algorithm.ack_size_bytes * len(acks_out)
+        if not conn.tables_sent:
+            size += routing_algorithm.connection_table_bytes(x, y)
+        sides.append((x, y, new_ids, acks_out, size))
+        total += size
+    if total == 0:
+        conn.tables_sent = True
+        return
+    failure = _link_failure_probability(
+        a, b, ble_config, rng,
+        channel.heard_data if channel is not None else None,
+        channel.duty_data if channel is not None else None,
+        ble_config.data_channels,
+    )
+    if failure >= 1.0:
+        return
+    attempts = 1.0 / (1.0 - failure)
+    budget = _radio_budget_bytes(ble_config)
+    a_left, b_left = airtime_left.get(a.id, budget), airtime_left.get(b.id, budget)
+    if total * attempts > min(a_left, b_left):
+        return
+    airtime_left[a.id] = a_left - total * attempts
+    airtime_left[b.id] = b_left - total * attempts
+    conn.tables_sent = True
+    for x, y, new_ids, acks_out, size in sides:
+        if size == 0:
+            continue
+        x.consume_energy(energy_model.cost_of_tx(size) * attempts)
+        y.consume_energy(energy_model.cost_of_rx(size) * attempts)
+        if channel is not None:
+            channel.sent_data[x.id] = channel.sent_data.get(x.id, 0.0) + size * attempts
+        conn.advertised.setdefault(x.id, set()).update(new_ids)
+        conn.acks_sent.setdefault(x.id, set()).update(acks_out)
+        for mid in acks_out:
+            y.learn_ack(mid, x.acked[mid])
+
+
 def process_node_contacts(
     now: float,
     sender: BaseNode,
@@ -345,6 +430,13 @@ def process_node_contacts(
             metrics.record_retransmission(message, airtime - message.size_bytes)
             if is_delivery:
                 contact.mark_delivered(copy.msg_id)
+                if routing_algorithm.uses_delivery_acks:
+                    # The destination acks straight back on this connection.
+                    expiry = copy.creation_time + copy.ttl_s
+                    contact.acked[copy.msg_id] = expiry
+                    sender.learn_ack(copy.msg_id, expiry)
+                    contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
+                    sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
                 if copy.src_position is not None:
                     contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
                 metrics.record_delivery(copy, now)
@@ -426,6 +518,17 @@ def beacon_backhaul_relay(
                     event_log.append(_relay_event(now, src_id, dst_id, relayed, False, backhaul=True))
 
 
+def _share_beacon_acks(beacons: List[BaseNode]) -> None:
+    # The backhaul is a separate backbone: whatever one beacon learned,
+    # they all know.
+    merged: Dict[int, float] = {}
+    for beacon in beacons:
+        merged.update(beacon.acked)
+    for beacon in beacons:
+        for mid in merged.keys() - beacon.acked.keys():
+            beacon.learn_ack(mid, merged[mid])
+
+
 def network_engine(
     env,
     nodes: Dict[int, BaseNode],
@@ -442,10 +545,12 @@ def network_engine(
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
     channel: Optional[ChannelState] = ChannelState() if ble_config is not None else None
-    connections: Dict[Tuple[int, int], List[float]] = {}
+    connections: Dict[Tuple[int, int], _Connection] = {}
     while True:
         yield env.timeout(contact_check_interval_s)
         now = env.now
+        if routing_algorithm.uses_delivery_acks and len(beacon_ids) > 1:
+            _share_beacon_acks([nodes[b] for b in beacon_ids if nodes[b].is_active])
         snapshot = {node_id: list(node.buffer.values()) for node_id, node in nodes.items()}
         beacon_backhaul_relay(
             now, beacon_ids, nodes, snapshot, metrics,
@@ -472,6 +577,13 @@ def network_engine(
             _update_connections(now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections)
             if neighbors_by_node is not None else None
         )
+        if links is not None:
+            for (a_id, b_id), conn in connections.items():
+                if conn.ready_at <= now:
+                    _exchange_metadata(
+                        nodes[a_id], nodes[b_id], conn, routing_algorithm, energy_model, ble_config, rng, channel,
+                        airtime_left,
+                    )
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
@@ -494,6 +606,6 @@ def network_engine(
             for contact_id in sent_to:
                 key = (min(node_id, contact_id), max(node_id, contact_id))
                 if key in connections:
-                    connections[key][1] = now
+                    connections[key].last_used = now
         if broadcasts:
             routing_algorithm.on_control_received(now, received, sent)

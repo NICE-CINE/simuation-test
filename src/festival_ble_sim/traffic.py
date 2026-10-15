@@ -75,6 +75,7 @@ def traffic_process(
             dst_known=node.known_positions.get(dst_id),
         )
         node.store_message(message)
+        node.outbox[message.msg_id] = message.creation_time + message.ttl_s
         metrics.record_creation(message)
         if followup_rng is not None and config.followup_probability > 0:
             env.process(followup_process(env, node, dst_id, nodes, config, metrics, id_generator, followup_rng))
@@ -123,4 +124,5 @@ def reply_process(
         is_reply=is_reply,
     )
     node.store_message(message)
+    node.outbox[message.msg_id] = message.creation_time + message.ttl_s
     metrics.record_creation(message)

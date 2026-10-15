@@ -5,8 +5,15 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 from ..models import Message
 
 if TYPE_CHECKING:
+    from ..config import BleConfig
     from ..energy import EnergyModel
     from ..nodes import BaseNode
+
+
+def per_destination_table_bytes(peer: "BaseNode", entry_bytes: int = 8) -> int:
+    # The usual table answer: one entry (id + value) per destination the
+    # peer carries messages for, e.g. when this node last met it.
+    return entry_bytes * len({m.dst_id for m in peer.buffer.values()})
 
 
 class RoutingDecision(Enum):
@@ -15,6 +22,13 @@ class RoutingDecision(Enum):
 
 
 class RoutingAlgorithm(ABC):
+    # True: the engine spreads delivery acks over connections (the
+    # destination mints one, each side acks the ids the other advertises, a
+    # node that learns one drops its copy), billing ack_size_bytes each.
+    # Never a global "delivered" set: a node only knows what reached it.
+    uses_delivery_acks = False
+    ack_size_bytes = 8
+
     @abstractmethod
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         # FORWARD is only an intention: the engine may still drop the copy
@@ -31,6 +45,11 @@ class RoutingAlgorithm(ABC):
     def on_energy_model(self, energy_model: "EnergyModel") -> None:
         # The run's own costs, for algorithms that bill extra traffic (acks,
         # beacons) themselves instead of letting the engine charge it.
+        pass
+
+    def on_ble_config(self, ble_config: "BleConfig") -> None:
+        # The run's radio settings (airtime per tick), for algorithms that
+        # size their own control traffic.
         pass
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
@@ -55,6 +74,12 @@ class RoutingAlgorithm(ABC):
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:
         pass
+
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # Bytes `node` sends `peer` once their connection is up for the
+        # algorithm's own state (encounter times, predictabilities,
+        # utilities) that decide() then reads about the peer.
+        return 0
 
     def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
         # Called right after `forwarded_copy` has been created (independent

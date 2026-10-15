@@ -27,6 +27,17 @@ def _msg(msg_id=1, src=1, copies=None, created=0.0):
     return m
 
 
+def _tick(algo, now, neighbors):
+    # The engine's part: each beacon reaches every listed neighbor.
+    algo.on_tick(now, neighbors)
+    sent = list(algo.control_broadcasts(now))
+    received = {}
+    for sender in sent:
+        for n in neighbors.get(sender, []):
+            received.setdefault(n.id, []).append(sender)
+    algo.on_control_received(now, received, sent)
+
+
 def _forward(algo, msg, holder, contact):
     copy = Message(**{**msg.__dict__, "routing_state": dict(msg.routing_state)})
     contact.buffer[copy.msg_id] = copy
@@ -42,7 +53,7 @@ def _setup(contact_battery=100.0):
     nodes = {1: holder, 2: contact, 9: dst}
     algo.on_simulation_start(nodes)
     for t in range(4):
-        algo.on_tick(float(t), {1: [contact], 2: [holder, dst], 9: [contact]})
+        _tick(algo, float(t), {1: [contact], 2: [holder, dst], 9: [contact]})
     return algo, holder, contact
 
 
@@ -112,15 +123,15 @@ def test_copy_budget_shrinks_with_density():
     algo.on_simulation_start({1: node, **{n.id: n for n in crowd}})
     neighbors = {1: crowd, **{n.id: [node] for n in crowd}}
     for t in range(4):
-        algo.on_tick(float(t), neighbors)
+        _tick(algo, float(t), neighbors)
     node.buffer[1] = _msg()
-    algo.on_tick(4.0, neighbors)
+    _tick(algo, 4.0, neighbors)
     assert node.buffer[1].routing_state["copies"] == 4
 
     lonely_algo, lonely = EcoSfRouting(), _Node(1)
     lonely_algo.on_simulation_start({1: lonely})
     lonely.buffer[1] = _msg()
-    lonely_algo.on_tick(0.0, {1: []})
+    _tick(lonely_algo, 0.0, {1: []})
     assert lonely.buffer[1].routing_state["copies"] == 16
 
 
@@ -129,22 +140,26 @@ def test_trickle_backs_off_to_i_max_and_resets_on_new_message():
     node = _Node(1)
     algo.on_simulation_start({1: node})
     for t in range(200):
-        algo.on_tick(float(t), {1: []})
+        _tick(algo, float(t), {1: []})
     assert algo._states[1].interval == 30.0
     node.buffer[1] = _msg()
-    algo.on_tick(200.0, {1: []})
+    _tick(algo, 200.0, {1: []})
     assert algo._states[1].interval == 2.0
 
 
-def test_delivery_purges_every_copy():
-    algo, holder, contact = _setup()
-    msg = _msg(copies=8)
-    holder.buffer[1] = msg
-    algo.decide(msg, holder, contact, 4.0)
-    _forward(algo, msg, holder, contact)
-    algo.on_delivered(msg, contact)
-    algo.on_tick(5.0, {1: [contact], 2: [holder]})
-    assert not holder.buffer and not contact.buffer
+def test_beacons_go_over_the_radio_and_acks_through_the_engine():
+    algo = EcoSfRouting()
+    a, b = _Node(1), _Node(2)
+    algo.on_simulation_start({1: a, 2: b})
+    sizes = []
+    for t in range(5):
+        algo.on_tick(float(t), {1: [b], 2: [a]})
+        sizes += algo.control_broadcasts(float(t)).values()
+        algo.on_control_received(float(t), {}, list(algo.control_broadcasts(float(t))))
+    # Beacons went out but all were lost: nobody discovered anybody.
+    assert sizes and set(sizes) == {algo.beacon_bytes}
+    assert not algo._discovered(1, 2, 4.0)
+    assert algo.uses_delivery_acks
 
 
 def test_eviction_spares_own_messages():
@@ -160,5 +175,5 @@ def test_per_pair_bookkeeping_does_not_outlive_the_cooldown():
     msg = _msg(copies=8)
     holder.buffer[1] = msg
     algo.decide(msg, holder, contact, 4.0)
-    algo.on_tick(30.0, {1: [contact], 2: [holder]})
+    _tick(algo, 30.0, {1: [contact], 2: [holder]})
     assert not algo._connections and not algo._last_connect
