@@ -31,7 +31,8 @@ Hybride MANET/DTN dans l'esprit de HYMAD (J. Whitbeck, V. Conan, *HYMAD: Hybrid 
 - Chaque nœud annonce une fois par `announce_period_s` (défaut 5 s), à sa propre phase (`id × 0,618… mod 1` de la période) : la foule n'annonce jamais dans le même tick.
 - Juste avant d'annoncer, `u` reconstruit son vecteur à partir du dernier vecteur entendu de chaque voisin depuis moins de `entry_ttl_s` (défaut 15 s, trois périodes) :
   `dist_u(d) = min sur ces voisins v de dist_v(d) + 1`, gardé seulement si `≤ horizon_hops`, et `dist_u(u) = 0`. Il diffuse ce vecteur, qu'il utilise aussi pour router jusqu'à sa prochaine annonce.
-- Rétention : une annonce perdue n'efface pas la route ; un voisin muet depuis plus de `entry_ttl_s` disparaît. Pas de comptage à l'infini au-delà de l'horizon.
+- Rétention : une annonce perdue n'efface pas la route ; un voisin muet depuis plus de `entry_ttl_s` disparaît.
+- Split horizon : chaque entrée porte aussi le prochain saut de l'émetteur, et `u` ignore les entrées dont le prochain saut est `u` lui-même. Sans cela, quand une destination part, deux voisins se renvoient sa route en l'allongeant d'un saut par tour jusqu'à l'horizon (route fantôme au-delà de `entry_ttl_s`). Une boucle d'au moins trois nœuds reste possible, bornée par `horizon_hops`.
 - Pourquoi la rétention : une première version reconstruisait le vecteur uniquement à partir des annonces du tour. Or une annonce n'atteint un voisin donné qu'une fois sur trois environ (mesuré en `poi`, 500 festivaliers : degré moyen 13, vecteurs de 525 octets, 32 % d'annonces non émises par backoff, 42 % des autres perdues), et une route à k sauts exigeait k réceptions consécutives : le champ s'effondrait. Avec rétention et phases étalées, les tirages doublent.
 - Radio : les vecteurs passent par le moteur (`control_broadcasts` / `on_control_received` de `RoutingAlgorithm`, `network._send_control_broadcast`). Chaque nœud diffuse `n × announce_entry_bytes` octets (`n` = entrées de son vecteur, au plus `max_announce_bytes / announce_entry_bytes` : au-delà, seules les destinations les plus proches sont annoncées, le moteur n'enverrait jamais un vecteur plus gros que le budget d'antenne d'un tick) à son tour dans l'ordre aléatoire du tick, juste avant ses données, avec les mêmes règles qu'un message : backoff CSMA, budget d'antenne partagé (émetteur et chaque récepteur), terme de congestion des liens (plafonnés à `max_concurrent_links`), perte par récepteur (marge de liaison, shadowing, collisions), énergie tx/rx du run (énergie mesh). Seule différence : pas de créneau de liaison (diffusion sans connexion). L'algorithme ne fusionne que les vecteurs effectivement reçus ; `on_control_received` arrive une fois par tick, après toutes les données.
 - `stats` : `pull`, `announces_sent`, `announces_received`, `announce_bytes`, `announce_rx_bytes`.
@@ -70,7 +71,7 @@ Les prochains sauts sont mis en cache par `(porteur, destinataire)` pour le tick
 | `horizon_hops` | 5 | Rayon du champ et taille de la réserve de sauts |
 | `announce_period_s` | 5,0 | Période des annonces de chaque nœud |
 | `entry_ttl_s` | 15,0 | Rétention du dernier vecteur entendu d'un voisin |
-| `announce_entry_bytes` | 5 | Taille d'une entrée (id 4 o + distance 1 o) |
+| `announce_entry_bytes` | 9 | Taille d'une entrée (id 4 o + distance 1 o + prochain saut 4 o) |
 | `max_announce_bytes` | 1650 | Taille max d'une annonce (données max d'un advertising étendu BLE 5) |
 | `**fresh_spray_kwargs` | ceux de `fresh_spray` | Phase DTN |
 

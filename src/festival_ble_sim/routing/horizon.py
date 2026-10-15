@@ -30,7 +30,7 @@ class HorizonRouting(FreshSprayRouting):
         horizon_hops: int = 5,
         announce_period_s: float = 5.0,
         entry_ttl_s: float = 15.0,
-        announce_entry_bytes: int = 5,
+        announce_entry_bytes: int = 9,
         max_announce_bytes: int = 1650,
         **fresh_spray_kwargs,
     ) -> None:
@@ -43,8 +43,8 @@ class HorizonRouting(FreshSprayRouting):
         self._entry_bytes = announce_entry_bytes
         self._max_entries = max(1, max_announce_bytes // announce_entry_bytes)
         self._dist: Dict[int, Dict[int, int]] = {}
-        self._vectors: Dict[int, Dict[int, int]] = {}
-        self._heard: Dict[int, Dict[int, Tuple[Dict[int, int], float]]] = {}
+        self._vectors: Dict[int, Dict[int, Tuple[int, int]]] = {}
+        self._heard: Dict[int, Dict[int, Tuple[Dict[int, Tuple[int, int]], float]]] = {}
         self._next_due: Dict[int, float] = {}
         self._neighbors: Dict[int, List["BaseNode"]] = {}
         self._now = 0.0
@@ -58,16 +58,22 @@ class HorizonRouting(FreshSprayRouting):
         self._now = now
         self._next_hops.clear()
 
-    def _rebuild(self, node_id: int, now: float) -> Dict[int, int]:
+    def _rebuild(self, node_id: int, now: float) -> Tuple[Dict[int, int], Dict[int, int]]:
         row = {node_id: 0}
+        via = {node_id: node_id}
         heard = self._heard.get(node_id, {})
         for sender_id in [v for v, (_, t) in heard.items() if now - t > self._entry_ttl]:
             del heard[sender_id]
-        for vector, _ in heard.values():
-            for dst, hops in vector.items():
-                if hops < self._horizon and row.get(dst, self._horizon + 1) > hops + 1:
+        for sender_id, (vector, _) in heard.items():
+            for dst, (hops, next_hop) in vector.items():
+                # Split horizon: a route through this very node would only
+                # loop back and count up once the real route is gone.
+                if next_hop == node_id or hops >= self._horizon:
+                    continue
+                if row.get(dst, self._horizon + 1) > hops + 1:
                     row[dst] = hops + 1
-        return row
+                    via[dst] = sender_id
+        return row, via
 
     def control_broadcasts(self, now: float) -> Dict[int, int]:
         sizes: Dict[int, int] = {}
@@ -81,14 +87,14 @@ class HorizonRouting(FreshSprayRouting):
             self._next_due[node_id] = due + self._period * max(1, math.ceil((now - due) / self._period))
             # A new dict every time: neighbors keep a reference to it as
             # "the last vector heard", so it must never be mutated.
-            row = self._dist[node_id] = self._rebuild(node_id, now)
+            row, via = self._rebuild(node_id, now)
+            self._dist[node_id] = row
             # The engine never sends what exceeds a tick's airtime, and BLE 5
             # extended advertising stops at 1650 bytes: past the cap, only
             # the nearest destinations are announced.
-            if len(row) > self._max_entries:
-                row = dict(sorted(row.items(), key=lambda e: (e[1], e[0]))[:self._max_entries])
-            self._vectors[node_id] = row
-            sizes[node_id] = len(row) * self._entry_bytes
+            nearest = sorted(row.items(), key=lambda e: (e[1], e[0]))[:self._max_entries]
+            self._vectors[node_id] = {dst: (hops, via[dst]) for dst, hops in nearest}
+            sizes[node_id] = len(nearest) * self._entry_bytes
         self._sizes = sizes
         self.stats["announces_sent"] += len(sizes)
         self.stats["announce_bytes"] += sum(sizes.values())
@@ -118,8 +124,8 @@ class HorizonRouting(FreshSprayRouting):
                 vector, t = heard.get(n.id, (None, 0.0))
                 if vector is None or self._now - t > self._entry_ttl:
                     continue
-                hops = vector.get(dst_id)
-                if hops is None or hops >= limit:
+                hops = vector.get(dst_id, (limit,))[0]
+                if hops >= limit:
                     continue
                 cand = (hops, holder.position.distance_squared_to(n.position), n.id)
                 if best is None or cand < best:

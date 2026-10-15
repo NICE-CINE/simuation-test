@@ -150,8 +150,8 @@ def test_announce_is_capped_to_the_nearest_destinations():
     nodes, links = _line(algo)
     _settle(algo, links)
     assert len(algo._dist[1]) > 2
-    assert algo._vectors[1] == {1: 0, 2: 1}
-    assert algo._heard[2][1][0] == {1: 0, 2: 1}
+    assert algo._vectors[1] == {1: (0, 1), 2: (1, 2)}
+    assert algo._heard[2][1][0] == algo._vectors[1]
 
 
 def test_vector_heard_over_a_one_way_link_is_ignored():
@@ -175,3 +175,15 @@ def test_pull_from_a_beacon_hands_out_a_single_token():
     assert algo.decide(msg, nodes[1], nodes[2], 30.0) is RoutingDecision.FORWARD
     copy = _forward(algo, msg, nodes[1], nodes[2])
     assert 1 in nodes[1].buffer and copy.routing_state["tokens"] == 1
+
+
+def test_route_to_a_departed_node_does_not_count_up():
+    algo = HorizonRouting(entry_ttl_s=15.0)
+    nodes, links = _line(algo)
+    _settle(algo, links)
+    links[4] = [nodes[3]]
+    del links[5]
+    for t in range(40, 80):
+        _tick(algo, float(t), links)
+        assert all(algo._dist[i].get(5, 0) <= {1: 4, 2: 3, 3: 2, 4: 1, 6: 5}[i] for i in algo._dist if i != 5)
+    assert not any(5 in algo._dist[i] for i in algo._dist if i != 5)
