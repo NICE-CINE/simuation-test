@@ -198,14 +198,19 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Variante 'cle=val,cle=val' (cles : " + ", ".join(_PARSERS) + "); repetable, '' = defauts. "
         "Sans --variant : " + " | ".join(variant_label(v) for v in DEFAULT_VARIANTS),
     )
-    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
-    parser.add_argument("--duration", type=float, default=3600.0)
-    parser.add_argument("--num-festivaliers", type=int, default=200)
-    parser.add_argument("--beacon-count", type=int, default=6)
-    parser.add_argument("--mobility", choices=sorted(MOBILITY_MODELS), default="random_waypoint")
-    parser.add_argument("--reply-probability", type=float, default=0.0)
-    parser.add_argument("--workers", type=int, default=2)
-    parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR)
+    parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3], help="Seeds, memes pour chaque valeur (defaut 1 2 3)")
+    parser.add_argument("--duration", type=float, default=3600.0, help="Duree mesuree de chaque run en secondes (defaut 3600)")
+    parser.add_argument("--num-festivaliers", type=int, default=200, help="Nombre de festivaliers (defaut 200)")
+    parser.add_argument("--beacon-count", type=int, default=6, help="Nombre de bornes (defaut 6)")
+    parser.add_argument(
+        "--mobility", choices=sorted(MOBILITY_MODELS), default="random_waypoint", help="Modele de mobilite (defaut random_waypoint)",
+    )
+    parser.add_argument(
+        "--reply-probability", type=float, default=0.0,
+        help="Probabilite qu'un message livre recoive une reponse du destinataire (defaut 0 = pas de reponses)",
+    )
+    parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele (defaut 2)")
+    parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR, help="Dossier d'archive du CSV et de son .json (defaut archives)")
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")

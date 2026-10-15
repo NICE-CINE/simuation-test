@@ -297,11 +297,14 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--seeds", "--seed", dest="seeds", type=int, nargs="+", default=[42],
         help="Une ou plusieurs seeds ; avec plusieurs, un resume moyenne +/- IC 95 %% par algo x bornes",
     )
-    parser.add_argument("--duration", type=float, default=3600.0)
+    parser.add_argument("--duration", type=float, default=3600.0, help="Duree mesuree de chaque run en secondes (defaut 3600)")
     parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
     parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
-    parser.add_argument("--beacon-count", type=int, default=6)
+    parser.add_argument(
+        "--beacon-count", type=int, default=6,
+        help="Nombre de bornes des runs \"avec bornes\" (defaut 6) ; chaque algo tourne aussi sans",
+    )
     parser.add_argument(
         "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
     )

@@ -221,3 +221,13 @@ def test_cooldown_defaults_to_the_message_ttl_and_can_be_turned_off():
     config = main_module.build_config(parser.parse_args([]))
     assert config.cooldown_s == config.traffic.message_ttl_s
     assert main_module.build_config(parser.parse_args(["--cooldown", "0"])).cooldown_s == 0.0
+
+
+def test_every_option_has_a_help_and_help_all_shows_every_command(capfd):
+    parser = main_module.build_arg_parser()
+    assert all(action.help for action in parser._actions)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--help-all"])
+    out = capfd.readouterr().out
+    for script, _ in main_module.OTHER_COMMANDS:
+        assert f"usage: {Path(script).name}" in out
