@@ -55,10 +55,10 @@ flowchart TD
   n'utilise comme gradient : en foule dense (`poi`, 500 personnes), 60 %
   des messages ont leur destinataire dans la meme composante connexe a la
   creation, 31 % a 8 sauts ou moins.
-- Contre `fresh_spray` (500 personnes, `poi`, 3 seeds) : latence -18 %
-  (245 s contre 298 s avec 6 bornes, 379 s contre 462 s sans), overhead
-  -56 %, energie mesh +0,9 %, livraison -0,6 pt avec bornes et +0,4 pt
-  sans. Detail dans la spec, section 8.
+- Contre `fresh_spray` (300 personnes, `poi`, 30 min, 2 seeds) : overhead
+  -30 %, latence -4 % avec 6 bornes (263 s contre 273 s) et -6 % sans
+  (411 s contre 438 s), energie mesh +0,6 %, livraison -1,0 pt avec bornes
+  et +0,3 pt sans. Detail dans la spec, section 8.
 - Une seule copie suit le gradient : pas d'inondation, contrairement a
   `bitchat` quand la destination est joignable.
 - Sans GPS ni historique de rencontres.

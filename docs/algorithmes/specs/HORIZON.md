@@ -85,13 +85,15 @@ Numéros de séquence DSDV, canaux d'advertising séparés (l'annonce partage le
 
 ## 8. Résultats
 
-`scripts/compare_algorithms.py --algorithms fresh_spray horizon --seeds 1 2 3 --duration 3600 --num-festivaliers 500 --beacon-count 6 --mobility poi --reply-probability 0.5` (moyennes sur 3 seeds, annonces passées par la radio) :
+`scripts/compare_algorithms.py --algorithms fresh_spray horizon --seeds 1 2 --duration 1800 --num-festivaliers 300 --beacon-count 6 --mobility poi --reply-probability 0.5` (moyennes sur 2 seeds, annonces passées par la radio ; archive `archives/2026-10-15_09-20-58_comparaison.csv`) :
 
 | | Livraison | Latence | p95 | Sauts | Overhead | Énergie mesh | Paquets perdus |
 |---|---|---|---|---|---|---|---|
-| `fresh_spray`, 6 bornes | 0,996 | 298 s | 948 s | 7,01 | 59,6 | 23,27 Ah | 50 409 |
-| `horizon`, 6 bornes | 0,990 | 245 s | 875 s | 5,81 | 26,2 | 23,48 Ah | 27 417 |
-| `fresh_spray`, sans borne | 0,980 | 462 s | 1 287 s | 7,00 | 61,7 | 23,27 Ah | 49 907 |
-| `horizon`, sans borne | 0,984 | 379 s | 1 185 s | 6,67 | 29,9 | 23,47 Ah | 30 135 |
+| `fresh_spray`, 6 bornes | 0,994 | 273 s | 981 s | 6,06 | 35,2 | 9,30 Ah | 9 376 |
+| `horizon`, 6 bornes | 0,984 | 263 s | 958 s | 6,23 | 24,7 | 9,36 Ah | 7 090 |
+| `fresh_spray`, sans borne | 0,975 | 438 s | 1 222 s | 6,10 | 38,2 | 9,30 Ah | 9 685 |
+| `horizon`, sans borne | 0,978 | 411 s | 1 212 s | 6,57 | 26,4 | 9,36 Ah | 7 497 |
 
-Latence −18 % (plus basse sur chacune des 6 paires de seeds), overhead −56 %, énergie mesh +0,9 % (les annonces), livraison −0,6 pt avec bornes, +0,4 pt sans. Avec des annonces gratuites et sans perte (première version), la latence tombait à 209 s : la radio coûte environ 35 s de latence et 1 point de livraison.
+Latence −4 % avec bornes, −6 % sans (plus basse sur 3 des 4 paires de seeds), overhead −30 %, énergie mesh +0,6 % (les annonces), livraison −1,0 pt avec bornes, +0,3 pt sans. Deux seeds seulement : l'écart de latence est du même ordre que la variation entre seeds.
+
+Une mesure antérieure (500 personnes, 1 h, 3 seeds) donnait latence −18 % et overhead −56 %, mais le choix du prochain saut lisait alors la table courante des voisins au lieu des vecteurs effectivement reçus : les annonces perdues ne pénalisaient pas le routage. Elle n'est plus valable.
