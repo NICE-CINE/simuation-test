@@ -15,7 +15,7 @@ from festival_ble_sim.routing.fresh_spray import FreshSprayRouting
 from festival_ble_sim.simulation import run_simulation
 
 HEADERS = ["initial_tokens", "seed", "beacons"] + REPORT_FIELDS + ["wall_s"]
-SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "total_energy_consumed_mah"]
+SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "overhead_bytes", "total_energy_consumed_mah"]
 
 _worker_progress: Optional[MutableMapping[str, float]] = None
 

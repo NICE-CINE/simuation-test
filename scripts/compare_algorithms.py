@@ -27,6 +27,8 @@ REPORT_FIELDS = [
     "p95_latency_s",
     "avg_hops",
     "overhead",
+    "overhead_bytes",
+    "retransmitted_bytes",
     "total_energy_consumed_mah",
     "total_mesh_energy_consumed_mah",
     "buffer_eviction_count",

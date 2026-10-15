@@ -212,6 +212,7 @@ def _send_control_broadcast(
     channel: Optional[ChannelState],
     airtime_left: Dict[int, float],
     received: Dict[int, List[int]],
+    now: float = 0.0,
 ) -> bool:
     # One connectionless broadcast to every active node in range: no link
     # slot, no acknowledgment and so no retransmission, each reception is
@@ -226,6 +227,7 @@ def _send_control_broadcast(
         return False
     airtime_left[sender.id] = left - size
     sender.consume_energy(energy_model.cost_of_tx(size))
+    metrics.record_overhead_bytes("control", size, now)
     if channel is not None:
         channel.sent_control[sender.id] = channel.sent_control.get(sender.id, 0.0) + size
     for contact in neighbors:
@@ -260,6 +262,8 @@ def _exchange_metadata(
     rng: Optional[random.Random],
     channel: Optional[ChannelState],
     airtime_left: Dict[int, float],
+    metrics: Optional[MetricsCollector] = None,
+    now: float = 0.0,
 ) -> None:
     # What decide() and has_message() read about the peer has to cross the
     # link first, every tick, before any data: each side's summary vector
@@ -281,10 +285,13 @@ def _exchange_metadata(
             sent = conn.acks_sent.get(x.id, set())
             asked = y.buffer.keys() | y.outbox.keys()
             acks_out = [mid for mid in asked if mid in x.acked and mid not in sent]
-        size = ble_config.summary_id_bytes * len(new_ids) + routing_algorithm.ack_size_bytes * len(acks_out)
-        if not conn.tables_sent:
-            size += routing_algorithm.connection_table_bytes(x, y)
-        sides.append((x, y, new_ids, acks_out, size))
+        parts = {
+            "summary": ble_config.summary_id_bytes * len(new_ids),
+            "ack": routing_algorithm.ack_size_bytes * len(acks_out),
+            "table": 0 if conn.tables_sent else routing_algorithm.connection_table_bytes(x, y),
+        }
+        size = sum(parts.values())
+        sides.append((x, y, new_ids, acks_out, size, parts))
         total += size
     if total == 0:
         conn.tables_sent = True
@@ -305,9 +312,12 @@ def _exchange_metadata(
     airtime_left[a.id] = a_left - total * attempts
     airtime_left[b.id] = b_left - total * attempts
     conn.tables_sent = True
-    for x, y, new_ids, acks_out, size in sides:
+    for x, y, new_ids, acks_out, size, parts in sides:
         if size == 0:
             continue
+        if metrics is not None:
+            for kind, nbytes in parts.items():
+                metrics.record_overhead_bytes(kind, nbytes * attempts, now)
         x.consume_energy(energy_model.cost_of_tx(size) * attempts)
         y.consume_energy(energy_model.cost_of_rx(size) * attempts)
         if channel is not None:
@@ -427,8 +437,7 @@ def process_node_contacts(
             copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
             sender.consume_energy(energy_model.cost_of_tx(message.size_bytes) * attempts)
             contact.consume_energy(energy_model.cost_of_rx(message.size_bytes) * attempts)
-            metrics.record_transmission(message)
-            metrics.record_retransmission(message, airtime - message.size_bytes)
+            metrics.record_transmission(message, airtime)
             if is_delivery:
                 contact.mark_delivered(copy.msg_id)
                 if routing_algorithm.uses_delivery_acks:
@@ -438,6 +447,7 @@ def process_node_contacts(
                     sender.learn_ack(copy.msg_id, expiry)
                     contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
                     sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
+                    metrics.record_overhead_bytes("ack", routing_algorithm.ack_size_bytes, now)
                 if copy.src_position is not None:
                     contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
                 metrics.record_delivery(copy, now)
@@ -583,14 +593,14 @@ def network_engine(
                 if conn.ready_at <= now:
                     _exchange_metadata(
                         nodes[a_id], nodes[b_id], conn, routing_algorithm, energy_model, ble_config, rng, channel,
-                        airtime_left,
+                        airtime_left, metrics, now,
                     )
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
             if node_id in broadcasts and sender.is_active and _send_control_broadcast(
                 sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                ble_config, rng, channel, airtime_left, received,
+                ble_config, rng, channel, airtime_left, received, now,
             ):
                 sent.append(node_id)
             sent_to = process_node_contacts(

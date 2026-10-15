@@ -224,15 +224,16 @@ colonnes du CSV :
 | Latence moyenne / p95 (`avg_latency_s`, `p95_latency_s`) | delai entre la creation et la **premiere** livraison, sur les messages spontanes livres seulement |
 | Sauts moyens (`avg_hops`) | sauts de la copie livree en premier (messages spontanes) |
 | Reponses (`replies_created`, `replies_delivered`, `reply_delivery_ratio`) | messages crees par `--reply-probability` en reaction a une livraison, rapportes a part. Elles consomment quand meme du debit radio : la charge depend donc encore un peu de l'algo |
-| Surcharge (`overhead`) | (transmissions BLE reussies - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Les tentatives perdues, le backhaul et les ACK de `managed_flood` et `bitchat` n'y sont pas |
+| Surcharge (`overhead`) | (tentatives de transmission - messages livres) / messages livres, comme dans The ONE : transmissions en plus de la livraison elle-meme, 0 pour une livraison directe sans autre copie. Une retransmission sur un lien qui perd p compte pour 1/(1-p) tentative. Le backhaul n'y est pas |
+| Octets par message livre (`overhead_bytes`) | tous les octets emis (donnees retransmissions comprises, resumes, ACK, tables des algorithmes, diffusions de controle) / messages livres : **le cout radio a comparer entre algorithmes**. Detail dans `data_bytes`, `summary_bytes`, `ack_bytes`, `table_bytes`, `control_bytes` ; seuls les octets non lies a un message emis avant la fin de `--duration` sont comptes |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
 | Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 82 mA du telephone etant identiques pour tous |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
-| Paquets perdus (radio) | tentatives perdues (congestion, signal faible, collisions, coupures) ; elles coutent quand meme l'energie d'emission |
+| Annonces perdues (`packet_loss_count`) | receptions de diffusions de controle perdues (sans connexion, donc sans renvoi) |
+| Octets retransmis (`retransmitted_bytes`) | temps d'antenne des renvois sur les connexions (collisions, signal faible) |
 | Transmissions / pertes backhaul | copies entre bornes par le reseau filaire, et celles perdues |
-| Backoffs | tours sautes par un emetteur a cause de la contention |
 
 ## Valeurs par defaut (festival moyen)
 

@@ -15,7 +15,7 @@ from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.simulation import run_simulation
 
 HEADERS = ["variant", "seed", "beacons"] + REPORT_FIELDS + ["wall_s"]
-SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "total_energy_consumed_mah"]
+SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "overhead_bytes", "total_energy_consumed_mah"]
 DEFAULT_VARIANTS = [
     "",
     "purge_delivered=0",
