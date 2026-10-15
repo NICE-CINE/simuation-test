@@ -1,7 +1,7 @@
 from __future__ import annotations
 import math
 import random
-from typing import List, Optional, TYPE_CHECKING
+from typing import Callable, List, Optional, TYPE_CHECKING
 from ..config import AreaConfig, MobilityConfig
 from ..models import Position
 from .base import MobilityModel
@@ -56,10 +56,15 @@ class GroupMobility(MobilityModel):
         self._meeting_at = 0.0
         self._search_target: Optional[Position] = None
         self._guide: Optional["BaseNode"] = None
+        self._clock: Optional[Callable[[], float]] = None
         self._speed_mps = self._rng.uniform(config.speed_min_mps, config.speed_max_mps)
 
     def initial_position(self, area: AreaConfig) -> Position:
         return self._solo.initial_position(area)
+
+    def set_clock(self, clock: Callable[[], float]) -> None:
+        self._clock = clock
+        self._solo.set_clock(clock)
 
     def join_group(self, node: "BaseNode", members: List["BaseNode"]) -> Optional[Position]:
         owner = members[0].mobility
@@ -157,7 +162,9 @@ class GroupMobility(MobilityModel):
         # "On se retrouve ici" at the end of the trip.
         self._meeting = leader.position
         self._meeting_at = self._elapsed_s + duration
-        return PoiMobility(self._config, rng=self._rng)
+        trip = PoiMobility(self._config, rng=self._rng)
+        trip.set_clock(self._clock)
+        return trip
 
     def _take_companions(self, leader: "BaseNode") -> None:
         others = [

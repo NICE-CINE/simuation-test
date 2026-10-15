@@ -128,6 +128,20 @@ class GroupConfig:
 
 
 @dataclass(frozen=True)
+class ScheduleConfig:
+    # Festival programme (PoiMobility, so group leaders too): sets of set_s
+    # alternate between the stages (indices into points_of_interest) from
+    # the start of the run, warm-up included. The playing stage's weight is
+    # multiplied by boost, and when a set starts each paused person cuts
+    # their pause with rush_probability and picks a new target: the crowd
+    # moves in waves. Every value is an estimate.
+    stages: Tuple[int, ...] = (0, 1)
+    set_s: float = 3600.0
+    boost: float = 3.0
+    rush_probability: float = 0.3
+
+
+@dataclass(frozen=True)
 class MobilityConfig:
     # Walking through a crowd is slower than free walking (~1.4 m/s), and
     # festivaliers spend most of their time standing still: a pause is a
@@ -145,6 +159,8 @@ class MobilityConfig:
     # target uniform over the whole area with that probability, POI otherwise.
     background_probability: Optional[float] = None
     group: GroupConfig = field(default_factory=GroupConfig)
+    # None = fixed POI weights (no programme).
+    schedule: Optional[ScheduleConfig] = None
 
 
 @dataclass(frozen=True)
@@ -384,6 +400,13 @@ class SimulationConfig:
             raise ValueError("group trip rates must be >= 0")
         if not 0.0 <= group.split_probability <= 1.0:
             raise ValueError("split_probability must be within [0, 1]")
+        schedule = self.mobility.schedule
+        if schedule is not None:
+            poi_count = len(self.mobility.points_of_interest)
+            if not schedule.stages or not all(0 <= s < poi_count for s in schedule.stages):
+                raise ValueError("schedule stages must index points_of_interest")
+            if schedule.set_s <= 0 or schedule.boost < 0 or not 0.0 <= schedule.rush_probability <= 1.0:
+                raise ValueError("schedule needs set_s > 0, boost >= 0, rush_probability in [0, 1]")
         for lo, hi in (group.short_trip_s, group.long_trip_s):
             if not 0 < lo <= hi:
                 raise ValueError("group trip durations must satisfy 0 < lo <= hi")

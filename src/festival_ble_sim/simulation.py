@@ -154,6 +154,7 @@ def run_simulation(
         nodes[node_id] = mobile
         mobile_nodes[node_id] = mobile
         grid.insert(mobile)
+        mobility.set_clock(lambda: env.now)
         env.process(_mobile_process(env, mobile, config, grid))
 
         if config.churn.enabled:

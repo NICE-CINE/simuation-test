@@ -15,8 +15,8 @@ from festival_ble_sim.config import (
 )
 from festival_ble_sim.metrics import format_report
 from festival_ble_sim.presets import (
-    DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_social_arguments,
-    build_site, energy_config, mobility_factory, resolve_cli_args, social_config,
+    DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_schedule_argument,
+    add_social_arguments, build_site, energy_config, mobility_factory, resolve_cli_args, social_config, with_schedule,
 )
 from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
@@ -80,6 +80,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     add_random_charge_argument(parser)
     add_social_arguments(parser)
+    add_schedule_argument(parser)
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -112,7 +113,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         num_festivaliers=num_festivaliers,
         random_seed=args.seed,
         area=area,
-        mobility=mobility,
+        mobility=with_schedule(mobility, args.schedule),
         beacons=BeaconConfig(count=args.beacons, placement=args.beacon_placement),
         churn=churn,
         traffic=traffic,

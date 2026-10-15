@@ -14,8 +14,8 @@ from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, T
 from festival_ble_sim.metrics import SimulationReport
 from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import (
-    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_social_arguments, build_site,
-    energy_config, resolve_cli_args, social_config,
+    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_schedule_argument,
+    add_social_arguments, build_site, energy_config, resolve_cli_args, social_config, with_schedule,
 )
 from festival_ble_sim.progress import MINI_BAR_WIDTH, format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
@@ -97,6 +97,7 @@ def build_config(
     warmup_s: Optional[float] = None,
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
+    schedule: bool = False,
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     traffic = TrafficConfig(
@@ -112,7 +113,7 @@ def build_config(
         num_festivaliers=num_festivaliers,
         random_seed=seed,
         area=area,
-        mobility=mobility_config,
+        mobility=with_schedule(mobility_config, schedule),
         beacons=BeaconConfig(count=beacon_count),
         traffic=traffic,
         gps=GpsConfig(fix_failure_probability=gps_fix_failure),
@@ -148,12 +149,13 @@ def _run_one(
     warmup_s: Optional[float] = None,
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
+    schedule: bool = False,
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
         followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
-        no_lost_messages,
+        no_lost_messages, schedule,
     )
     total_s = config.total_s
     label = run_label(algo_name, beacon_count, seed)
@@ -196,6 +198,7 @@ def run_matrix(
     warmup_s: Optional[float] = None,
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
+    schedule: bool = False,
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
@@ -210,7 +213,7 @@ def run_matrix(
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
                 followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
-                no_lost_messages,
+                no_lost_messages, schedule,
             ): index
             for index, (algo_name, count, seed) in enumerate(tasks)
         }
@@ -320,6 +323,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     add_random_charge_argument(parser)
     add_social_arguments(parser)
+    add_schedule_argument(parser)
     parser.add_argument(
         "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
         help="Sous-ensemble d'algos a lancer (defaut : tous)",
@@ -345,7 +349,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         build_config(
             args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
             args.followup_probability, args.gps_fix_failure, args.size, args.cooldown, args.random_charge,
-            args.warmup, args.no_outside_friends, args.no_lost_messages,
+            args.warmup, args.no_outside_friends, args.no_lost_messages, args.schedule,
         ),
     )
     rows = run_matrix(
@@ -367,6 +371,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         warmup_s=args.warmup,
         no_outside_friends=args.no_outside_friends,
         no_lost_messages=args.no_lost_messages,
+        schedule=args.schedule,
     )
     write_csv(rows, archive_csv)
     if args.csv:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, Optional, Tuple
-from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest, SocialConfig
+from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest, ScheduleConfig, SocialConfig
 from .mobility.base import MobilityModel
 from .mobility.group import GroupMobility
 from .mobility.poi import PoiMobility, default_festival_pois
@@ -57,6 +57,18 @@ def add_social_arguments(parser: Any) -> None:
         "--no-lost-messages", action="store_true",
         help="Pas de messages en plus pendant un rendez-vous rate (par defaut 6/h du perdu au groupe et du meneur au perdu, mobilite group)",
     )
+
+
+def add_schedule_argument(parser: Any) -> None:
+    parser.add_argument(
+        "--schedule", action="store_true",
+        help="Programme du festival (mobilites poi et group) : concerts d'1 h alternes entre les deux scenes, "
+        "scene qui joue x3, 30 %% des gens en pause partent au debut de chaque concert",
+    )
+
+
+def with_schedule(mobility: MobilityConfig, schedule: bool) -> MobilityConfig:
+    return replace(mobility, schedule=ScheduleConfig()) if schedule else mobility
 
 
 def social_config(no_outside_friends: bool) -> SocialConfig:

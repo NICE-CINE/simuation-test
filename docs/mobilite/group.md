@@ -19,7 +19,7 @@ un telephone mort ne change rien, la personne continue de marcher. Un ami
 arrive apres lui ne prend pas sa place.
 
 1. **Meneur** : se deplace comme `poi` (memes points d'interet, memes
-   pauses).
+   pauses, meme programme avec `--schedule`) ; le groupe suit.
 2. **Membre** : garde un decalage fixe tire dans un disque de
    `radius_m` (5 m) autour du meneur, et le suit a `speed_max_mps`.
 3. **Sorties** : un membre avec le groupe part avec un taux de

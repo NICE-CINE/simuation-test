@@ -24,7 +24,8 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   (`connection_idle_timeout_s`), taille des annonces bitchat et des
   beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
   rendez-vous, distance a laquelle on reconnait son groupe, probabilite
-  qu'une sortie scinde le groupe en deux), le nombre
+  qu'une sortie scinde le groupe en deux), le programme `--schedule`
+  (`ScheduleConfig` : sets d'1 h, scene x3, 30 % de pauses coupees), le nombre
   d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2), le
   rythme des messages pendant un rendez-vous rate
   (`TrafficConfig.lost_messages_per_hour`, 6/h).
@@ -107,6 +108,10 @@ Options disponibles :
   exactement le groupe (voir "Destinataire : un ami" plus bas)
 - `--no-lost-messages` : pas de messages en plus pendant un rendez-vous
   rate (voir "Messages de perdu" plus bas)
+- `--schedule` : programme du festival (`poi` et `group`), concerts d'1 h
+  alternes entre les deux scenes, la scene qui joue attire 3 fois plus et
+  30 % des gens en pause partent au debut de chaque concert (desactive par
+  defaut, voir `docs/mobilite/poi.md`)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -115,7 +120,7 @@ Options disponibles :
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
-        [--random-charge] [--no-outside-friends] [--no-lost-messages]
+        [--random-charge] [--no-outside-friends] [--no-lost-messages] [--schedule]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
