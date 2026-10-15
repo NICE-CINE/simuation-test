@@ -1,11 +1,10 @@
 from __future__ import annotations
 import argparse
-import random
 import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import (
     BeaconConfig,
@@ -15,11 +14,9 @@ from festival_ble_sim.config import (
     TrafficConfig,
 )
 from festival_ble_sim.metrics import format_report
-from festival_ble_sim.mobility.base import MobilityModel
-from festival_ble_sim.mobility.poi import PoiMobility
-from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.presets import (
-    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site, energy_config, resolve_cli_args,
+    DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site,
+    energy_config, mobility_factory, resolve_cli_args,
 )
 from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
@@ -31,21 +28,13 @@ DEFAULT_NUM_FESTIVALIERS = 4000
 PROGRESS_BAR_WIDTH = 30
 STATUS_REFRESH_S = 0.5
 
-# "poi" has no CLI knobs of its own: build_config() points it at a default
-# festival layout (see default_festival_pois) since the mobility_factory
-# signature only takes an RNG, not a config.
-MOBILITY_FACTORIES: Dict[str, Callable[[SimulationConfig], Callable[[random.Random], MobilityModel]]] = {
-    "random_waypoint": lambda config: (lambda rng: RandomWaypointMobility(config.mobility, rng=rng)),
-    "poi": lambda config: (lambda rng: PoiMobility(config.mobility, rng=rng)),
-}
-
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Simulateur de messagerie BLE mesh en festival")
     parser.add_argument("--routing", choices=sorted(ROUTING_NAMES), default="epidemic")
     parser.add_argument(
-        "--mobility", choices=sorted(MOBILITY_FACTORIES), default=None,
-        help="random_waypoint par defaut, poi avec --size",
+        "--mobility", choices=sorted(MOBILITY_MODELS), default=None,
+        help="random_waypoint par defaut, group avec --size",
     )
     parser.add_argument(
         "--size", choices=sorted(SITE_PRESETS), default=None,
@@ -155,7 +144,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     resolve_cli_args(args, DEFAULT_NUM_FESTIVALIERS, parser.error)
     config = build_config(args)
     routing_algorithm = build_routing(args.routing, args.seed, args.spray_initial_copies)
-    mobility_factory = MOBILITY_FACTORIES[args.mobility](config)
+    factory = mobility_factory(args.mobility, config.mobility)
     history = None
     if args.replay_html:
         history = SimulationHistory(
@@ -168,7 +157,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     show_progress = sys.stderr.isatty()
     try:
         report = run_simulation(
-            config, routing_algorithm=routing_algorithm, mobility_factory=mobility_factory, history=history,
+            config, routing_algorithm=routing_algorithm, mobility_factory=factory, history=history,
             progress_callback=make_progress_callback(total_s) if show_progress else None,
             progress_interval_s=max(total_s / 1000, 1.0),
         )

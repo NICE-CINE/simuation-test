@@ -30,13 +30,14 @@ Options disponibles :
   defauts (`fanout=3`, `max_hops=4`, bande 40-60 %, purge activee) et
   `--seed` pour le tirage des relais ; pour faire varier ses parametres,
   voir "Balayer les variantes de band_fanout"
-- `--mobility` : `random_waypoint` (defaut) ou `poi` (les festivaliers
-  se repartissent entre scenes, bars et entree, voir plus bas)
+- `--mobility` : `random_waypoint` (defaut), `poi` (les festivaliers
+  se repartissent entre scenes, bars et entree, voir plus bas) ou `group`
+  (comme `poi`, mais les groupes d'amis se deplacent ensemble, voir plus bas)
 - `--size` : `small`, `medium`, `large` ou `extra-large` (4 000 / 10 000 /
   30 000 / 60 000 festivaliers sur 12 000 / 30 000 / 90 000 / 180 000 m2,
   soit ~3 m2 par personne, ratio 1,4:1). Fixe aussi la repartition de la
   foule (70 % du public cible 15 % de la surface, voir `presets.py`) et
-  active `--mobility poi` par defaut ; refuse un `--num-festivaliers`
+  active `--mobility group` par defaut ; refuse un `--num-festivaliers`
   different. Disponible aussi dans `compare_algorithms.py` et
   `sweep_fresh_spray_tokens.py`. Sans `--size`, le site reste 700x500 m,
   4 000 festivaliers. La part mesuree dans la zone dense est un peu sous
@@ -408,6 +409,13 @@ Programmatiquement :
 Principe, diagramme, plans de site, ordres de grandeur, forces et
 faiblesses : un fichier par modele dans `docs/mobilite/`.
 
+- `group` (`mobility/group.py`, defaut avec `--size`) — les groupes
+  d'amis (les memes qui choisissent les destinataires) se deplacent
+  ensemble autour d'un meneur qui suit `poi` ; un membre part parfois seul
+  (bar 5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous
+  ou le groupe l'attend 15 min, sinon il cherche le groupe de point
+  d'interet en point d'interet. Personne n'ecrit a un ami qu'il voit
+  (`TrafficConfig.skip_friends_within_m`, 15 m). Voir `docs/mobilite/group.md`.
 - `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
   uniforme sur toute la zone, puis pause (70 % de chances, 5 a 45 min).
   Voir `docs/mobilite/random_waypoint.md`.

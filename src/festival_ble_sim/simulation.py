@@ -8,6 +8,7 @@ from .beacons import place_beacons
 from .config import SimulationConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector, SimulationReport
+from .models import Position
 from .mobility.base import MobilityModel
 from .mobility.random_waypoint import RandomWaypointMobility
 from .network import network_engine
@@ -172,6 +173,15 @@ def run_simulation(
 
     friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
     gps_rng = random.Random(rng.randrange(1 << 30))
+    for node_id, mobile in mobile_nodes.items():
+        group = sorted(friends.get(node_id, set()) | {node_id})
+        if group[0] != node_id:
+            start = mobile.mobility.join_group(mobile_nodes[group[0]])
+            if start is not None:
+                old_x, old_y = mobile.position.x, mobile.position.y
+                mobile.position = Position(min(max(start.x, 0.0), config.area.width_m),
+                                           min(max(start.y, 0.0), config.area.height_m))
+                grid.update(mobile, old_x, old_y)
     for node_id, mobile in mobile_nodes.items():
         mobile.friends = friends.get(node_id, set())
         mobile.gps_noise_std_m = config.gps.noise_std_m

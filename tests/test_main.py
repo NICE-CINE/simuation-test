@@ -51,10 +51,10 @@ def test_routing_factories_cover_every_cli_choice():
 
 
 def test_mobility_factories_cover_every_cli_choice():
-    for name in ["random_waypoint", "poi"]:
+    for name in main_module.MOBILITY_MODELS:
         args = main_module.build_arg_parser().parse_args(["--mobility", name])
         config = main_module.build_config(args)
-        factory = main_module.MOBILITY_FACTORIES[name](config)
+        factory = main_module.mobility_factory(name, config.mobility)
         mobility = factory(random.Random(0))
         assert mobility is not None
 
@@ -195,7 +195,7 @@ def test_size_sets_festivaliers_area_and_crowd_layout():
     assert (config.area.width_m, config.area.height_m) == (205.0, 146.0)
     assert len(config.mobility.points_of_interest) == 4
     assert config.mobility.background_probability == pytest.approx(0.30 / 0.85)
-    assert args.mobility == "poi"
+    assert args.mobility == "group"
 
 
 def test_size_with_explicit_random_waypoint_only_changes_count_and_area():

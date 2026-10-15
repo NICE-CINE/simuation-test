@@ -108,6 +108,22 @@ class PointOfInterest:
 
 
 @dataclass(frozen=True)
+class GroupConfig:
+    # mobility.group.GroupMobility only. Every value is an estimate.
+    radius_m: float = 5.0
+    # How far a member recognizes its group.
+    visual_range_m: float = 15.0
+    # Trips a member makes alone (rate per hour while with the group, and
+    # length): bar or toilets, or another stage.
+    short_trips_per_hour: float = 0.5
+    short_trip_s: Tuple[float, float] = (300.0, 1800.0)
+    long_trips_per_hour: float = 0.2
+    long_trip_s: Tuple[float, float] = (1800.0, 7200.0)
+    # How long the leader waits at a rendezvous.
+    rendezvous_max_wait_s: float = 900.0
+
+
+@dataclass(frozen=True)
 class MobilityConfig:
     # Walking through a crowd is slower than free walking (~1.4 m/s), and
     # festivaliers spend most of their time standing still: a pause is a
@@ -124,6 +140,7 @@ class MobilityConfig:
     # POI-only targets); a probability makes initial positions and each new
     # target uniform over the whole area with that probability, POI otherwise.
     background_probability: Optional[float] = None
+    group: GroupConfig = field(default_factory=GroupConfig)
 
 
 @dataclass(frozen=True)
@@ -147,6 +164,10 @@ class TrafficConfig:
     # the sender's SocialConfig group, and friendless people send nothing.
     # False restores a uniformly random destination among active nodes.
     friends_only: bool = True
+    # Nobody texts a friend they can see: friends closer than this are not
+    # drawn as destinations (no candidate left = no message). Matters with
+    # group mobility, where most friends walk alongside. 0 = off.
+    skip_friends_within_m: float = 15.0
     # Conversations: probability that a delivered message gets a reply from
     # its destination, after a delay drawn from reply_delay_range_s. Replies
     # can themselves be replied to. 0.0 = no replies (previous behavior).
@@ -338,6 +359,14 @@ class SimulationConfig:
             raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
         if not (0.0 <= self.social.no_friend_fraction <= 1.0):
             raise ValueError("no_friend_fraction must be within [0, 1]")
+        group = self.mobility.group
+        if group.radius_m < 0 or group.visual_range_m <= 0 or group.rendezvous_max_wait_s < 0:
+            raise ValueError("group radius_m and rendezvous_max_wait_s must be >= 0, visual_range_m > 0")
+        if group.short_trips_per_hour < 0 or group.long_trips_per_hour < 0:
+            raise ValueError("group trip rates must be >= 0")
+        for lo, hi in (group.short_trip_s, group.long_trip_s):
+            if not 0 < lo <= hi:
+                raise ValueError("group trip durations must satisfy 0 < lo <= hi")
         if self.gps.noise_std_m < 0:
             raise ValueError("gps noise_std_m must be >= 0")
         if not 0.0 <= self.gps.fix_failure_probability < 1.0:

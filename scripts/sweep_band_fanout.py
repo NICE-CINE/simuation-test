@@ -10,7 +10,7 @@ from compare_algorithms import (
     REPORT_FIELDS, STATUS_REFRESH_S, append_csv_row, build_config, format_duration, render_status,
 )
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
-from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.simulation import run_simulation
 
@@ -102,7 +102,7 @@ def _run_one(
     report = run_simulation(
         config,
         routing_algorithm=build_algorithm(parse_variant(variant), seed),
-        mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
+        mobility_factory=mobility_factory(mobility, config.mobility),
         progress_callback=progress_callback,
         progress_interval_s=max(total_s / 1000, 1.0),
     )
@@ -202,7 +202,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--duration", type=float, default=3600.0)
     parser.add_argument("--num-festivaliers", type=int, default=200)
     parser.add_argument("--beacon-count", type=int, default=6)
-    parser.add_argument("--mobility", choices=["random_waypoint", "poi"], default="random_waypoint")
+    parser.add_argument("--mobility", choices=sorted(MOBILITY_MODELS), default="random_waypoint")
     parser.add_argument("--reply-probability", type=float, default=0.0)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR)

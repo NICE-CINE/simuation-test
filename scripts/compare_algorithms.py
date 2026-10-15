@@ -12,7 +12,7 @@ from typing import Any, Dict, List, MutableMapping, Optional, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
-from festival_ble_sim.mobility.poi import PoiMobility
+from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import (
     DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site, energy_config, resolve_cli_args,
 )
@@ -157,7 +157,7 @@ def _run_one(
     report: SimulationReport = run_simulation(
         config,
         routing_algorithm=build_routing(algo_name, seed),
-        mobility_factory=(lambda rng: PoiMobility(config.mobility, rng=rng)) if mobility == "poi" else None,
+        mobility_factory=mobility_factory(mobility, config.mobility),
         progress_callback=progress_callback,
         progress_interval_s=max(total_s / 1000, 1.0),
     )
@@ -286,7 +286,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument("--beacon-count", type=int, default=6)
     parser.add_argument(
-        "--mobility", choices=["random_waypoint", "poi"], default=None, help="random_waypoint par defaut, poi avec --size",
+        "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
     )
     parser.add_argument(
         "--size", choices=sorted(SITE_PRESETS), default=None,
