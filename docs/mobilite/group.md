@@ -13,7 +13,10 @@ choisissent aussi les destinataires des messages) etaient tires sans lien
 avec les positions : un destinataire etait n'importe ou sur le site.
 
 Modele de groupe a point de reference (RPGM) : chaque groupe d'amis a un
-meneur, son plus petit identifiant.
+meneur, le premier membre (par identifiant) present sur le site et avec le
+groupe. Il le reste jusqu'a ce qu'il quitte le festival (`on_site`, churn) ;
+un telephone mort ne change rien, la personne continue de marcher. Un ami
+arrive apres lui ne prend pas sa place.
 
 1. **Meneur** : se deplace comme `poi` (memes points d'interet, memes
    pauses).
@@ -34,7 +37,12 @@ meneur, son plus petit identifiant.
 5. **Recherche** : un membre qui arrive apres la fin de l'attente fait le
    tour des points d'interet (sans pause) jusqu'a voir son groupe, c'est-a-
    dire passer a moins de `visual_range_m` (15 m) du meneur. En revenant
-   ou en cherchant, il rejoint le groupe des qu'il le voit.
+   ou en cherchant, il rejoint le groupe des qu'il le voit. Un membre qui
+   arrive sur le site apres son groupe (churn) ne sait pas ou il est : il
+   commence en recherche. S'il ne reste plus personne avec le groupe (tous
+   partis ou en sortie), celui qui revient devient le groupe.
+6. **Departs** : un membre qui quitte le festival n'est plus attendu aux
+   rendez-vous.
 
 Les personnes sans amis (`no_friend_fraction`, 20 %) se deplacent comme
 `poi`. Les membres demarrent autour de leur meneur
