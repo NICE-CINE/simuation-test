@@ -163,3 +163,15 @@ def test_vector_heard_over_a_one_way_link_is_ignored():
     algo.on_simulation_start(nodes)
     _settle(algo, links)
     assert algo._dist[1][5] == 4 and 7 not in algo._heard[1]
+
+
+def test_pull_from_a_beacon_hands_out_a_single_token():
+    algo = HorizonRouting()
+    nodes, links = _line(algo)
+    nodes[1].is_beacon = True
+    _settle(algo, links)
+    msg = _msg(tokens=16)
+    nodes[1].buffer[1] = msg
+    assert algo.decide(msg, nodes[1], nodes[2], 30.0) is RoutingDecision.FORWARD
+    copy = _forward(algo, msg, nodes[1], nodes[2])
+    assert 1 in nodes[1].buffer and copy.routing_state["tokens"] == 1

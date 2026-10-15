@@ -166,7 +166,11 @@ class HorizonRouting(FreshSprayRouting):
             return
         message.routing_state.pop(_REASON)
         forwarded_copy.routing_state.pop(_REASON, None)
-        forwarded_copy.routing_state[_TOKENS] = message.routing_state.get(_TOKENS, self._initial_tokens)
         self.stats["pull"] += 1
-        if not getattr(holder, "is_beacon", False):
-            holder.buffer.pop(message.msg_id, None)
+        if getattr(holder, "is_beacon", False):
+            # The beacon keeps its copy: handing out its tokens too would mint
+            # a full spray budget on every pull.
+            forwarded_copy.routing_state[_TOKENS] = 1
+            return
+        forwarded_copy.routing_state[_TOKENS] = message.routing_state.get(_TOKENS, self._initial_tokens)
+        holder.buffer.pop(message.msg_id, None)

@@ -51,7 +51,7 @@ Pour un message `m` (destinataire `d`) porté par `A`, au contact de `B` :
 3. **Réserve.** Si `ttl_hops` est défini et `hops(m) ≥ ttl_hops − horizon_hops` : IGNORE.
 4. Sinon : décision `fresh_spray`.
 
-À la réception d'un tirage (`on_forward`) : la copie reçue prend les jetons du porteur, le porteur supprime la sienne (sauf une borne, qui la garde comme dans `fresh_spray`), `stats["pull"]` est incrémenté. Un tirage perdu (perte de paquet, budget d'antenne) n'appelle pas `on_forward` : le porteur garde la copie et retente.
+À la réception d'un tirage (`on_forward`) : la copie reçue prend les jetons du porteur et le porteur supprime la sienne ; une borne garde la sienne (comme dans `fresh_spray`) et ne donne qu'un jeton, sinon chaque tirage depuis elle créerait un budget de spray complet, `stats["pull"]` est incrémenté. Un tirage perdu (perte de paquet, budget d'antenne) n'appelle pas `on_forward` : le porteur garde la copie et retente.
 
 Les prochains sauts sont mis en cache par `(porteur, destinataire)` pour le tick.
 
