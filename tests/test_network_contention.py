@@ -162,7 +162,8 @@ def test_network_engine_counts_only_last_ticks_actual_transmitters():
         grid.insert(node)
     metrics = MetricsCollector()
     ble_config = BleConfig(
-        relay_backoff_coefficient=1.0, relay_backoff_max_probability=1.0, **_no_signal_or_congestion_loss()
+        relay_backoff_coefficient=1.0, relay_backoff_max_probability=1.0, connection_setup_s=0.0,
+        **_no_signal_or_congestion_loss(),
     )
     env.process(
         network_engine(

@@ -218,7 +218,7 @@ def test_link_budget_is_shared_by_all_of_a_receivers_senders_in_one_tick():
     s2.store_message(Message(msg_id=2, src_id=2, dst_id=3, size_bytes=60, creation_time=0.0, ttl_s=100.0))
     metrics = MetricsCollector()
     env = simpy.Environment()
-    ble = BleConfig(transfer_rate_bytes_per_s=100.0, contact_check_interval_s=1.0)
+    ble = BleConfig(transfer_rate_bytes_per_s=100.0, contact_check_interval_s=1.0, connection_setup_s=0.0)
     env.process(network_engine(env, nodes, grid, EpidemicRouting(), _energy_model(), metrics, 1.0, ble_config=ble))
     env.run(until=1.5)
     assert metrics.build_report([], 0).messages_delivered == 1
@@ -253,7 +253,42 @@ def test_receiver_link_slots_are_shared_by_every_sender():
     s2.store_message(Message(msg_id=2, src_id=2, dst_id=3, size_bytes=10, creation_time=0.0, ttl_s=100.0))
     metrics = MetricsCollector()
     env = simpy.Environment()
-    ble = BleConfig(max_concurrent_links=1)
+    ble = BleConfig(max_concurrent_links=1, connection_setup_s=0.0)
     env.process(network_engine(env, nodes, grid, EpidemicRouting(), _energy_model(), metrics, 1.0, ble_config=ble))
     env.run(until=1.5)
     assert metrics.build_report([], 0).messages_delivered == 1
+
+
+def _engine(nodes, ble):
+    import simpy
+    from festival_ble_sim.network import network_engine
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    for n in nodes.values():
+        grid.insert(n)
+    metrics = MetricsCollector()
+    env = simpy.Environment()
+    env.process(network_engine(env, nodes, grid, EpidemicRouting(), _energy_model(), metrics, 1.0, ble_config=ble))
+    return env, grid, metrics
+
+
+def test_connection_carries_nothing_before_its_setup_time():
+    a, b = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0)
+    a.store_message(Message(msg_id=1, src_id=1, dst_id=2, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    env, _, metrics = _engine({1: a, 2: b}, BleConfig(connection_setup_s=3.0))
+    env.run(until=3.5)
+    assert metrics.build_report([], 0).messages_delivered == 0
+    env.run(until=4.5)
+    assert metrics.build_report([], 0).messages_delivered == 1
+
+
+def test_established_connection_keeps_its_slot_against_a_closer_newcomer():
+    a, b, c = _node(1, 0.0, 0.0), _node(2, 15.0, 0.0), _node(3, 90.0, 90.0)
+    a.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    a.store_message(Message(msg_id=2, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    env, grid, _ = _engine({1: a, 2: b, 3: c}, BleConfig(max_concurrent_links=1, connection_setup_s=0.0))
+    env.run(until=1.5)
+    old_x, old_y = c.position.x, c.position.y
+    c.position = Position(2.0, 0.0)
+    grid.update(c, old_x, old_y)
+    env.run(until=5.5)
+    assert b.has_message(1) and not c.has_message(1)

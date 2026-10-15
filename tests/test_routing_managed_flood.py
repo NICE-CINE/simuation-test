@@ -41,7 +41,7 @@ def _lossless_ble():
         reference_loss_db=40.0, receiver_sensitivity_dbm=-90.0, shadowing_std_db=0.0,
     )
     return BleConfig(
-        phone_radio=radio, beacon_radio=radio, max_concurrent_links=None,
+        phone_radio=radio, beacon_radio=radio, max_concurrent_links=None, connection_setup_s=0.0,
         packet_loss_base_probability=0.0, packet_loss_congestion_coefficient=0.0,
         weak_signal_max_probability=0.0, packet_loss_max_probability=0.0,
         relay_backoff_coefficient=0.0, relay_backoff_max_probability=0.0,

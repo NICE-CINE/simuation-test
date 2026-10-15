@@ -224,7 +224,7 @@ class _Announcer(EpidemicRouting):
 def _lossless_ble(**kw):
     from dataclasses import replace
     from festival_ble_sim.config import BleConfig
-    ble = BleConfig()
+    ble = BleConfig(connection_setup_s=0.0)
     params = dict(shadowing_std_db=0.0)
     return replace(
         ble,

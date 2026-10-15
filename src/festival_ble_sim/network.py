@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from dataclasses import replace
-from typing import Any, Callable, Collection, Dict, List, Optional, Set
+from typing import Any, Callable, Collection, Dict, List, Optional, Set, Tuple
 from .config import BeaconConfig, BleConfig
 from .energy import EnergyModel
 from .metrics import MetricsCollector
@@ -49,30 +49,58 @@ def _link_radio(ble_config: BleConfig, a: BaseNode, b: BaseNode):
     return ble_config.beacon_radio if weaker.is_beacon else ble_config.phone_radio
 
 
-def _assign_links(
+def _update_connections(
+    now: float,
     order: List[Any],
     neighbors_by_node: Dict[int, List[BaseNode]],
     snapshot: Dict[int, List[Message]],
     routing_algorithm: RoutingAlgorithm,
-    max_links: Optional[int],
+    ble_config: BleConfig,
+    connections: Dict[Tuple[int, int], List[float]],
 ) -> Dict[int, List[BaseNode]]:
-    # Connections are two-way and count against both ends' slots, so a
-    # beacon or a popular destination can't be reached by every sender in
-    # range at once. Only nodes with something to send initiate one.
-    if max_links is None:
-        return neighbors_by_node
-    links: Dict[int, List[BaseNode]] = {node_id: [] for node_id in neighbors_by_node}
+    # connections: (low id, high id) -> [ready_at, last_used], kept across
+    # ticks. A pair must stay in range connection_setup_s before it can carry
+    # anything (discovery + connection), keeps its slot on both ends while
+    # in range, and is closed after connection_idle_timeout_s without data.
+    # Only nodes with something to send open new ones, via select_links.
+    # Returns each node's usable (ready) links.
+    nodes_by_id = dict(order)
+    for key in list(connections):
+        a, b = nodes_by_id[key[0]], nodes_by_id[key[1]]
+        ready_at, last_used = connections[key]
+        reach = min(a.radio_range_m, b.radio_range_m)
+        if (
+            not a.is_active or not b.is_active
+            or a.position.distance_squared_to(b.position) > reach * reach
+            or (ready_at <= now and now - last_used >= ble_config.connection_idle_timeout_s)
+        ):
+            del connections[key]
+    partners: Dict[int, List[int]] = {}
+    for a_id, b_id in connections:
+        partners.setdefault(a_id, []).append(b_id)
+        partners.setdefault(b_id, []).append(a_id)
+    max_links = ble_config.max_concurrent_links
     for node_id, node in order:
-        if not snapshot.get(node_id) or node_id not in links:
+        if not snapshot.get(node_id) or node_id not in neighbors_by_node:
             continue
-        free = max_links - len(links[node_id])
+        taken = partners.setdefault(node_id, [])
+        free = len(neighbors_by_node[node_id]) if max_links is None else max_links - len(taken)
         if free <= 0:
             continue
-        linked = {n.id for n in links[node_id]}
-        candidates = [n for n in neighbors_by_node[node_id] if n.id not in linked and len(links[n.id]) < max_links]
+        candidates = [
+            n for n in neighbors_by_node[node_id]
+            if n.id not in taken and (max_links is None or len(partners.get(n.id, ())) < max_links)
+        ]
         for contact in routing_algorithm.select_links(node, candidates, free)[:free]:
-            links[node_id].append(contact)
-            links[contact.id].append(node)
+            ready_at = now + ble_config.connection_setup_s
+            connections[(min(node_id, contact.id), max(node_id, contact.id))] = [ready_at, ready_at]
+            taken.append(contact.id)
+            partners.setdefault(contact.id, []).append(node_id)
+    links: Dict[int, List[BaseNode]] = {}
+    for (a_id, b_id), (ready_at, _) in connections.items():
+        if ready_at <= now:
+            links.setdefault(a_id, []).append(nodes_by_id[b_id])
+            links.setdefault(b_id, []).append(nodes_by_id[a_id])
     return links
 
 
@@ -251,12 +279,14 @@ def process_node_contacts(
     airtime_left: Optional[Dict[int, float]] = None,
     backed_off: Optional[bool] = None,
     sender_was_transmitting: bool = True,
-) -> bool:
-    # Returns whether the sender put anything on the air (lost copies included).
+) -> List[int]:
+    # Returns the contacts the sender put anything on the air towards (lost
+    # copies included): network_engine reads it as "transmitted" and as
+    # connection activity.
     _purge_expired_messages(sender, now)
 
     if not sender.buffer or not sender.is_active:
-        return False
+        return []
 
     # Process only what sender held at tick start (or what the caller
     # passes explicitly). A message received from another node earlier
@@ -270,7 +300,7 @@ def process_node_contacts(
     if backed_off is None:
         backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
     if backed_off:
-        return False
+        return []
 
     # neighbors, when given, are the links network_engine already assigned
     # (see _assign_links); otherwise this sender picks its own.
@@ -292,7 +322,7 @@ def process_node_contacts(
     if airtime_left is None:
         airtime_left = {}
 
-    transmitted = False
+    sent_to: List[int] = []
     for contact in neighbors:
         if not contact.is_active:
             continue
@@ -305,7 +335,7 @@ def process_node_contacts(
 
         for message in messages:
             if not sender.is_active:
-                return transmitted
+                return sent_to
             if message.msg_id not in sender.buffer:
                 continue
             if not contact.is_active:
@@ -338,7 +368,8 @@ def process_node_contacts(
                 airtime_left[sender.id] = sender_left - message.size_bytes
                 airtime_left[contact.id] = contact_left - message.size_bytes
 
-            transmitted = True
+            if not sent_to or sent_to[-1] != contact.id:
+                sent_to.append(contact.id)
             if rng is not None and loss_prob > 0.0 and rng.random() < loss_prob:
                 sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
                 metrics.record_packet_loss(message)
@@ -361,7 +392,7 @@ def process_node_contacts(
                 routing_algorithm.on_forward(message, sender, contact, copy)
             if event_log is not None:
                 event_log.append(_relay_event(now, sender.id, contact.id, copy, is_delivery))
-    return transmitted
+    return sent_to
 
 def _relay_event(now: float, from_id: int, to_id: int, message: Message, delivered: bool, backhaul: bool = False) -> Dict[str, Any]:
     event = {
@@ -447,6 +478,7 @@ def network_engine(
 ):
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
     transmitters: Set[int] = set()
+    connections: Dict[Tuple[int, int], List[float]] = {}
     while True:
         yield env.timeout(contact_check_interval_s)
         now = env.now
@@ -476,7 +508,7 @@ def network_engine(
         if rng is not None:
             rng.shuffle(order)
         links = (
-            _assign_links(order, neighbors_by_node, snapshot, routing_algorithm, ble_config.max_concurrent_links)
+            _update_connections(now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections)
             if neighbors_by_node is not None else None
         )
         for node_id, sender in order:
@@ -493,7 +525,7 @@ def network_engine(
                 ):
                     sent.append(node_id)
                     transmitters.add(node_id)
-            if process_node_contacts(
+            sent_to = process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
                 ble_config=ble_config,
@@ -505,7 +537,12 @@ def network_engine(
                 airtime_left=airtime_left,
                 backed_off=backed_off,
                 sender_was_transmitting=was_transmitting,
-            ):
+            )
+            if sent_to:
                 transmitters.add(node_id)
+            for contact_id in sent_to:
+                key = (min(node_id, contact_id), max(node_id, contact_id))
+                if key in connections:
+                    connections[key][1] = now
         if broadcasts:
             routing_algorithm.on_control_received(now, received, sent)

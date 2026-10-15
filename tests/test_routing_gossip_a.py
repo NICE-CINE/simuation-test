@@ -271,5 +271,5 @@ def test_decide_cache_leaves_results_unchanged():
         traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5),
     )
     r = run_simulation(config, routing_algorithm=GossipARouting(seed=11))
-    assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (57, 55, 4297)
-    assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (1529, 3957, 24, 23)
+    assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (57, 52, 3098)
+    assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (1466, 3400, 22, 19)

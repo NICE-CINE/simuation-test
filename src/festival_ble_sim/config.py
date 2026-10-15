@@ -72,6 +72,13 @@ class BleConfig:
     # Simultaneous GATT-central connections a phone can realistically hold
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
     max_concurrent_links: Optional[int] = 6
+    # A pair must stay in range this long before its connection carries
+    # anything: Nearby measured ~7 s from discovery to connection
+    # (docs/energie/consommation.md). 0 = usable on the first tick.
+    connection_setup_s: float = 7.0
+    # An established connection with no data either way for this long is
+    # closed, freeing both slots (estimated, not measured).
+    connection_idle_timeout_s: float = 30.0
     packet_loss_base_probability: float = 0.01
     packet_loss_congestion_coefficient: float = 0.02
     # Extra loss probability for links near the edge of radio range: fades
@@ -293,6 +300,8 @@ class SimulationConfig:
             raise ValueError("transfer_rate_bytes_per_s must be positive")
         if self.ble.max_concurrent_links is not None and self.ble.max_concurrent_links < 1:
             raise ValueError("max_concurrent_links must be None or >= 1")
+        if self.ble.connection_setup_s < 0 or self.ble.connection_idle_timeout_s <= 0:
+            raise ValueError("connection_setup_s must be >= 0 and connection_idle_timeout_s > 0")
         for prob in (
             self.ble.packet_loss_base_probability,
             self.ble.packet_loss_congestion_coefficient,
