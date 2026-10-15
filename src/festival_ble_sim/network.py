@@ -159,6 +159,9 @@ def _send_control_broadcast(
     congestion_loss_prob = ble_config.packet_loss_base_probability + ble_config.packet_loss_congestion_coefficient * max(0, links - 1)
     radio = ble_config.beacon_radio if sender.is_beacon else ble_config.phone_radio
     for contact in neighbors:
+        # Neighbors are listed at tick start; a battery may have died since.
+        if not contact.is_active:
+            continue
         contact_left = airtime_left.get(contact.id, budget)
         if size > contact_left:
             continue

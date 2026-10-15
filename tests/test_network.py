@@ -267,3 +267,14 @@ def test_control_broadcast_takes_airtime_from_data():
         return 1 in b.delivered_ids
 
     assert delivered({}) and not delivered({1: 95})
+
+
+def test_control_broadcast_skips_a_receiver_that_died_this_tick():
+    import random
+    from festival_ble_sim.network import _send_control_broadcast
+    a, b = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0)
+    b.is_active = False
+    received = {}
+    _send_control_broadcast(a, 50, [b], _energy_model(), MetricsCollector(), _lossless_ble(), random.Random(0),
+                            None, {}, received)
+    assert received == {} and b.battery_mah == 100.0
