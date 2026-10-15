@@ -121,6 +121,28 @@ def _link_loss_probability(
     )
 
 
+def _backs_off(
+    sender: BaseNode,
+    ble_config: Optional[BleConfig],
+    rng: Optional[random.Random],
+    contention_counts: Optional[Dict[int, int]],
+    metrics: MetricsCollector,
+) -> bool:
+    # CSMA-style channel sensing: back off (skip this whole tick, retry
+    # next one) before spending any energy or attempting a transmission,
+    # with a probability that grows with how many other nodes the sender
+    # can itself hear trying to send this tick.
+    if ble_config is None or rng is None or contention_counts is None:
+        return False
+    other_transmitters = contention_counts.get(sender.id, 0)
+    if other_transmitters > 0 and rng.random() < min(
+        ble_config.relay_backoff_max_probability, ble_config.relay_backoff_coefficient * other_transmitters
+    ):
+        metrics.record_backoff()
+        return True
+    return False
+
+
 def _send_control_broadcast(
     sender: BaseNode,
     size: int,
@@ -135,18 +157,11 @@ def _send_control_broadcast(
 ) -> None:
     # One broadcast to every active node in range: no link slot (no
     # connection needed), otherwise the same rules as data so control-heavy
-    # algorithms get no free ride: CSMA backoff, the shared airtime budget,
-    # the congestion term the sender's data links would see, and the same
-    # per-receiver loss.
+    # algorithms get no free ride: the CSMA backoff network_engine draws for
+    # the node's whole turn, the shared airtime budget, the congestion term
+    # the sender's data links would see, and the same per-receiver loss.
     if not sender.is_active:
         return
-    if rng is not None and contention_counts is not None:
-        other_transmitters = contention_counts.get(sender.id, 0)
-        if other_transmitters > 0 and rng.random() < min(
-            ble_config.relay_backoff_max_probability, ble_config.relay_backoff_coefficient * other_transmitters
-        ):
-            metrics.record_backoff()
-            return
     budget = ble_config.transfer_rate_bytes_per_s * ble_config.contact_check_interval_s
     left = airtime_left.get(sender.id, budget)
     if size > left:
@@ -190,6 +205,7 @@ def process_node_contacts(
     neighbors: Optional[List[BaseNode]] = None,
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
     airtime_left: Optional[Dict[int, float]] = None,
+    backed_off: Optional[bool] = None,
 ) -> None:
     _purge_expired_messages(sender, now)
 
@@ -203,20 +219,12 @@ def process_node_contacts(
     if messages is None:
         messages = list(sender.buffer.values())
 
-    # CSMA-style channel sensing: back off (skip this whole tick, retry
-    # next one) before spending any energy or attempting a transmission,
-    # with a probability that grows with how many other nodes the sender
-    # can itself hear trying to send this tick.
-    if ble_config is not None and rng is not None and contention_counts is not None:
-        other_transmitters = contention_counts.get(sender.id, 0)
-        if other_transmitters > 0:
-            backoff_prob = min(
-                ble_config.relay_backoff_max_probability,
-                ble_config.relay_backoff_coefficient * other_transmitters,
-            )
-            if rng.random() < backoff_prob:
-                metrics.record_backoff()
-                return
+    # backed_off: the tick's channel sense when network_engine already drew
+    # it for this node's control broadcast.
+    if backed_off is None:
+        backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
+    if backed_off:
+        return
 
     if neighbors is None:
         neighbors = _active_nearby(sender, grid)
@@ -424,11 +432,15 @@ def network_engine(
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
-            if node_id in broadcasts:
-                _send_control_broadcast(
-                    sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                    ble_config, rng, contention_counts, airtime_left, received,
-                )
+            # One channel sense covers both, as a radio senses once per turn.
+            backed_off = None
+            if node_id in broadcasts and sender.is_active:
+                backed_off = _backs_off(sender, ble_config, rng, contention_counts, metrics)
+                if not backed_off:
+                    _send_control_broadcast(
+                        sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
+                        ble_config, rng, contention_counts, airtime_left, received,
+                    )
             process_node_contacts(
                 now, sender, grid, routing_algorithm, energy_model, metrics,
                 messages=snapshot[node_id],
@@ -439,6 +451,7 @@ def network_engine(
                 neighbors=neighbors_by_node.get(node_id) if neighbors_by_node is not None else None,
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
+                backed_off=backed_off,
             )
         if broadcasts:
             routing_algorithm.on_control_received(now, received)
