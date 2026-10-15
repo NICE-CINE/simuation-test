@@ -231,10 +231,12 @@ def test_flood_is_storm_free_each_node_receives_exactly_once_then_goes_quiet():
     env, metrics = _engine(nodes, algo)
     env.run(until=15.5)
     assert all(algo.in_cache(i, 1) for i in nodes)
-    assert metrics.build_report([], 0).total_transmissions == len(nodes) - 1
+    # Advertising bearer: one broadcast per relaying node, never more.
+    sent = metrics.build_report([], 0).total_transmissions
+    assert sent <= len(nodes)
     assert all(not n.buffer for n in nodes.values())
     env.run(until=60.5)
-    assert metrics.build_report([], 0).total_transmissions == len(nodes) - 1
+    assert metrics.build_report([], 0).total_transmissions == sent
 
 
 def test_ack_floods_back_and_purges_copies_at_source():
@@ -272,3 +274,22 @@ def test_explicit_ack_energy_wins_over_the_simulation_one():
     algo = ManagedFloodRouting(energy=explicit)
     algo.on_energy_model(EnergyModel(EnergyConfig(tx_cost_mah_per_event=1.0)))
     assert algo._ack_tx_mah == pytest.approx(EnergyModel(explicit).cost_of_tx(16))
+
+
+def test_pdus_use_the_advertising_bearer_without_waiting_for_a_connection():
+    nodes = _line(3)
+    nodes[1].store_message(_msg(dst_id=3))
+    # A 60 s connection setup: a connectionless bearer must not care.
+    from dataclasses import replace as _replace
+    from festival_ble_sim.network import network_engine as _engine_fn
+    env = simpy.Environment()
+    grid = SpatialGrid(1000.0, 100.0, cell_size_m=20.0)
+    for node in nodes.values():
+        grid.insert(node)
+    metrics = MetricsCollector()
+    algo = ManagedFloodRouting(ttl=7)
+    algo.on_simulation_start(nodes)
+    env.process(_engine_fn(env, nodes, grid, algo, _energy_model(), metrics, contact_check_interval_s=1.0,
+                           ble_config=_replace(_lossless_ble(), connection_setup_s=60.0)))
+    env.run(until=2.5)
+    assert metrics.build_report([], 0).messages_delivered == 1

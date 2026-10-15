@@ -313,6 +313,11 @@ la portee radio :
   le message ; seule une vraie panne radio (fading negatif, cf. ci-dessus)
   ne laisse rien passer ce tick. Une diffusion de controle, sans connexion,
   est perdue ou non (`packet_loss_count`) ;
+- un **transport sans connexion** pour les algorithmes qui le declarent
+  (`advertising_bearer`, `managed_flood` comme Bluetooth Mesh) : pas de
+  connexion a etablir, chaque message part une fois vers tous les voisins
+  que l'algo choisit, sur les canaux d'annonce, et chaque reception est
+  perdue ou non (pas de renvoi) ;
 - des **ACK et metadonnees payes** : a chaque tick, sur chaque connexion
   etablie et avant les donnees, chaque cote envoie son vecteur de resume
   (4 octets par message pas encore annonce sur cette connexion), les ACK

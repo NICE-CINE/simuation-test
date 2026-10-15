@@ -27,7 +27,10 @@ class ManagedFloodRouting(RoutingAlgorithm):
     # rules) and purge copies: each node relaying acks broadcasts them over
     # the radio (control_broadcasts, ack_size_bytes each), so they take
     # airtime and can be lost. Only the destination's ack to the holder that
-    # just delivered rides on their connection, charged here.
+    # just delivered rides on their connection, charged here. PDUs use the
+    # advertising bearer: no connections, as in Bluetooth Mesh.
+    advertising_bearer = True
+
     def __init__(
         self,
         ttl: int = 7,

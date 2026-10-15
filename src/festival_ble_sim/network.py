@@ -366,7 +366,10 @@ def process_node_contacts(
     # (see _update_connections); otherwise this sender picks its own.
     if neighbors is None:
         neighbors = _active_nearby(sender, grid)
-        if ble_config is not None and ble_config.max_concurrent_links is not None:
+        if (
+            ble_config is not None and ble_config.max_concurrent_links is not None
+            and not routing_algorithm.advertising_bearer
+        ):
             neighbors = routing_algorithm.select_links(sender, neighbors, ble_config.max_concurrent_links)
 
     # Per radio, not per link: one node's sends and receives this tick all
@@ -377,6 +380,12 @@ def process_node_contacts(
         radio_budget_bytes = _radio_budget_bytes(ble_config)
     if airtime_left is None:
         airtime_left = {}
+
+    if ble_config is not None and routing_algorithm.advertising_bearer:
+        return _broadcast_messages(
+            now, sender, neighbors, messages, routing_algorithm, energy_model, metrics, ble_config, rng, channel,
+            event_log, on_delivery, airtime_left,
+        )
 
     sent_to: List[int] = []
     for contact in neighbors:
@@ -406,20 +415,9 @@ def process_node_contacts(
             if not contact.is_active:
                 break
 
-            is_delivery = contact.id == message.dst_id
-            if is_delivery:
-                if contact.has_message(message.msg_id):
-                    continue
-            else:
-                # Network-layer hop TTL only caps relaying, not direct delivery:
-                # a holder still carries and can hand off a hop-exhausted
-                # message straight to its destination, it just stops spreading
-                # it to other relays — the same "wait phase" semantics Spray &
-                # Wait already uses for its last copy.
-                if message.hop_limit_reached():
-                    continue
-                if routing_algorithm.decide(message, sender, contact, now) is not RoutingDecision.FORWARD:
-                    continue
+            is_delivery = _wanted(message, sender, contact, routing_algorithm, now)
+            if is_delivery is None:
+                continue
 
             # Budget only applies once something is actually sent: a message
             # the routing would ignore (or the contact already has) costs
@@ -438,32 +436,125 @@ def process_node_contacts(
                 sent_to.append(contact.id)
             if channel is not None:
                 channel.sent_data[sender.id] = channel.sent_data.get(sender.id, 0.0) + airtime
-            copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
             sender.consume_energy(energy_model.cost_of_tx(message.size_bytes) * attempts)
             contact.consume_energy(energy_model.cost_of_rx(message.size_bytes) * attempts)
             metrics.record_transmission(message, airtime)
-            if is_delivery:
-                contact.mark_delivered(copy.msg_id)
-                if routing_algorithm.uses_delivery_acks:
-                    # The destination acks straight back on this connection.
-                    expiry = copy.creation_time + copy.ttl_s
-                    contact.acked[copy.msg_id] = expiry
-                    sender.learn_ack(copy.msg_id, expiry)
-                    contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
-                    sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
-                    metrics.record_overhead_bytes("ack", routing_algorithm.ack_size_bytes, now)
-                if copy.src_position is not None:
-                    contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
-                metrics.record_delivery(copy, now)
-                routing_algorithm.on_delivered(copy, sender)
-                if on_delivery is not None:
-                    on_delivery(copy, contact, now)
-            else:
-                contact.store_message(copy, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now))
-                routing_algorithm.on_forward(message, sender, contact, copy)
-            if event_log is not None:
-                event_log.append(_relay_event(now, sender.id, contact.id, copy, is_delivery))
+            _hand_over(now, sender, contact, message, is_delivery, routing_algorithm, energy_model, metrics,
+                       event_log, on_delivery)
     return sent_to
+
+
+def _broadcast_messages(
+    now: float,
+    sender: BaseNode,
+    neighbors: List[BaseNode],
+    messages: List[Message],
+    routing_algorithm: RoutingAlgorithm,
+    energy_model: EnergyModel,
+    metrics: MetricsCollector,
+    ble_config: BleConfig,
+    rng: Optional[random.Random],
+    channel: Optional[ChannelState],
+    event_log: Optional[List[Dict[str, Any]]],
+    on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
+    airtime_left: Dict[int, float],
+) -> List[int]:
+    # Connectionless bearer (Bluetooth Mesh advertising bearer): no
+    # connection to wait for, each message goes out once to every neighbor
+    # decide() picks, on the advertising channels' load; each reception is
+    # lost or not, nothing is resent.
+    budget = _radio_budget_bytes(ble_config)
+    for message in messages:
+        if not sender.is_active:
+            break
+        if message.msg_id not in sender.buffer:
+            continue
+        receivers = []
+        for contact in neighbors:
+            if contact.is_active:
+                is_delivery = _wanted(message, sender, contact, routing_algorithm, now)
+                if is_delivery is not None:
+                    receivers.append((contact, is_delivery))
+        left = airtime_left.get(sender.id, budget)
+        if not receivers or message.size_bytes > left:
+            continue
+        airtime_left[sender.id] = left - message.size_bytes
+        sender.consume_energy(energy_model.cost_of_tx(message.size_bytes))
+        metrics.record_transmission(message, message.size_bytes)
+        if channel is not None:
+            channel.sent_control[sender.id] = channel.sent_control.get(sender.id, 0.0) + message.size_bytes
+        for contact, is_delivery in receivers:
+            contact_left = airtime_left.get(contact.id, budget)
+            if message.size_bytes > contact_left:
+                continue
+            airtime_left[contact.id] = contact_left - message.size_bytes
+            failure = _link_failure_probability(
+                sender, contact, ble_config, rng,
+                channel.heard_control if channel is not None else None,
+                channel.duty_control if channel is not None else None,
+                ble_config.advertising_channels,
+            )
+            if failure >= 1.0 or (rng is not None and failure > 0.0 and rng.random() < failure):
+                metrics.record_packet_loss(message)
+                continue
+            contact.consume_energy(energy_model.cost_of_rx(message.size_bytes))
+            _hand_over(now, sender, contact, message, is_delivery, routing_algorithm, energy_model, metrics,
+                       event_log, on_delivery)
+    # No connection to keep alive.
+    return []
+
+
+def _wanted(
+    message: Message, sender: BaseNode, contact: BaseNode, routing_algorithm: RoutingAlgorithm, now: float,
+) -> Optional[bool]:
+    # None: nothing to send this contact; else whether it is the delivery.
+    if contact.id == message.dst_id:
+        return None if contact.has_message(message.msg_id) else True
+    # Network-layer hop TTL only caps relaying, not direct delivery: a
+    # holder still carries and can hand off a hop-exhausted message straight
+    # to its destination, it just stops spreading it to other relays — the
+    # same "wait phase" semantics Spray & Wait already uses for its last copy.
+    if message.hop_limit_reached():
+        return None
+    if routing_algorithm.decide(message, sender, contact, now) is not RoutingDecision.FORWARD:
+        return None
+    return False
+
+
+def _hand_over(
+    now: float,
+    sender: BaseNode,
+    contact: BaseNode,
+    message: Message,
+    is_delivery: bool,
+    routing_algorithm: RoutingAlgorithm,
+    energy_model: EnergyModel,
+    metrics: MetricsCollector,
+    event_log: Optional[List[Dict[str, Any]]],
+    on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
+) -> None:
+    copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
+    if is_delivery:
+        contact.mark_delivered(copy.msg_id)
+        if routing_algorithm.uses_delivery_acks:
+            # The destination acks straight back on this connection.
+            expiry = copy.creation_time + copy.ttl_s
+            contact.acked[copy.msg_id] = expiry
+            sender.learn_ack(copy.msg_id, expiry)
+            contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
+            sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
+            metrics.record_overhead_bytes("ack", routing_algorithm.ack_size_bytes, now)
+        if copy.src_position is not None:
+            contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
+        metrics.record_delivery(copy, now)
+        routing_algorithm.on_delivered(copy, sender)
+        if on_delivery is not None:
+            on_delivery(copy, contact, now)
+    else:
+        contact.store_message(copy, choose_victim=lambda node: routing_algorithm.choose_eviction(node, now))
+        routing_algorithm.on_forward(message, sender, contact, copy)
+    if event_log is not None:
+        event_log.append(_relay_event(now, sender.id, contact.id, copy, is_delivery))
 
 def _relay_event(now: float, from_id: int, to_id: int, message: Message, delivered: bool, backhaul: bool = False) -> Dict[str, Any]:
     event = {
@@ -592,7 +683,7 @@ def network_engine(
             _update_connections(
                 now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections, energy_model,
             )
-            if neighbors_by_node is not None else None
+            if neighbors_by_node is not None and not routing_algorithm.advertising_bearer else None
         )
         if links is not None:
             for node_id, node_links in links.items():
@@ -622,7 +713,10 @@ def network_engine(
                 rng=rng,
                 channel=channel,
                 event_log=event_log,
-                neighbors=links.get(node_id, []) if links is not None else None,
+                neighbors=(
+                    links.get(node_id, []) if links is not None
+                    else neighbors_by_node.get(node_id, []) if neighbors_by_node is not None else None
+                ),
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
             )

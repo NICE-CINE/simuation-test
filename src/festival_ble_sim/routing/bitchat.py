@@ -46,6 +46,9 @@ class BitchatRouting(ManagedFloodRouting):
     # spread over the round and capped at the node's airtime, so a big
     # crowd's announce flood crowds the data out. Who hears an announce is
     # still the loss-free BFS of _announce_reach.
+    # bitchat itself relays over BLE GATT connections.
+    advertising_bearer = False
+
     def __init__(
         self,
         ttl: int = 7,
