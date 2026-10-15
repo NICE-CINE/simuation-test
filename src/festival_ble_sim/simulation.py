@@ -18,7 +18,7 @@ from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
 from .social import add_outside_friends, assign_friend_groups
 from .spatial import SpatialGrid
-from .traffic import reply_process, traffic_process
+from .traffic import lost_process, reply_process, traffic_process
 from .viz.history import SimulationHistory
 
 
@@ -180,6 +180,13 @@ def run_simulation(
                 mobile.position = Position(min(max(start.x, 0.0), config.area.width_m),
                                            min(max(start.y, 0.0), config.area.height_m))
                 grid.update(mobile, old_x, old_y)
+    if config.traffic.lost_messages_per_hour > 0:
+        lost_rng = random.Random(f"{config.random_seed}-lost")
+        for node_id, mobile in mobile_nodes.items():
+            if node_id in groups and hasattr(mobile.mobility, "lost_peers"):
+                env.process(_after(env, config.warmup_s, lost_process(
+                    env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, lost_rng
+                )))
     for node_id, mobile in mobile_nodes.items():
         mobile.friends = friends.get(node_id, set())
         mobile.gps_noise_std_m = config.gps.noise_std_m

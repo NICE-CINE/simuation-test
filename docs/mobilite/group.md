@@ -70,6 +70,15 @@ ensemble) plus 0 a 2 **amis venus a part** tires dans d'autres groupes
   n'ecarte presque personne. Le taux reel depend donc de `GroupConfig`
   (frequence et duree des sorties) et du nombre d'amis venus a part.
 
+En plus de ce rythme fixe, un rendez-vous rate fait ecrire : de l'heure
+prevue jusqu'au retour dans le groupe (et pour un ami arrive apres son
+groupe), le perdu ecrit a un membre du groupe et le meneur ecrit au perdu,
+chacun a `TrafficConfig.lost_messages_per_hour` (6/h, estime ;
+`--no-lost-messages` = 0). Le trafic suit la mobilite, jamais l'inverse :
+les trajectoires restent les memes pour tous les algorithmes.
+`GroupMobility.lost_peers()` dit a qui ecrire, `traffic.lost_process`
+envoie.
+
 Les reponses (`--reply-probability`) et relances (`--followup-probability`)
 ne repassent pas par ce filtre : elles partent meme si le destinataire est
 revenu a moins de 15 m entre-temps (20 a 180 s plus tard, c'est rare).

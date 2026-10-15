@@ -53,6 +53,10 @@ def add_social_arguments(parser: Any) -> None:
         "--no-outside-friends", action="store_true",
         help="Pas d'amis hors du groupe : les amis sont exactement le groupe (par defaut chacun a aussi 0 a 2 amis venus a part)",
     )
+    parser.add_argument(
+        "--no-lost-messages", action="store_true",
+        help="Pas de messages en plus pendant un rendez-vous rate (par defaut 6/h du perdu au groupe et du meneur au perdu, mobilite group)",
+    )
 
 
 def social_config(no_outside_friends: bool) -> SocialConfig:

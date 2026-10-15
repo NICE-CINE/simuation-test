@@ -106,6 +106,31 @@ def followup_process(
             return
 
 
+def lost_process(
+    env,
+    node: MobileNode,
+    nodes: Dict[int, MobileNode],
+    config: TrafficConfig,
+    metrics: MetricsCollector,
+    id_generator: Iterator[int],
+    rng: random.Random,
+):
+    # Poisson thinning: draws at the full rate, sends only while lost.
+    reach_sq = config.skip_friends_within_m ** 2
+    while True:
+        yield env.timeout(sample_interval_s(config.lost_messages_per_hour, rng))
+        if not node.is_active:
+            continue
+        candidate_ids = sorted(
+            peer.id for peer in node.mobility.lost_peers()
+            if peer.is_active and node.position.distance_squared_to(peer.position) >= reach_sq
+        )
+        if candidate_ids:
+            yield from reply_process(
+                env, node, rng.choice(candidate_ids), 0.0, nodes, config, metrics, id_generator, rng, is_reply=False
+            )
+
+
 def reply_process(
     env,
     node: MobileNode,

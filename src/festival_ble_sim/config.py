@@ -168,6 +168,11 @@ class TrafficConfig:
     # drawn as destinations (no candidate left = no message). Matters with
     # group mobility, where most friends walk alongside. 0 = off.
     skip_friends_within_m: float = 15.0
+    # On top of the fixed rate: during a missed rendezvous (group mobility
+    # only, from the meeting time until the member is back), the lost member
+    # writes to its group and the leader to the lost member, each at this
+    # rate (estimate, "t'es ou ?"). 0 = off.
+    lost_messages_per_hour: float = 6.0
     # Conversations: probability that a delivered message gets a reply from
     # its destination, after a delay drawn from reply_delay_range_s. Replies
     # can themselves be replied to. 0.0 = no replies (previous behavior).
@@ -320,6 +325,8 @@ class SimulationConfig:
             raise ValueError("reply_probability must be in [0, 1)")
         if not 0.0 <= self.traffic.followup_probability < 1.0:
             raise ValueError("followup_probability must be in [0, 1)")
+        if self.traffic.lost_messages_per_hour < 0:
+            raise ValueError("lost_messages_per_hour must be >= 0")
         followup_lo, followup_hi = self.traffic.followup_delay_range_s
         if followup_lo < 0 or followup_hi < followup_lo:
             raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")

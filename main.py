@@ -100,7 +100,11 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         arrival_window_s=tuple(args.churn_arrival_window_s),
         session_duration_range_s=tuple(args.churn_session_duration_s),
     )
-    traffic = TrafficConfig(reply_probability=args.reply_probability, followup_probability=args.followup_probability)
+    traffic = TrafficConfig(
+        reply_probability=args.reply_probability,
+        followup_probability=args.followup_probability,
+        lost_messages_per_hour=0.0 if args.no_lost_messages else TrafficConfig.lost_messages_per_hour,
+    )
     return SimulationConfig(
         duration_s=args.duration,
         cooldown_s=args.cooldown if args.cooldown is not None else traffic.message_ttl_s,

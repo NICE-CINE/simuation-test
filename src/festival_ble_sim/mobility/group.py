@@ -76,6 +76,19 @@ class GroupMobility(MobilityModel):
     def is_with_group(self) -> bool:
         return self._team is None or self._state == _WITH
 
+    def lost_peers(self) -> List["BaseNode"]:
+        # Who this person writes to about a missed rendezvous: a lost member
+        # (past its meeting time, or arrived late) writes to the group, the
+        # leader writes to the lost members on the group's behalf.
+        if self._team is None:
+            return []
+        leader = self._team.current_leader()
+        if self._state in (_RETURN, _SEARCH):
+            return [n for n in self._team.nodes if n is not self._node and n.on_site and n.mobility._state == _WITH]
+        if leader is self._node:
+            return [n for n in self._team.nodes if n.on_site and n.mobility._state in (_RETURN, _SEARCH)]
+        return []
+
     def _slot(self, leader: "BaseNode") -> Position:
         p = leader.position
         return Position(p.x + self._offset[0], p.y + self._offset[1])

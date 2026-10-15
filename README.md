@@ -24,7 +24,9 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   (`connection_idle_timeout_s`), taille des annonces bitchat et des
   beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
   rendez-vous, distance a laquelle on reconnait son groupe), le nombre
-  d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2).
+  d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2), le
+  rythme des messages pendant un rendez-vous rate
+  (`TrafficConfig.lost_messages_per_hour`, 6/h).
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
   d'un voisin dans `on_tick` avant toute connexion ; les tables des
@@ -102,6 +104,8 @@ Options disponibles :
   12 % entre 30 et 50, 8 % entre 5 et 30 (voir `docs/energie/consommation.md`)
 - `--no-outside-friends` : pas d'amis venus a part, les amis sont
   exactement le groupe (voir "Destinataire : un ami" plus bas)
+- `--no-lost-messages` : pas de messages en plus pendant un rendez-vous
+  rate (voir "Messages de perdu" plus bas)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -110,7 +114,7 @@ Options disponibles :
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
-        [--random-charge] [--no-outside-friends]
+        [--random-charge] [--no-outside-friends] [--no-lost-messages]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
@@ -218,6 +222,15 @@ separations, et bien moins de messages sont crees qu'avec `poi` (voir
 `docs/mobilite/group.md`). Avec `random_waypoint` et `poi`, la
 mobilite ignore le graphe. `friends_only=False` revient a un
 destinataire tire parmi tous les festivaliers actifs.
+
+**Messages de perdu** (`--mobility group` seulement, en plus du rythme
+fixe) : pendant un rendez-vous rate, de l'heure prevue jusqu'au retour
+dans le groupe (et pour un ami arrive apres son groupe), le perdu ecrit a
+un membre du groupe et le meneur ecrit au perdu, chacun a
+`TrafficConfig.lost_messages_per_hour` (6/h, estime : « t'es ou ? »),
+toujours a plus de 15 m. RNG a part (`f"{seed}-lost"`), qui n'existe que
+si le rythme est > 0. Ce sont des messages spontanes, comptes dans le
+taux de livraison. `--no-lost-messages` les retire.
 
 **Reponses** (`--reply-probability P`, defaut 0) : un message livre a un
 festivalier recoit une reponse avec la probabilite P, envoyee 20 a 180 s
