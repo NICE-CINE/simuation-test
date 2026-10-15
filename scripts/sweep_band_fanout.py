@@ -89,7 +89,7 @@ def _run_one(
 ) -> Dict[str, Any]:
     progress = _worker_progress
     config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
-    total_s = config.duration_s + config.cooldown_s
+    total_s = config.total_s
     label = run_label(variant, seed)
     progress_callback = None
     if progress is not None:

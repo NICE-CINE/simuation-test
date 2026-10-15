@@ -18,7 +18,9 @@ from festival_ble_sim.metrics import format_report
 from festival_ble_sim.mobility.base import MobilityModel
 from festival_ble_sim.mobility.poi import PoiMobility
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
-from festival_ble_sim.presets import SITE_PRESETS, add_random_charge_argument, build_site, energy_config, resolve_cli_args
+from festival_ble_sim.presets import (
+    DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, build_site, energy_config, resolve_cli_args,
+)
 from festival_ble_sim.progress import format_duration, render_bar
 from festival_ble_sim.routing.registry import ROUTING_NAMES, build_routing
 from festival_ble_sim.simulation import run_simulation
@@ -53,6 +55,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
     parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
+    parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
     parser.add_argument("--num-festivaliers", type=int, default=None, help="4000 par defaut, fixe par --size")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", default=None, help="Copie optionnelle du rapport, en plus de l'archive")
@@ -111,6 +114,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
     return SimulationConfig(
         duration_s=args.duration,
         cooldown_s=args.cooldown if args.cooldown is not None else traffic.message_ttl_s,
+        warmup_s=args.warmup if args.warmup is not None else DEFAULT_WARMUP_S,
         num_festivaliers=num_festivaliers,
         random_seed=args.seed,
         area=area,
@@ -160,7 +164,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             tick_interval_s=config.mobility.tick_interval_s,
             snapshot_every_ticks=max(1, round(args.replay_frame_step / config.mobility.tick_interval_s)),
         )
-    total_s = config.duration_s + config.cooldown_s
+    total_s = config.total_s
     show_progress = sys.stderr.isatty()
     try:
         report = run_simulation(

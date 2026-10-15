@@ -86,3 +86,17 @@ def test_festival_charge_bins_shares():
         observed = sum(lo <= d < hi or d == hi == 1.0 for d in draws) / len(draws)
         assert observed == pytest.approx(share, abs=0.015)
     assert draw_charge_fraction(((1.0, 1.0, 1.0),), [1.0], rng) == 1.0
+
+
+def test_warmup_moves_people_but_measures_and_bills_nothing():
+    from festival_ble_sim.config import TrafficConfig
+    base = dict(
+        duration_s=60.0, num_festivaliers=20, random_seed=4, area=AreaConfig(width_m=100.0, height_m=100.0),
+        traffic=TrafficConfig(messages_per_hour_range=(20.0, 40.0)),
+    )
+    cold = run_simulation(SimulationConfig(**base))
+    warm = run_simulation(SimulationConfig(warmup_s=600.0, **base))
+    assert SimulationConfig(warmup_s=600.0, **base).total_s == 660.0
+    # Same measured length: the warm-up adds no energy and no messages of its own.
+    assert warm.avg_energy_consumed_mah == pytest.approx(cold.avg_energy_consumed_mah, rel=0.05)
+    assert 0 < warm.messages_created < 3 * cold.messages_created + 10

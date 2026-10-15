@@ -43,7 +43,7 @@ def _run_one(
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, size=size
     )
-    total_s = config.duration_s + config.cooldown_s
+    total_s = config.total_s
     label = run_label(tokens, seed)
     progress_callback = None
     if progress is not None:

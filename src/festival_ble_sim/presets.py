@@ -5,6 +5,13 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from .config import AreaConfig, EnergyConfig, MobilityConfig, PointOfInterest
 from .mobility.poi import default_festival_pois
 
+# Warm-up default for the CLI: the longest pause, so the measured window
+# doesn't open on the whole crowd leaving its start position together.
+DEFAULT_WARMUP_S = MobilityConfig().pause_duration_range_s[1]
+WARMUP_HELP = (
+    "Secondes de mobilite seule avant --duration (pas de radio, de trafic ni d'energie), pour ne pas mesurer "
+    "le demarrage synchronise de la foule. Defaut : la pause la plus longue (2700 s) ; 0 = pas de chauffe"
+)
 DENSE_AREA_FRACTION = 0.15
 DENSE_POPULATION_SHARE = 0.70
 # --random-charge: (share of phones, lo, hi) of their battery capacity.

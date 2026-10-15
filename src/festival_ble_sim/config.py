@@ -252,6 +252,11 @@ class SimulationConfig:
     # message_ttl_s is the exact bound; 0 keeps the old cut-off at duration_s.
     duration_s: float = 3600.0
     cooldown_s: float = 0.0
+    # Mobility-only lead-in before the measured window: no radio, traffic or
+    # energy, just walking and pauses, so the window doesn't start with the
+    # whole crowd walking off at once (random waypoint's start-up transient).
+    # Encounter tables start empty when it ends.
+    warmup_s: float = 0.0
     num_festivaliers: int = 4000
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
@@ -265,9 +270,13 @@ class SimulationConfig:
     social: SocialConfig = field(default_factory=SocialConfig)
     gps: GpsConfig = field(default_factory=GpsConfig)
 
+    @property
+    def total_s(self) -> float:
+        return self.warmup_s + self.duration_s + self.cooldown_s
+
     def __post_init__(self) -> None:
-        if self.cooldown_s < 0:
-            raise ValueError("cooldown_s must be >= 0")
+        if self.cooldown_s < 0 or self.warmup_s < 0:
+            raise ValueError("cooldown_s and warmup_s must be >= 0")
         if self.area.width_m <= 0 or self.area.height_m <= 0:
             raise ValueError("area dimensions must be positive")
         if self.num_festivaliers < 2:

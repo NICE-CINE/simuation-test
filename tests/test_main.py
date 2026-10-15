@@ -133,7 +133,7 @@ def test_main_replay_flags_shape_the_replay_data(tmp_path):
     archive_dir = tmp_path / "archives"
     main_module.main(
         ["--routing", "epidemic", "--duration", "30", "--num-festivaliers", "10", "--seed", "1",
-         "--cooldown", "0", "--replay-html", "--replay-frame-step", "10", "--replay-max-messages", "1",
+         "--cooldown", "0", "--warmup", "0", "--replay-html", "--replay-frame-step", "10", "--replay-max-messages", "1",
          "--archive-dir", str(archive_dir)]
     )
     replay = next((archive_dir / "replay").glob("*_epidemic.html"))

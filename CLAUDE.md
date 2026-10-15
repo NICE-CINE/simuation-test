@@ -107,6 +107,8 @@ Each `MobileNode` gets its own `traffic.traffic_process` with a fixed personal r
 
 `SimulationConfig.cooldown_s` (default 0; `--cooldown` in `main.py`/`compare_algorithms.py`, defaulting to the message TTL there and in the sweeps via `compare_algorithms.build_config`) runs the simulation `duration_s + cooldown_s`, traffic included, while `MetricsCollector(measure_until=duration_s)` only counts creations, deliveries, transmissions and losses of messages created before `duration_s`. Engine `metrics.record_*` calls must pass the message so this filter works. Energy, dead nodes and evictions cover the whole run.
 
+`SimulationConfig.warmup_s` (default 0; `--warmup` in `main.py`/`compare_algorithms.py`, defaulting to `presets.DEFAULT_WARMUP_S` = the longest pause, 2700 s, there and in the sweeps via `compare_algorithms.build_config`) runs mobility alone first: `simulation._after` delays the network engine, traffic, churn times and the history recorder by it, `_mobile_process` bills no energy before it, and `MetricsCollector(measure_until=warmup_s + duration_s)`. Encounter tables start empty when it ends (the engine doesn't run during it: neighbor queries are the run's main cost). `SimulationConfig.total_s` = warm-up + duration + cooldown; scripts size their progress bars on it.
+
 ### GPS
 
 Engine-provided, so position-unaware algorithms are unaffected:
