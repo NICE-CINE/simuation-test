@@ -152,3 +152,14 @@ def test_announce_is_capped_to_the_nearest_destinations():
     assert len(algo._dist[1]) > 2
     assert algo._vectors[1] == {1: 0, 2: 1}
     assert algo._heard[2][1][0] == {1: 0, 2: 1}
+
+
+def test_vector_heard_over_a_one_way_link_is_ignored():
+    algo = HorizonRouting()
+    nodes, links = _line(algo)
+    nodes[7] = _Node(7, x=30.0, is_beacon=True)
+    links[7] = [nodes[1], nodes[5]]
+    links[5].append(nodes[7])
+    algo.on_simulation_start(nodes)
+    _settle(algo, links)
+    assert algo._dist[1][5] == 4 and 7 not in algo._heard[1]

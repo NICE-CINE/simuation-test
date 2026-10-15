@@ -97,10 +97,14 @@ class HorizonRouting(FreshSprayRouting):
     def on_control_received(self, now: float, received: Dict[int, List[int]]) -> None:
         for node_id, senders in received.items():
             heard = self._heard.setdefault(node_id, {})
+            reachable = {n.id for n in self._neighbors.get(node_id, ())}
             self.stats["announces_received"] += len(senders)
             for sender_id in senders:
                 self.stats["announce_rx_bytes"] += self._sizes.get(sender_id, 0)
-                heard[sender_id] = (self._vectors[sender_id], now)
+                # A beacon's longer range reaches phones that can't reach it
+                # back: a route through it would be unusable.
+                if sender_id in reachable:
+                    heard[sender_id] = (self._vectors[sender_id], now)
 
     def _next_hop(self, holder: "BaseNode", dst_id: int) -> Optional[Tuple[int, int]]:
         key = (holder.id, dst_id)

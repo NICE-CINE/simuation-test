@@ -36,6 +36,7 @@ Hybride MANET/DTN dans l'esprit de HYMAD (J. Whitbeck, V. Conan, *HYMAD: Hybrid 
 - Radio : les vecteurs passent par le moteur (`control_broadcasts` / `on_control_received` de `RoutingAlgorithm`, `network._send_control_broadcast`). Chaque nœud diffuse `n × announce_entry_bytes` octets (`n` = entrées de son vecteur, au plus `max_announce_bytes / announce_entry_bytes` : au-delà, seules les destinations les plus proches sont annoncées, le moteur n'enverrait jamais un vecteur plus gros que le budget d'antenne d'un tick) à son tour dans l'ordre aléatoire du tick, juste avant ses données, avec les mêmes règles qu'un message : backoff CSMA, budget d'antenne partagé (émetteur et chaque récepteur), terme de congestion des liens (plafonnés à `max_concurrent_links`), perte par récepteur (marge de liaison, shadowing, collisions), énergie tx/rx du run (énergie mesh). Seule différence : pas de créneau de liaison (diffusion sans connexion). L'algorithme ne fusionne que les vecteurs effectivement reçus ; `on_control_received` arrive une fois par tick, après toutes les données.
 - `stats` : `pull`, `announces_sent`, `announces_received`, `announce_bytes`, `announce_rx_bytes`.
 - Les bornes participent comme les téléphones (énergie gratuite) ; le backhaul ne propage pas les vecteurs.
+- Liens à sens unique : un nœud ignore le vecteur d'un émetteur absent de sa propre liste de voisins (typiquement une borne, de plus grande portée, qu'il entend sans pouvoir l'atteindre) : il annoncerait une route qu'il ne peut pas utiliser.
 
 ---
 
@@ -77,7 +78,7 @@ Les prochains sauts sont mis en cache par `(porteur, destinataire)` pour le tick
 
 ## 7. Non modélisé
 
-Numéros de séquence DSDV, canaux d'advertising séparés (l'annonce partage le budget d'antenne des données), asymétrie de liens (on lit la liste de voisins du moteur dans un seul sens), vie privée (les identifiants sont annoncés en clair sur H sauts).
+Numéros de séquence DSDV, canaux d'advertising séparés (l'annonce partage le budget d'antenne des données), vie privée (les identifiants sont annoncés en clair sur H sauts).
 
 ---
 
