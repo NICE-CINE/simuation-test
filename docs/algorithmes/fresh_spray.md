@@ -105,3 +105,12 @@ mobilite `poi`, avec une latence du meme ordre.
 - `met_dst_window_s` n'est calibre que sur un seul scenario (500 noeuds,
   random waypoint) ; `initial_tokens` a ete re-verifie a 5000 noeuds en
   mobilite `poi` (voir le balayage ci-dessus).
+
+## References
+
+Origine : Combinaison de briques de la litterature ; la replication vers ceux qui ont vu la destination, la replique unique sur les bornes et la purge sont propres a ce simulateur (spec, §2).
+
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Wait: An Efficient Routing Scheme for Intermittently Connected Mobile Networks*, ACM SIGCOMM WDTN, p. 252-259, 2005. — budget de copies binaire.
+- H. Dubois-Ferriere, M. Grossglauser, M. Vetterli, *Age Matters: Efficient Route Discovery in Mobile Ad Hoc Networks Using Encounter Ages*, ACM MobiHoc, 2003. — cession au noeud qui a vu la destination le plus recemment.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Focus: Efficient Mobility-Assisted Routing for Heterogeneous and Correlated Mobility*, IEEE PerCom Workshops, 2007. — phase de focus.
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — purge des copies apres livraison : schemas de recuperation (IMMUNE, VACCINE) du routage epidemique.

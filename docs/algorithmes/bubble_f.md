@@ -69,3 +69,11 @@ flowchart TD
 - Le graphe d'amis est synthetique : le comportement depend fortement de
   `group_size_range` et `no_friend_fraction`.
 - Beaucoup de parametres et de mecanismes imbriques.
+
+## References
+
+Origine : Spec NICE `docs/algorithmes/specs/BUBBLE-F.md`, adaptation de BUBBLE Rap au festival.
+
+- P. Hui, J. Crowcroft, E. Yoneki, *BUBBLE Rap: Social-based Forwarding in Delay Tolerant Networks*, ACM MobiHoc, 2008 (version journal : IEEE Transactions on Mobile Computing 10(11), 2011). — bulles, rangs global et local, fenetres C-Window.
+- P. Hui, E. Yoneki, S.-Y. Chan, J. Crowcroft, *Distributed Community Detection in Delay Tolerant Networks*, ACM/IEEE MobiArch, 2007. — detection distribuee de communautes (SIMPLE : familiers, recouvrement, fusion).
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Wait: An Efficient Routing Scheme for Intermittently Connected Mobile Networks*, ACM SIGCOMM WDTN, p. 252-259, 2005. — budget de jetons en division binaire.

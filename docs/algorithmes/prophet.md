@@ -54,3 +54,10 @@ flowchart TD
   les rencontres n'etaient vues que lorsqu'un message etait a offrir
   (voir `specs/PROPHET.md` §7 : +8 a +21 points de livraison apres
   correction, pour plus d'overhead et d'energie).
+
+## References
+
+Origine : Algorithme de la litterature (ecarts dans la spec, §6).
+
+- A. Lindgren, A. Doria, O. Schelen, *Probabilistic Routing in Intermittently Connected Networks*, ACM SIGMOBILE Mobile Computing and Communications Review 7(3), p. 19-20, 2003 (poster MobiHoc 2003 ; version longue : SAPIR 2004, LNCS 3126, p. 239-254). — article d'origine : predictabilite, vieillissement, transitivite.
+- A. Lindgren, A. Doria, E. Davies, S. Grasic, *Probabilistic Routing Protocol for Intermittently Connected Networks*, RFC 6693, 2012. — version standardisee.

@@ -69,3 +69,14 @@ flowchart TD
   sont pas mesurables ici.
 - Election aleatoire : un membre sans relais a portee attend 30 s avant de
   relayer lui-meme.
+
+## References
+
+Origine : Document NICE « Algorithmes de routage candidats et protocole de comparaison » (absent du depot), spec reecrite a posteriori. Briques reprises :
+
+- A. Lindgren, A. Doria, O. Schelen, *Probabilistic Routing in Intermittently Connected Networks*, ACM SIGMOBILE Mobile Computing and Communications Review 7(3), p. 19-20, 2003 (poster MobiHoc 2003 ; version longue : SAPIR 2004, LNCS 3126, p. 239-254). — composante predictabilite de l'utilite.
+- H. Dubois-Ferriere, M. Grossglauser, M. Vetterli, *Age Matters: Efficient Route Discovery in Mobile Ad Hoc Networks Using Encounter Ages*, ACM MobiHoc, 2003. — composante fraicheur de la derniere rencontre.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Focus: Efficient Mobility-Assisted Routing for Heterogeneous and Correlated Mobility*, IEEE PerCom Workshops, 2007. — spray puis copie unique qui avance vers une utilite meilleure.
+- S. C. Nelson, M. Bakht, R. Kravets, *Encounter-Based Routing in DTNs*, IEEE INFOCOM, 2009. — jetons partages au prorata de l'utilite.
+- W. Heinzelman, A. Chandrakasan, H. Balakrishnan, *Energy-Efficient Communication Protocol for Wireless Microsensor Networks*, HICSS, 2000. — election tournante de relais selon l'energie.
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — purge des copies apres livraison : schemas de recuperation (IMMUNE, VACCINE) du routage epidemique.

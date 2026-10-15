@@ -64,3 +64,13 @@ flowchart TD
   l'autre.
 - Nombreux parametres (`C`, `P_MIN`, `K_FLOOD`, `H_MAX`, `K_SUP`,
   fenetres, budgets).
+
+## References
+
+Origine : Spec NICE `docs/algorithmes/specs/GOSSIP-A.md`, conception propre au projet. Briques reprises :
+
+- Z. J. Haas, J. Y. Halpern, L. Li, *Gossip-Based Ad Hoc Routing*, IEEE INFOCOM, 2002 (arXiv cs/0209011). — retransmission avec probabilite `p` apres inondation des `k` premiers sauts (GOSSIP1(p,k)), d'ou `K_FLOOD`.
+- S.-Y. Ni, Y.-C. Tseng, Y.-S. Chen, J.-P. Sheu, *The Broadcast Storm Problem in a Mobile Ad Hoc Network*, ACM MobiCom, p. 151-162, 1999. — suppression par compteur (*counter-based scheme*), d'ou `K_SUP`.
+- A. Demers et al., *Epidemic Algorithms for Replicated Database Maintenance*, ACM PODC, p. 1-12, 1987. — anti-entropie entre pairs.
+- B. H. Bloom, *Space/Time Trade-offs in Hash Coding with Allowable Errors*, Communications of the ACM 13(7), 1970. — resume Bloom et ses faux positifs.
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — purge des copies apres livraison : schemas de recuperation (IMMUNE, VACCINE) du routage epidemique.

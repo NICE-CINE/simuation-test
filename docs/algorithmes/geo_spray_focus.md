@@ -71,3 +71,13 @@ flowchart TD
   non mesure, le resultat peut s'inverser.
 - Escalade non propagee aux copies deja distribuees ; positions des
   voisins lues dans une table globale au lieu d'etre echangees.
+
+## References
+
+Origine : Spec `docs/algorithmes/specs/GSF.md`, conception propre au projet (escalade et inondation tardive comprises). Briques reprises :
+
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Focus: Efficient Mobility-Assisted Routing for Heterogeneous and Correlated Mobility*, IEEE PerCom Workshops, 2007. — schema spray puis focus.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Wait: An Efficient Routing Scheme for Intermittently Connected Mobile Networks*, ACM SIGCOMM WDTN, p. 252-259, 2005. — spray binaire.
+- H. Dubois-Ferriere, M. Grossglauser, M. Vetterli, *Age Matters: Efficient Route Discovery in Mobile Ad Hoc Networks Using Encounter Ages*, ACM MobiHoc, 2003. — focus sans indice, vers qui a croise le destinataire le plus recemment.
+- Y.-B. Ko, N. H. Vaidya, *Location-Aided Routing (LAR) in Mobile Ad Hoc Networks*, ACM MobiCom, 1998. — disque d'incertitude autour de la derniere position connue.
+- X. Zhang, G. Neglia, J. Kurose, D. Towsley, *Performance Modeling of Epidemic Routing*, Computer Networks 51(10), 2007. — purge des copies apres livraison : schemas de recuperation (IMMUNE, VACCINE) du routage epidemique.

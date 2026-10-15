@@ -60,3 +60,9 @@ flowchart TD
 - Cout GPS (10 mA) a mesurer sur appareils ; il peut doubler la
   consommation par noeud.
 - Bruit GPS en foule (5 m dans le simulateur) probablement optimiste.
+
+## References
+
+Origine : Spec NICE `docs/algorithmes/specs/TIDE-G.md`, sur la base de TIDE (voir `tide.md`).
+
+- Y.-B. Ko, N. H. Vaidya, *Location-Aided Routing (LAR) in Mobile Ad Hoc Networks*, ACM MobiCom, 1998. — zone attendue du destinataire : disque autour de sa derniere position connue, rayon qui croit avec l'age (`r = r0 + v h`).

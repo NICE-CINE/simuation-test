@@ -156,7 +156,7 @@ All opt-in/no-op when the relevant config/param is `None` or its default, so exi
 
 - Spec (binding design authority): `docs/superpowers/specs/2026-09-14-festival-ble-sim-design.md`
 - Implementation plan (task-by-task, argues from the spec): `docs/superpowers/plans/2026-09-14-festival-ble-sim-implementation.md`
-- Per-algorithm docs: every routing algorithm gets a one-page `docs/algorithmes/<name>.md` (Principe / Diagramme / Forces / Faiblesses) and a full spec in `docs/algorithmes/specs/<NAME>.md` (original protocol spec when one exists — DASF-V, GOSSIP-A, BUBBLE-F, TIDE-G/G2, GSF, ECO-SF — otherwise written from the code and marked so in its status banner). Each mobility model gets the same kind of page in `docs/mobilite/<name>.md`. Nothing goes at the root of `docs/`.
+- Per-algorithm docs: every routing algorithm gets a one-page `docs/algorithmes/<name>.md` (Principe / Diagramme / Forces / Faiblesses / References: where each idea comes from, papers or "propre au projet") and a full spec in `docs/algorithmes/specs/<NAME>.md` (original protocol spec when one exists — DASF-V, GOSSIP-A, BUBBLE-F, TIDE-G/G2, GSF, ECO-SF — otherwise written from the code and marked so in its status banner). Each mobility model gets the same kind of page in `docs/mobilite/<name>.md`. Nothing goes at the root of `docs/`.
 
 ### Conventions
 

@@ -68,3 +68,9 @@ flowchart TD
 - Purge par ACK instantanee dans le moteur ; seule la position est
   retardee.
 - Pas encore mesure a la densite de reference (~11 400 personnes/km2).
+
+## References
+
+Origine : Spec NICE `docs/algorithmes/specs/TIDE-G2.md`, sur la base de TIDE-G (voir `tide_g.md`) ; la position renvoyee dans l'ACK est propre au projet.
+
+- Y.-B. Ko, N. H. Vaidya, *Location-Aided Routing (LAR) in Mobile Ad Hoc Networks*, ACM MobiCom, 1998. — zone attendue autour de la derniere position connue.

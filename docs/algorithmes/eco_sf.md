@@ -72,3 +72,12 @@ flowchart TD
 - L'economie de beacons n'apparait pas dans l'energie du rapport : le
   moteur facture un courant de fond fixe quel que soit l'algorithme.
 - Toutes les valeurs numeriques sont des points de depart non valides.
+
+## References
+
+Origine : Spec `docs/algorithmes/specs/ECO-SF.md`, conception propre au projet. Briques reprises :
+
+- P. Levis, N. Patel, D. Culler, S. Shenker, *Trickle: A Self-Regulating Algorithm for Code Propagation and Maintenance in Wireless Sensor Networks*, USENIX NSDI, 2004 ; standardise dans la RFC 6206, 2011. — cadence des beacons, suppression `k`, remise a `Imin`.
+- A. Lindgren, A. Doria, O. Schelen, *Probabilistic Routing in Intermittently Connected Networks*, ACM SIGMOBILE Mobile Computing and Communications Review 7(3), p. 19-20, 2003 (poster MobiHoc 2003 ; version longue : SAPIR 2004, LNCS 3126, p. 239-254). — utilite allegee.
+- T. Spyropoulos, K. Psounis, C. S. Raghavendra, *Spray and Focus: Efficient Mobility-Assisted Routing for Heterogeneous and Correlated Mobility*, IEEE PerCom Workshops, 2007. — schema spray puis focus.
+- S. C. Nelson, M. Bakht, R. Kravets, *Encounter-Based Routing in DTNs*, IEEE INFOCOM, 2009. — spray pondere par l'utilite.
