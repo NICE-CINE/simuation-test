@@ -23,7 +23,8 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   `extra_connection_current_ma`), fermeture d'une connexion inactive
   (`connection_idle_timeout_s`), taille des annonces bitchat et des
   beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
-  rendez-vous, distance a laquelle on reconnait son groupe), le nombre
+  rendez-vous, distance a laquelle on reconnait son groupe, probabilite
+  qu'une sortie scinde le groupe en deux), le nombre
   d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2), le
   rythme des messages pendant un rendez-vous rate
   (`TrafficConfig.lost_messages_per_hour`, 6/h).
@@ -474,12 +475,15 @@ Principe, diagramme, plans de site, ordres de grandeur, forces et
 faiblesses : un fichier par modele dans `docs/mobilite/`.
 
 - `group` (`mobility/group.py`, defaut avec `--size`) — les groupes
-  d'amis (les memes qui choisissent les destinataires) se deplacent
-  ensemble autour d'un meneur qui suit `poi` ; un membre part parfois seul
-  (bar 5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous
-  ou le groupe l'attend 15 min, sinon il cherche le groupe de point
-  d'interet en point d'interet. Personne n'ecrit a un ami qu'il voit
-  (`TrafficConfig.skip_friends_within_m`, 15 m). Voir `docs/mobilite/group.md`.
+  d'amis (sans les amis venus a part) se deplacent ensemble autour d'un
+  meneur (le premier membre present) qui suit `poi` ; un membre part
+  parfois, seul ou avec la moitie du groupe (30 % des sorties), (bar
+  5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous ou le
+  groupe l'attend 15 min, sinon il cherche le groupe de point d'interet en
+  point d'interet, comme un ami arrive apres son groupe. Personne n'ecrit
+  a un ami qu'il voit (`TrafficConfig.skip_friends_within_m`, 15 m) ;
+  perdu et groupe s'ecrivent en plus pendant un rendez-vous rate. Voir
+  `docs/mobilite/group.md`.
 - `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
   uniforme sur toute la zone, puis pause (70 % de chances, 5 a 45 min).
   Voir `docs/mobilite/random_waypoint.md`.

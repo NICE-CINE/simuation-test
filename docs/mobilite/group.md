@@ -22,10 +22,15 @@ arrive apres lui ne prend pas sa place.
    pauses).
 2. **Membre** : garde un decalage fixe tire dans un disque de
    `radius_m` (5 m) autour du meneur, et le suit a `speed_max_mps`.
-3. **Sorties seul** : un membre avec le groupe part seul avec un taux de
+3. **Sorties** : un membre avec le groupe part avec un taux de
    `short_trips_per_hour` (0,5/h, 5 a 30 min : bar, toilettes) ou
    `long_trips_per_hour` (0,2/h, 30 min a 2 h : une autre scene). Pendant
-   la sortie, il se deplace comme `poi`.
+   la sortie, il se deplace comme `poi`. Avec la probabilite
+   `split_probability` (0,3, estimee) **le groupe se scinde en deux** : il
+   emmene environ la moitie des autres membres (`(taille - 1) // 2`, jamais
+   le meneur), qui le suivent a leur decalage puis reviennent avec lui ;
+   sinon il part seul. Si celui qui mene la sortie quitte le festival, ceux
+   qui le suivaient vont seuls au rendez-vous.
 4. **Rendez-vous** : personne ne peut appeler ni ecrire (le reseau
    cellulaire est sature, et la mobilite ne doit pas dependre du reseau
    simule, sinon chaque algorithme aurait ses propres trajectoires et la
@@ -89,7 +94,7 @@ revenu a moins de 15 m entre-temps (20 a 180 s plus tard, c'est rare).
 flowchart TD
     W["Avec le groupe : suit le meneur a son decalage"] --> L{"Sortie (courte ou longue) ?"}
     L -- non --> W
-    L -- oui --> R["Rendez-vous : ici, a la fin de la sortie"] --> A["Sortie seul (comme poi)"]
+    L -- oui --> R["Rendez-vous : ici, a la fin de la sortie"] --> A["Sortie (comme poi), seul ou avec la moitie du groupe"]
     A --> T{"Fin de la sortie ?"}
     T -- non --> A
     T -- oui --> B["Va au rendez-vous"]
@@ -115,8 +120,9 @@ flowchart TD
 - Toutes les valeurs de `GroupConfig` sont estimees, pas mesurees ; comme
   elles fixent le nombre de separations, elles fixent aussi la charge du
   reseau (voir "Effet sur le trafic").
-- Le groupe entier suit le meneur au rendez-vous ; dans la realite le
-  groupe peut aussi se scinder.
+- Une scission se fait toujours en deux, autour d'une sortie qui finit
+  par un rendez-vous ; le groupe restant suit toujours le meneur au
+  rendez-vous, et deux sous-groupes ne se separent pas a nouveau.
 - Le nombre d'amis venus a part (0 a 2) est estime, et ils sont tires au
   hasard sur tout le site : rien ne rapproche deux groupes qui se
   connaissent.

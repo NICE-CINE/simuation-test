@@ -11,7 +11,7 @@ from .random_waypoint import move_towards
 if TYPE_CHECKING:
     from ..nodes import BaseNode
 
-_WITH, _AWAY, _RETURN, _SEARCH = "with", "away", "return", "search"
+_WITH, _AWAY, _RETURN, _SEARCH, _TAG = "with", "away", "return", "search", "tag"
 
 
 class _Team:
@@ -30,8 +30,9 @@ class _Team:
 class GroupMobility(MobilityModel):
     # Friends move together (reference point group mobility): the first
     # member present on site leads with PoiMobility, the others keep a fixed
-    # offset around it. A member sometimes leaves on its own, for a short
-    # trip (bar, toilets) or a long one (another stage). Nobody can call or
+    # offset around it. A member sometimes leaves, alone or taking about half
+    # of the others along (split_probability), for a short trip (bar,
+    # toilets) or a long one (another stage). Nobody can call or
     # text (the cellular network is saturated), so before leaving they agree
     # on a rendezvous: here, at the end of the trip. The leader goes back
     # there and waits up to rendezvous_max_wait_s; a member who misses it,
@@ -54,6 +55,7 @@ class GroupMobility(MobilityModel):
         self._meeting: Optional[Position] = None
         self._meeting_at = 0.0
         self._search_target: Optional[Position] = None
+        self._guide: Optional["BaseNode"] = None
         self._speed_mps = self._rng.uniform(config.speed_min_mps, config.speed_max_mps)
 
     def initial_position(self, area: AreaConfig) -> Position:
@@ -109,11 +111,20 @@ class GroupMobility(MobilityModel):
             # On site after the group: it doesn't know where they are.
             if leader is not None and leader.mobility._elapsed_s > self._elapsed_s:
                 self._state = _SEARCH
+        if self._state == _TAG:
+            guide = self._guide
+            if guide.on_site and guide.mobility._state in (_AWAY, _RETURN, _SEARCH):
+                return move_towards(current, self._slot(guide), self._config.speed_max_mps, dt)
+            # Guide back with the group: so is this member. Guide gone: head
+            # for the rendezvous alone.
+            self._guide = None
+            self._state = _WITH if guide.on_site else _RETURN
         if self._state == _WITH:
             trip = self._maybe_leave(leader, dt)
             if trip is None:
                 return move_towards(current, self._slot(leader), self._config.speed_max_mps, dt)
             self._state, self._trip = _AWAY, trip
+            self._take_companions(leader)
             self._trip.step(current, dt, area)
             return current
         if self._state == _AWAY:
@@ -147,6 +158,20 @@ class GroupMobility(MobilityModel):
         self._meeting = leader.position
         self._meeting_at = self._elapsed_s + duration
         return PoiMobility(self._config, rng=self._rng)
+
+    def _take_companions(self, leader: "BaseNode") -> None:
+        others = [
+            n for n in self._team.nodes
+            if n is not self._node and n is not leader and n.on_site and n.mobility._state == _WITH
+        ]
+        count = min(len(others), (len(self._team.nodes) - 1) // 2)
+        if count == 0 or self._rng.random() >= self._group.split_probability:
+            return
+        for node in self._rng.sample(others, count):
+            model = node.mobility
+            model._state, model._guide = _TAG, self._node
+            model._meeting = self._meeting
+            model._meeting_at = model._elapsed_s + (self._meeting_at - self._elapsed_s)
 
     def _lead(self, current: Position, dt: float, area: AreaConfig) -> Position:
         # A member heading back to its rendezvous: go there and wait (its

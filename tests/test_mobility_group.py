@@ -123,3 +123,44 @@ def test_member_arriving_after_its_group_searches_for_it():
         if member.mobility.is_with_group:
             break
     assert member.mobility.is_with_group
+
+
+def test_a_split_takes_half_the_group_along_and_everyone_meets_again():
+    config = MobilityConfig(points_of_interest=POIS, group=replace(
+        GroupConfig(), short_trips_per_hour=3600.0, short_trip_s=(120.0, 120.0), long_trips_per_hour=0.0,
+        split_probability=1.0,
+    ))
+    walkers = [_Walker(GroupMobility(config, random.Random(i)), Position(30.0, 30.0)) for i in range(5)]
+    for w in walkers:
+        start = w.mobility.join_group(w, walkers)
+        if start is not None:
+            w.position = start
+    leaver = walkers[1]
+    leaver.step()
+    companions = [w for w in walkers if w.mobility._state == "tag"]
+    assert len(companions) == 2 and leaver not in companions and walkers[0] not in companions
+    for w in walkers:
+        w.mobility._group = replace(w.mobility._group, short_trips_per_hour=0.0)
+    for _ in range(60):
+        for w in walkers:
+            w.step()
+        for c in companions:
+            assert c.position.distance_to(leaver.position) <= 2 * 5.0 + 2.0
+    for _ in range(2000):
+        for w in walkers:
+            w.step()
+        if all(w.mobility.is_with_group for w in walkers):
+            break
+    assert all(w.mobility.is_with_group for w in walkers)
+
+
+def test_split_probability_zero_means_alone():
+    config = MobilityConfig(points_of_interest=POIS, group=replace(
+        GroupConfig(), short_trips_per_hour=3600.0, split_probability=0.0,
+    ))
+    walkers = [_Walker(GroupMobility(config, random.Random(i)), Position(30.0, 30.0)) for i in range(5)]
+    for w in walkers:
+        w.mobility.join_group(w, walkers)
+    walkers[1].step()
+    assert walkers[1].mobility._state == "away"
+    assert not [w for w in walkers if w.mobility._state == "tag"]

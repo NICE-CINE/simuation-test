@@ -121,6 +121,10 @@ class GroupConfig:
     long_trip_s: Tuple[float, float] = (1800.0, 7200.0)
     # How long the leader waits at a rendezvous.
     rendezvous_max_wait_s: float = 900.0
+    # Chance that a trip splits the group in two: the member leaving takes
+    # about half of the others along (the leader stays); otherwise it goes
+    # alone.
+    split_probability: float = 0.3
 
 
 @dataclass(frozen=True)
@@ -378,6 +382,8 @@ class SimulationConfig:
             raise ValueError("group radius_m and rendezvous_max_wait_s must be >= 0, visual_range_m > 0")
         if group.short_trips_per_hour < 0 or group.long_trips_per_hour < 0:
             raise ValueError("group trip rates must be >= 0")
+        if not 0.0 <= group.split_probability <= 1.0:
+            raise ValueError("split_probability must be within [0, 1]")
         for lo, hi in (group.short_trip_s, group.long_trip_s):
             if not 0 < lo <= hi:
                 raise ValueError("group trip durations must satisfy 0 < lo <= hi")
