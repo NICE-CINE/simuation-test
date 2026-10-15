@@ -396,8 +396,10 @@ d'arrivee dans `arrival_window_s` et une duree de presence dans
 `session_duration_range_s`, et n'est `is_active` (participe au BLE,
 eligible comme source/destination de trafic) qu'entre les deux — le meme
 mecanisme deja utilise pour les noeuds a court de batterie. Un noeud non
-encore arrive ou deja parti ne bouge plus (`_mobile_process` le laisse en
-pause) et disparait des replays HTML. `SimulationReport.dead_node_count`
+encore arrive ou deja parti ne bouge plus (`BaseNode.on_site`, que seul le
+churn change) et disparait des replays HTML ; un festivalier dont le
+telephone est mort continue de marcher (et de mener son groupe), seule sa
+radio s'eteint. `SimulationReport.dead_node_count`
 ne compte que les morts par batterie (`BaseNode.battery_depleted`), pas
 les departs de churn.
 

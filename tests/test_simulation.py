@@ -100,3 +100,26 @@ def test_warmup_moves_people_but_measures_and_bills_nothing():
     # Same measured length: the warm-up adds no energy and no messages of its own.
     assert warm.avg_energy_consumed_mah == pytest.approx(cold.avg_energy_consumed_mah, rel=0.05)
     assert 0 < warm.messages_created < 3 * cold.messages_created + 10
+
+
+def test_dead_phone_owner_keeps_walking_until_they_leave():
+    import simpy
+    from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
+    from festival_ble_sim.nodes import MobileNode
+    from festival_ble_sim.simulation import _mobile_process
+    from festival_ble_sim.spatial import SpatialGrid
+    config = SimulationConfig(area=AreaConfig(width_m=100.0, height_m=100.0))
+    node = MobileNode(1, RandomWaypointMobility(config.mobility, random.Random(1)), 10.0, 10, 100.0, config.area)
+    node.consume_energy(1000.0)
+    assert node.battery_depleted and not node.is_active
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=10.0)
+    grid.insert(node)
+    env = simpy.Environment()
+    env.process(_mobile_process(env, node, config, grid))
+    start = node.position
+    env.run(until=60.0)
+    assert node.position != start
+    node.on_site = False
+    gone = node.position
+    env.run(until=120.0)
+    assert node.position == gone

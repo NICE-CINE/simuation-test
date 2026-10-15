@@ -39,12 +39,9 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
     phone_mah_per_tick = config.energy.phone_current_ma * config.mobility.tick_interval_s / 3600.0
     while True:
         yield env.timeout(config.mobility.tick_interval_s)
-        if not node.is_active:
-            # Not yet arrived / already departed (see _churn_process) or
-            # battery-dead: frozen in place rather than wandering while it
-            # can't participate in BLE anyway.
+        if not node.on_site:
             continue
-        if env.now > config.warmup_s:
+        if node.is_active and env.now > config.warmup_s:
             node.consume_energy(mesh_mah_per_tick)
             node.consume_energy(phone_mah_per_tick, mesh=False)
         old_x, old_y = node.position.x, node.position.y
@@ -54,13 +51,13 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
 
 def _churn_process(env, node: MobileNode, arrival_time_s: float, departure_time_s: float):
     if arrival_time_s > 0:
-        node.is_active = False
+        node.is_active = node.on_site = False
         yield env.timeout(arrival_time_s)
-        node.is_active = True
+        node.is_active = node.on_site = True
     remaining_s = departure_time_s - max(arrival_time_s, 0.0)
     if remaining_s > 0:
         yield env.timeout(remaining_s)
-        node.is_active = False
+        node.is_active = node.on_site = False
 
 
 def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, MobileNode], tick_interval_s: float):

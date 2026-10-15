@@ -22,7 +22,8 @@ Modele de reference de la litterature DTN. Chaque festivalier :
    tick-la), et ainsi de suite.
 
 Le moteur appelle `step` toutes les `tick_interval_s` (1 s) pour chaque
-noeud actif ; un noeud inactif (churn, batterie vide) reste fige. Chaque
+noeud present sur le site ; un noeud pas encore arrive ou deja parti
+(churn) reste fige, un telephone mort continue de marcher. Chaque
 noeud a sa propre instance et son propre RNG, derive de `random_seed`.
 
 ## Diagramme
