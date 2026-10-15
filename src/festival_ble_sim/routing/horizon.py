@@ -44,6 +44,7 @@ class HorizonRouting(FreshSprayRouting):
         self._heard: Dict[int, Dict[int, Tuple[Dict[int, int], float]]] = {}
         self._next_due: Dict[int, float] = {}
         self._neighbors: Dict[int, List["BaseNode"]] = {}
+        self._now = 0.0
         self._next_hops: Dict[Tuple[int, int], Optional[Tuple[int, int]]] = {}
         self._sizes: Dict[int, int] = {}
         self.stats = {"pull": 0, "announce_bytes": 0, "announce_rx_bytes": 0, "announces_sent": 0, "announces_received": 0}
@@ -51,6 +52,7 @@ class HorizonRouting(FreshSprayRouting):
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
         super().on_tick(now, neighbors_by_node)
         self._neighbors = neighbors_by_node
+        self._now = now
         self._next_hops.clear()
 
     def _rebuild(self, node_id: int, now: float) -> Dict[int, int]:
@@ -96,8 +98,14 @@ class HorizonRouting(FreshSprayRouting):
         if key not in self._next_hops:
             best: Optional[Tuple[int, float, int]] = None
             limit = self._dist.get(holder.id, {}).get(dst_id, self._horizon + 1)
+            heard = self._heard.get(holder.id, {})
             for n in self._neighbors.get(holder.id, ()):
-                hops = self._dist.get(n.id, {}).get(dst_id)
+                # Only what the holder actually received from n: n's own
+                # table may be newer than any announce that got through.
+                vector, t = heard.get(n.id, (None, 0.0))
+                if vector is None or self._now - t > self._entry_ttl:
+                    continue
+                hops = vector.get(dst_id)
                 if hops is None or hops >= limit:
                     continue
                 cand = (hops, holder.position.distance_squared_to(n.position), n.id)

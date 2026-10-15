@@ -133,3 +133,13 @@ def test_route_survives_a_lost_announce_but_expires_after_entry_ttl():
     assert algo._dist[1].get(5) == 4
     _settle(algo, links, start=46, until=70, lost={(2, 1)})
     assert 5 not in algo._dist[1]
+
+
+def test_pull_uses_the_vector_heard_not_the_neighbors_live_table():
+    algo = HorizonRouting()
+    nodes, links = _line(algo)
+    _settle(algo, links, lost={(2, 1)})
+    msg = _msg(tokens=4)
+    nodes[1].buffer[1] = msg
+    assert algo._dist[2][5] == 3
+    assert algo._next_hop(nodes[1], 5) is None

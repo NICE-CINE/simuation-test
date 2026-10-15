@@ -44,7 +44,7 @@ Hybride MANET/DTN dans l'esprit de HYMAD (J. Whitbeck, V. Conan, *HYMAD: Hybrid 
 Pour un message `m` (destinataire `d`) porté par `A`, au contact de `B` :
 
 1. `m` déjà livré, ou `B` a déjà `m` : comportement `fresh_spray` (purge ou IGNORE).
-2. **Tirage.** Prochain saut de `A` vers `d` : le voisin `v` du tick qui minimise `(dist_v(d), distance physique A–v)`, parmi ceux tels que `dist_v(d) < dist_A(d)` (`horizon_hops + 1` si `A` n'a pas d'entrée). S'il existe et que `hops(m) + dist_v(d) ≤ ttl_hops` (il reste `dist_v(d) − 1` relais, puis une livraison directe que le TTL ne bloque pas) :
+2. **Tirage.** Prochain saut de `A` vers `d` : le voisin `v` du tick qui minimise `(dist_v(d), distance physique A–v)`, parmi ceux tels que `dist_v(d) < dist_A(d)` (`horizon_hops + 1` si `A` n'a pas d'entrée). `dist_v(d)` est lu dans le dernier vecteur que `A` a reçu de `v` depuis moins de `entry_ttl_s`, jamais dans la table courante de `v` : une annonce perdue l'est aussi pour le routage. S'il existe et que `hops(m) + dist_v(d) ≤ ttl_hops` (il reste `dist_v(d) − 1` relais, puis une livraison directe que le TTL ne bloque pas) :
    - `B = v` : FORWARD, raison `pull` ;
    - sinon : IGNORE (la copie attend son prochain saut).
 3. **Réserve.** Si `ttl_hops` est défini et `hops(m) ≥ ttl_hops − horizon_hops` : IGNORE.
