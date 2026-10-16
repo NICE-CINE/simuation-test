@@ -79,3 +79,16 @@ def test_run_sweep_runs_duplicate_variants_once(tmp_path):
         ["fanout=2", "fanout=2"], [1], duration_s=30.0, num_festivaliers=10, beacon_count=2, workers=1,
     )
     assert [row["variant"] for row in rows] == ["fanout=2"]
+
+
+def test_main_accepts_the_shared_run_options_and_archives_them(tmp_path):
+    import json
+    sweep.main([
+        "--variant", "fanout=2", "--seeds", "1", "--duration", "30", "--num-festivaliers", "10",
+        "--beacon-count", "2", "--workers", "1", "--archive-dir", str(tmp_path),
+        "--churn", "--no-gps-noise", "--random-charge", "--set", "traffic.message_ttl_s=300",
+    ])
+    config = json.loads(next(tmp_path.glob("*.json")).read_text())["config"]
+    assert config["churn"]["enabled"] is True and config["gps"]["noise_std_m"] == 0.0
+    assert config["traffic"]["message_ttl_s"] == 300.0 and config["cooldown_s"] == 300.0
+    assert len(config["energy"]["initial_charge_bins"]) == 4

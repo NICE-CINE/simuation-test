@@ -7,7 +7,8 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Tuple
 from compare_algorithms import (
-    REPORT_FIELDS, STATUS_REFRESH_S, append_csv_row, build_config, format_duration, render_status,
+    REPORT_FIELDS, STATUS_REFRESH_S, add_run_arguments, append_csv_row, build_config, format_duration, render_status,
+    run_config_kwargs,
 )
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
@@ -86,9 +87,10 @@ def _run_one(
     beacon_count: int,
     mobility: str,
     reply_probability: float,
+    config_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     progress = _worker_progress
-    config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability)
+    config = build_config(beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, **(config_kwargs or {}))
     total_s = config.total_s
     label = run_label(variant, seed)
     progress_callback = None
@@ -123,6 +125,7 @@ def run_sweep(
     workers: int = 1,
     show_progress: bool = False,
     csv_path: Optional[str] = None,
+    config_kwargs: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     tasks: List[Tuple[str, int]] = [(variant, seed) for variant in dict.fromkeys(variants) for seed in seeds]
     results: Dict[int, Dict[str, Any]] = {}
@@ -133,7 +136,8 @@ def run_sweep(
     try:
         futures: Dict[Future, int] = {
             executor.submit(
-                _run_one, variant, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability
+                _run_one, variant, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability,
+                config_kwargs,
             ): index
             for index, (variant, seed) in enumerate(tasks)
         }
@@ -211,6 +215,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele (defaut 2)")
     parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR, help="Dossier d'archive du CSV et de son .json (defaut archives)")
+    add_run_arguments(parser)
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
@@ -222,19 +227,23 @@ def main(argv: Optional[List[str]] = None) -> None:
             build_algorithm(parse_variant(text), seed=0)
         except ValueError as exc:
             parser.error(f"--variant {text!r}: {exc}")
+    run_kwargs = run_config_kwargs(args, parser.error)
+    try:
+        config = build_config(
+            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
+            **run_kwargs,
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     stem = archive_stem(args.archive_dir, "sweep_band_fanout")
     archive_csv = str(stem.with_suffix(".csv"))
     # The variants aren't part of SimulationConfig: they live in the CLI args.
-    write_params(
-        stem.with_suffix(".json"),
-        vars(args),
-        build_config(args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability),
-    )
+    write_params(stem.with_suffix(".json"), vars(args), config)
     rows = run_sweep(
         args.variant, args.seeds, args.duration, args.num_festivaliers, args.beacon_count,
         mobility=args.mobility, reply_probability=args.reply_probability,
-        workers=args.workers, show_progress=True, csv_path=archive_csv,
+        workers=args.workers, show_progress=True, csv_path=archive_csv, config_kwargs=run_kwargs,
     )
     print_summary(summarize(rows))
     print(f"\nArchive ecrite dans {archive_csv} / .json")

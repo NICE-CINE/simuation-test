@@ -148,15 +148,25 @@ refuse en listant les champs possibles, une valeur interdite par les
 verifications de la config. Les `--set` s'appliquent apres les autres
 options, et `--cooldown` (s'il n'est pas donne) suit un TTL change. Ils
 sont archives dans le `.json` du run avec la config finale.
-`compare_algorithms.py` refuse `--set beacons.count` (la matrice fixe
-0 et `--beacon-count`). Module : `festival_ble_sim/overrides.py`.
+`compare_algorithms.py` et les deux balayages refusent `--set beacons.count`
+(le nombre de bornes se regle avec `--beacon-count`). Module :
+`festival_ble_sim/overrides.py`.
+
+**Options communes aux trois scripts** (`compare_algorithms.py`,
+`sweep_band_fanout.py`, `sweep_fresh_spray_tokens.py`, via
+`compare_algorithms.add_run_arguments`) : `--cooldown`, `--warmup`,
+`--followup-probability`, `--gps-fix-failure`, `--random-charge`,
+`--no-outside-friends`, `--no-lost-messages`, `--schedule`, `--churn`
+(fenetres par `--set churn.arrival_window_s=LO,HI` et
+`churn.session_duration_range_s=LO,HI`), les six raccourcis et `--set`.
 
 ## Comparer les algorithmes
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
-        [--random-charge] [--no-outside-friends] [--no-lost-messages] [--schedule]
+        [--random-charge] [--no-outside-friends] [--no-lost-messages] [--schedule] [--churn] \
+        [--no-gps-noise] [--max-links 4] [--set traffic.message_ttl_s=900 ...]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
@@ -204,8 +214,8 @@ overhead, energie).
 - `--seeds` (defaut `1 2 3`), `--duration` (defaut 3600), `--num-festivaliers`
   (defaut 200), `--beacon-count` (defaut 6), `--mobility`
   (`random_waypoint` par defaut ou `poi`), `--reply-probability` (defaut 0),
-  `--workers` (defaut 2), `--archive-dir` (defaut `archives`). Pas d'option
-  `--size`, `--followup-probability`, `--gps-fix-failure` ni `--random-charge` ici.
+  `--workers` (defaut 2), `--archive-dir` (defaut `archives`), plus les
+  options communes (voir "Tout regler avec `--set`"). Pas d'option `--size` ici.
 - Archive : `<date>_<heure>_sweep_band_fanout.csv` (une ligne par variante et
   par graine, ecrite des que le run se termine, avec `wall_s`) + `.json` du
   meme nom ; les chaines de variantes ne sont que dans les arguments CLI du
@@ -223,8 +233,8 @@ affiche la moyenne par valeur de jetons (livraison, latence moyenne et
 p95, surcharge, energie). Memes options que `compare_algorithms.py` pour
 le scenario (`--duration` defaut 3600, `--num-festivaliers` defaut 200,
 `--beacon-count` defaut 6, `--mobility`, `--size`, `--reply-probability`,
-`--workers`, `--archive-dir`), sans `--followup-probability`,
-`--gps-fix-failure` ni `--random-charge`. Archive :
+`--workers`, `--archive-dir`) et les memes options communes (voir "Tout
+regler avec `--set`"). Archive :
 `<date>_<heure>_sweep_fresh_spray_tokens.csv` + `.json` ; la liste des
 jetons n'est que dans les arguments CLI du `.json`. Resultats a 5 000
 festivaliers : `docs/algorithmes/fresh_spray.md`.
