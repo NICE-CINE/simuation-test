@@ -1,7 +1,8 @@
 # Modèle de consommation et charge de départ
 
 > **Statut** : valeurs recalées le 12 oct. 2026 sur le banc radio Nice Mesh
-> (IMT Mines Alès), écran mesuré le 13 oct. Chaque paramètre indique s'il est **mesuré** ou **estimé**.
+> (IMT Mines Alès), écran mesuré le 13 oct., durée de connexion recalée sur le
+> terrain le 16 oct. (`docs/radio/mesures.md`). Chaque paramètre indique s'il est **mesuré** ou **estimé**.
 > Code : `EnergyConfig` (`src/festival_ble_sim/config.py`), facturation dans
 > `simulation.py` (courant de fond) et `network.py` (émission/réception).
 
@@ -238,3 +239,8 @@ utilisaient `phone_current_ma = 98` au lieu de 82. Leur énergie totale est
 environ 14 % plus haute et leur `dead_node_count` un peu plus élevé avec
 `--random-charge`. Leur énergie mesh reste comparable, et les autres
 colonnes aussi à 100 % de charge. La valeur utilisée est dans le `.json`.
+
+Les runs archivés avant le 16 oct. ouvraient une connexion en 7 s
+(`connection_setup_mah` = 0,028 au lieu de 0,048) et transportaient des
+messages et des accusés bien plus légers : leur énergie mesh n'est pas
+comparable. Voir `docs/radio/mesures.md` §8.

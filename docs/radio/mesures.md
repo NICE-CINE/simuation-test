@@ -202,3 +202,42 @@ reste un « et si » sur un autre transport.
 **Format allégé** (÷4) : `--set traffic.payload_size_range_bytes=250,950`.
 Les accusés n'ont pas de raccourci, il faut changer `ack_size_bytes` dans le
 code.
+
+## 6. Population
+
+- **iPhones** : aucun dans le réseau. L'app est Android uniquement, iOS est
+  hors du projet ; un festivalier avec un iPhone est simplement un
+  non-utilisateur (le taux d'adoption n'est pas encore modélisé, voir la
+  TODO du README).
+- **Honor (EMUI)** : l'app est gelée écran éteint, sauf réglage manuel. Non
+  simulé.
+- **Samsung avec les réglages d'usine** : pas encore testé.
+
+## 7. Ce qui reste à mesurer
+
+Par ordre d'importance pour le simulateur :
+
+1. **Une vraie foule**, les corps répartis sur tout le trajet (sortie
+   d'amphi, file de cantine, concert) : portée, exposant et débit. C'est la
+   mesure qui manque le plus.
+2. **3 téléphones ou plus** : connexions simultanées (`max_concurrent_links`)
+   et débit avec 2 ou 3 voisins. Il faut emprunter des Android (Nearby
+   n'existe que sur Android, un émulateur n'a pas de vrai Bluetooth).
+3. **Reconnexion ×10** à 1, 10 et 30 m, pour une distribution du délai de
+   connexion plutôt qu'une valeur fixe.
+4. **Une passe libre n°3**, sens de la passe n°2 mais port de charge vers le
+   marcheur : départage l'orientation et le terrain dans les ~11 dB d'écart.
+5. **Usage en festival** : temps écran, messages par heure (relevés
+   « Bien-être numérique », sondage).
+
+## 8. Comparabilité avec les archives
+
+Les runs archivés avant le 16 oct. 2026 utilisaient 37 ko/s,
+`signal_margin_cutoff_db=6` et `weak_signal_max_probability=0.30`, 7 s de
+connexion (0,028 mAh), des messages de 20 à 512 o et des accusés de 8 o
+(20 o pour `tide_g2`/GSF, 16 o pour `managed_flood`/`bitchat`). Leurs
+colonnes de livraison, de latence, d'overhead et d'énergie mesh ne sont pas
+comparables aux nouvelles : les messages sont 5 à 7 fois plus lourds, les
+accusés 26 fois plus, et les connexions mettent plus longtemps à s'ouvrir.
+La config exacte de chaque run est dans son `.json`. La portée (30 m, 60 m)
+n'a pas changé.

@@ -6,10 +6,11 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
 
 - [ ] **Participation reelle** : tout le monde a l'app et elle tourne au
   premier plan. A modeliser : taux d'adoption (une partie seulement des
-  festivaliers est un noeud, les autres ne font qu'attenuer le signal),
-  restrictions iOS en arriere-plan (deux iPhone en arriere-plan ne se
-  decouvrent pas), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
-  `docs/energie/consommation.md`).
+  festivaliers est un noeud, les autres ne font qu'attenuer le signal ;
+  l'app est Android uniquement, les possesseurs d'iPhone n'en font donc
+  pas partie), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
+  `docs/energie/consommation.md` ; Samsung avec les reglages d'usine pas
+  encore teste).
 - [ ] **Radio** (mesures du 16 oct., `docs/radio/mesures.md`) : les 30 m
   du telephone sont mesures avec seulement 5 personnes groupees devant
   l'ancre, une borne haute pour un festival. A faire :
@@ -41,7 +42,12 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   (`ScheduleConfig` : sets d'1 h, scene x3, 30 % de pauses coupees), le nombre
   d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2), le
   rythme des messages pendant un rendez-vous rate
-  (`TrafficConfig.lost_messages_per_hour`, 6/h).
+  (`TrafficConfig.lost_messages_per_hour`, 6/h), connexions simultanees
+  (`max_concurrent_links`, 6) et debit avec plusieurs voisins (il faut 3
+  telephones ou plus), delai de connexion en distribution plutot que les
+  12 s fixes (26 a 80 s mesures loin de l'ancre), taille d'un resume
+  (`summary_id_bytes`, 4 o) ; liste et priorites radio dans
+  `docs/radio/mesures.md` §7.
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
   d'un voisin dans `on_tick` avant toute connexion ; les tables des
