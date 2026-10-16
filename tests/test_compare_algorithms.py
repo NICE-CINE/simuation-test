@@ -10,13 +10,21 @@ import compare_algorithms  # noqa: E402
 
 
 def test_run_matrix_covers_every_algorithm_with_and_without_beacons():
-    rows = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
+    rows = compare_algorithms.run_matrix(
+        seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, with_beacons=True, cooldown_s=0.0
+    )
     assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
     combos = {(row["algorithm"], row["beacons"] > 0) for row in rows}
     expected = {(name, with_beacons) for name in compare_algorithms.ALGORITHMS for with_beacons in (False, True)}
     assert combos == expected
     for row in rows:
         assert 0.0 <= row["delivery_ratio"] <= 1.0
+
+
+def test_run_matrix_runs_without_beacons_only_by_default():
+    rows = compare_algorithms.run_matrix(seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0)
+    assert [row["algorithm"] for row in rows] == list(compare_algorithms.ALGORITHMS)
+    assert {row["beacons"] for row in rows} == {0}
 
 
 def test_run_matrix_parallel_workers_match_sequential_results():
@@ -54,10 +62,11 @@ def test_main_archives_csv_and_params_named_after_date(tmp_path, capsys):
     csvs = list(archive_dir.glob("*_comparaison.csv"))
     assert len(csvs) == 1
     with open(csvs[0], newline="", encoding="utf-8") as f:
-        assert len(list(csv.DictReader(f))) == 2 * len(compare_algorithms.ALGORITHMS)
+        assert len(list(csv.DictReader(f))) == len(compare_algorithms.ALGORITHMS)
     params = json.loads(csvs[0].with_suffix(".json").read_text(encoding="utf-8"))
     assert params["cli"]["num_festivaliers"] == 10
     assert params["config"]["duration_s"] == 30.0
+    assert params["config"]["beacons"]["count"] == 0
     assert params["config"]["cooldown_s"] == params["config"]["traffic"]["message_ttl_s"]
 
 
@@ -65,7 +74,7 @@ def test_run_matrix_with_poi_mobility_and_replies():
     rows = compare_algorithms.run_matrix(
         seeds=(1,), duration_s=60.0, num_festivaliers=10, beacon_count=2, cooldown_s=0.0, mobility="poi", reply_probability=0.5
     )
-    assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
+    assert len(rows) == len(compare_algorithms.ALGORITHMS)
 
 
 def test_build_config_wires_followups_and_fix_failures():
@@ -148,18 +157,19 @@ def test_main_with_several_seeds_writes_paired_runs_and_a_summary(tmp_path):
     with open(runs_csv, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert sorted({row["seed"] for row in rows}) == ["1", "2"]
-    assert len(rows) == 2 * 2 * len(compare_algorithms.ALGORITHMS)
+    assert len(rows) == 2 * len(compare_algorithms.ALGORITHMS)
     (summary_csv,) = tmp_path.glob("*_comparaison_resume.csv")
     with open(summary_csv, encoding="utf-8") as f:
         summary = list(csv.DictReader(f))
-    assert len(summary) == 2 * len(compare_algorithms.ALGORITHMS)
+    assert len(summary) == len(compare_algorithms.ALGORITHMS)
     assert {row["runs"] for row in summary} == {"2"}
 
 
 def test_algorithms_option_runs_only_the_chosen_subset(tmp_path):
     compare_algorithms.main(
         ["--algorithms", "epidemic", "tide", "--seeds", "1", "--duration", "30", "--cooldown", "0",
-         "--num-festivaliers", "10", "--beacon-count", "2", "--workers", "1", "--archive-dir", str(tmp_path)]
+         "--num-festivaliers", "10", "--beacon-count", "2", "--with-beacons", "--workers", "1",
+         "--archive-dir", str(tmp_path)]
     )
     (runs_csv,) = tmp_path.glob("*_comparaison.csv")
     with open(runs_csv, encoding="utf-8") as f:

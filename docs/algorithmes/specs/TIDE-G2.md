@@ -546,7 +546,7 @@ done
 Deux remarques sur le script :
 
 - `ALGORITHMS` contient tous les algorithmes : pour cette campagne, le restreindre à `tide`, `tide_g` et `tide_g2` divise le temps par quatre ;
-- la matrice lance chaque algorithme avec 0 et `--beacon-count` bornes. Seules les lignes à 0 borne sont comparables au §5. Avec `--beacon-count 0`, chaque algorithme tournerait deux fois à l'identique.
+- la matrice lance chaque algorithme sans borne, comme au §5 ; `--with-beacons` ajoute des lignes avec `--beacon-count` bornes, qui n'y sont pas comparables.
 
 Ablations, sur la densité où TIDE-G2 se distingue le plus :
 

@@ -189,6 +189,7 @@ def run_matrix(
     duration_s: float = 3600.0,
     num_festivaliers: int = 200,
     beacon_count: int = 6,
+    with_beacons: bool = False,
     workers: int = 1,
     show_progress: bool = False,
     csv_path: Optional[str] = None,
@@ -208,7 +209,8 @@ def run_matrix(
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
-    tasks = [(algo_name, count, seed) for seed in seeds for algo_name in names for count in (0, beacon_count)]
+    counts = (0, beacon_count) if with_beacons else (0,)
+    tasks = [(algo_name, count, seed) for seed in seeds for algo_name in names for count in counts]
     results: Dict[int, dict] = {}
     matrix_start = time.monotonic()
     manager = multiprocessing.Manager() if show_progress else None
@@ -339,7 +341,7 @@ def run_config_kwargs(args: argparse.Namespace, error: Callable[[str], None]) ->
 
 
 def main(argv: Optional[List[str]] = None) -> None:
-    parser = argparse.ArgumentParser(description="Compare les algos de routing avec/sans bornes")
+    parser = argparse.ArgumentParser(description="Compare les algos de routing (sans bornes, ou avec et sans)")
     parser.add_argument(
         "--seeds", "--seed", dest="seeds", type=int, nargs="+", default=[42],
         help="Une ou plusieurs seeds ; avec plusieurs, un resume moyenne +/- IC 95 %% par algo x bornes",
@@ -348,7 +350,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument(
         "--beacon-count", type=int, default=6,
-        help="Nombre de bornes des runs \"avec bornes\" (defaut 6) ; chaque algo tourne aussi sans",
+        help="Nombre de bornes des runs \"avec bornes\" (defaut 6), lances seulement avec --with-beacons",
+    )
+    parser.add_argument(
+        "--with-beacons", action="store_true",
+        help="Lance chaque algo avec --beacon-count bornes en plus du run sans bornes (defaut : sans bornes seulement)",
     )
     parser.add_argument(
         "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
@@ -387,11 +393,12 @@ def main(argv: Optional[List[str]] = None) -> None:
             csv_path = Path(args.csv)
             size_args.csv = str(csv_path.with_name(f"{csv_path.stem}_{size}{csv_path.suffix}"))
         resolve_cli_args(size_args, 200, parser.error)
-        # Beacon count varies per row (0 or --beacon-count); the archived config
-        # is the "with beacons" one, the CSV's `beacons` column says which applied.
+        # With --with-beacons the beacon count varies per row (0 or --beacon-count);
+        # the archived config is the "with beacons" one, the CSV's `beacons` column
+        # says which applied.
         try:
             config = build_config(
-                size_args.beacon_count, size_args.seeds[0], size_args.duration, size_args.num_festivaliers,
+                size_args.beacon_count if size_args.with_beacons else 0, size_args.seeds[0], size_args.duration, size_args.num_festivaliers,
                 size_args.mobility, size_args.reply_probability, size=size, **run_kwargs,
             )
         except ValueError as error:
@@ -412,6 +419,7 @@ def run_comparison(args: argparse.Namespace, config: SimulationConfig, run_kwarg
         duration_s=args.duration,
         num_festivaliers=args.num_festivaliers,
         beacon_count=args.beacon_count,
+        with_beacons=args.with_beacons,
         workers=args.workers,
         show_progress=True,
         csv_path=archive_csv,

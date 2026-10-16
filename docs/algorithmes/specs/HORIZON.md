@@ -85,7 +85,7 @@ Numéros de séquence DSDV, canaux d'advertising séparés (l'annonce partage le
 
 ## 8. Résultats
 
-`scripts/compare_algorithms.py --algorithms fresh_spray horizon --seeds 1 2 --duration 1800 --num-festivaliers 300 --beacon-count 6 --mobility poi --reply-probability 0.5` (moyennes sur 2 seeds, annonces passées par la radio ; archive `archives/2026-10-15_09-20-58_comparaison.csv`) :
+`scripts/compare_algorithms.py --algorithms fresh_spray horizon --seeds 1 2 --duration 1800 --num-festivaliers 300 --with-beacons --beacon-count 6 --mobility poi --reply-probability 0.5` (moyennes sur 2 seeds, annonces passées par la radio ; archive `archives/2026-10-15_09-20-58_comparaison.csv`) :
 
 | | Livraison | Latence | p95 | Sauts | Overhead | Énergie mesh | Paquets perdus |
 |---|---|---|---|---|---|---|---|
