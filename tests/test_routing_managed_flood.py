@@ -273,7 +273,7 @@ def test_explicit_ack_energy_wins_over_the_simulation_one():
     explicit = EnergyConfig(tx_cost_mah_per_event=5.0)
     algo = ManagedFloodRouting(energy=explicit)
     algo.on_energy_model(EnergyModel(EnergyConfig(tx_cost_mah_per_event=1.0)))
-    assert algo._ack_tx_mah == pytest.approx(EnergyModel(explicit).cost_of_tx(16))
+    assert algo._ack_tx_mah == pytest.approx(EnergyModel(explicit).cost_of_tx(210))
 
 
 def test_pdus_use_the_advertising_bearer_without_waiting_for_a_connection():

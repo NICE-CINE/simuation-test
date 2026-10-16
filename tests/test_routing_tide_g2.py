@@ -54,7 +54,7 @@ def test_ack_hint_reaches_the_source_with_the_engines_ack():
     src.learn_ack(msg.msg_id, msg.creation_time + msg.ttl_s)
     algo.on_tick(501.0, {1: [relay], 2: [src], 99: []})
     assert src.known_positions[99] == (Position(500.0, 0.0), 1.0)
-    assert algo.ack_size_bytes == 20
+    assert algo.ack_size_bytes == 222
     assert algo.hint_stats["ack_hints_sent"] == algo.hint_stats["ack_hints_received"] == 1
 
 
@@ -170,13 +170,14 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     config = SimulationConfig(
         duration_s=600.0, num_festivaliers=60, random_seed=3,
         area=AreaConfig(width_m=120.0, height_m=120.0),
-        traffic=TrafficConfig(messages_per_hour_range=(4.0, 8.0), reply_probability=0.9),
+        traffic=TrafficConfig(messages_per_hour_range=(4.0, 8.0), reply_probability=0.9, payload_size_range_bytes=(20, 512)),
         # Friends = group: these values predate outside friends.
         social=SocialConfig(outside_friends_range=(0, 0)),
-        # ... and the field-bench connection setup.
+        # ... and the field-bench connection setup, message and ack sizes.
         ble=BleConfig(connection_setup_s=7.0),
     )
     algo = TideGRouting(seed=3)
+    algo.ack_size_bytes = 8
     report = run_simulation(config, routing_algorithm=algo)
     created = report.messages_created + report.replies_created
     delivered = report.messages_delivered + report.replies_delivered

@@ -28,7 +28,9 @@ class ManagedFloodRouting(RoutingAlgorithm):
     # the radio (control_broadcasts, ack_size_bytes each), so they take
     # airtime and can be lost. Only the destination's ack to the holder that
     # just delivered rides on their connection, charged here. PDUs use the
-    # advertising bearer: no connections, as in Bluetooth Mesh.
+    # advertising bearer: no connections, as in Bluetooth Mesh. Acks are
+    # billed at the Nice app's size (~210 bytes), not Bluetooth Mesh's: the
+    # comparison picks an algorithm for that app, whatever its origin.
     advertising_bearer = True
 
     def __init__(
@@ -39,7 +41,7 @@ class ManagedFloodRouting(RoutingAlgorithm):
         acknowledged: bool = True,
         ack_timeout_s: float = 30.0,
         max_source_retransmissions: int = 2,
-        ack_size_bytes: int = 16,
+        ack_size_bytes: int = 210,
         energy: Optional[EnergyConfig] = None,
     ) -> None:
         if ttl < 0:

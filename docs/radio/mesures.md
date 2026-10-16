@@ -167,3 +167,38 @@ connexion dès que la paire sort de portée, et le message reste chez
 l'émetteur, libre de passer par un autre voisin. Dans l'app, un lien
 fantôme peut au contraire retenir des messages et occuper une place de
 connexion.
+
+## 5. Taille des messages sur le fil
+
+Calculée depuis le code de l'app (pas mesurée à l'antenne) :
+
+| Contenu | Taille sur le fil |
+| --- | --- |
+| « ok » | ~1 000 o |
+| texte typique (52 o) | ~1 650 o |
+| texte de 200 o | ~3 800 o |
+| accusé de réception | ~210 o |
+
+La cause est un double JSON où les octets sont écrits comme des listes de
+nombres, plus le chiffrement (X25519 et XChaCha20-Poly1305, ~72 o). L'en-tête
+propre à Nearby n'est pas compté. Un format binaire ou base64 diviserait ces
+tailles par ~4, mais casserait la compatibilité entre deux versions de
+l'app : décision en attente.
+
+| Paramètre | Ancienne valeur | Nouvelle valeur | Dérivation | Statut |
+| --- | --- | --- | --- | --- |
+| `TrafficConfig.payload_size_range_bytes` | 20 à 512 o (le texte) | **1 000 à 3 800 o** | de « ok » à un texte de 200 o, tirage uniforme (moyenne 2 400 o, un peu au-dessus du message typique de 1 650 o) | **calculé** |
+| `RoutingAlgorithm.ack_size_bytes` | 8 o | **210 o** | un accusé de réception de l'app | **calculé** |
+| `ack_size_bytes` de `tide_g2` et `geo_spray_focus` | 20 o | **222 o** | 210 + 12 o de position | **calculé** pour 210, position **estimée** |
+| `ManagedFloodRouting(ack_size_bytes=...)` (`managed_flood`, `bitchat`) | 16 o | **210 o** | même format que les autres : on compare des algos pour l'app Nice, quelle que soit leur origine (Bluetooth Mesh, bitchat) | **calculé** |
+| `BleConfig.summary_id_bytes` | 4 o | 4 o | — | **estimé**, inchangé |
+
+**Non changé** : le PURGE_SYNC de `gossip_a` (Bloom de 128 o par
+connexion), les annonces de `bitchat` et les beacons d'`eco_sf` (64 o)
+suivent leur propre format et restent estimés. `managed_flood` envoie ses
+accusés en diffusion, sans connexion, ce que l'app Nice ne fait pas : il
+reste un « et si » sur un autre transport.
+
+**Format allégé** (÷4) : `--set traffic.payload_size_range_bytes=250,950`.
+Les accusés n'ont pas de raccourci, il faut changer `ack_size_bytes` dans le
+code.

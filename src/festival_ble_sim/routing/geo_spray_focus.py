@@ -81,8 +81,9 @@ class GeoSprayFocusRouting(RoutingAlgorithm):
         self._gps_current_ma = gps_current_ma
         self._gps_policy = gps_policy
         self._ack_hint = ack_hint
+        # The destination's position rides on its delivery ack (+12 bytes).
         if ack_hint:
-            self.ack_size_bytes = 20
+            self.ack_size_bytes = 222
         self._refresh_hint = refresh_hint
 
         self._nodes: Dict[int, "BaseNode"] = {}

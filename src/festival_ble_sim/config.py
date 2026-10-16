@@ -177,7 +177,12 @@ class TrafficConfig:
     # Mean 2 msg/h: most people text a few times per hour ("t'es ou ?"),
     # some never do.
     messages_per_hour_range: Tuple[float, float] = (0.0, 4.0)
-    payload_size_range_bytes: Tuple[int, int] = (20, 512)
+    # Size on the wire, not the text: the Nice app's double JSON (bytes as
+    # number lists) plus encryption turns "ok" into ~1 000 bytes and a
+    # 200-byte text into ~3 800 (a typical 52-byte text: ~1 650), computed
+    # from the app's code, docs/radio/mesures.md. A /4 lighter format is
+    # pending.
+    payload_size_range_bytes: Tuple[int, int] = (1000, 3800)
     message_ttl_s: float = 1800.0
     # Bluetooth Mesh network-layer TTL, in hops rather than seconds: caps
     # how many times a message can be relayed regardless of how long it's

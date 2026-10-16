@@ -65,7 +65,7 @@ flowchart TD
 - Herite du cout GPS de TIDE-G : energie x2 a x2,3 par rapport a TIDE pour
   1 a 2 points de livraison.
 - Gain dependant de taux de reponses et de relances inconnus en festival.
-- L'ACK (20 octets avec la position) passe par le moteur : la source ne
+- L'ACK (222 octets : les 210 d'un accuse de l'app + 12 de position) passe par le moteur : la source ne
   recoit la position que si l'ACK l'atteint.
 - Pas encore mesure a la densite de reference (~11 400 personnes/km2).
 

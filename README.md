@@ -271,7 +271,8 @@ simulation, son propre debit de messages dans
 2 en moyenne ; un debit de 0 = n'envoie jamais), puis envoie selon un
 processus de Poisson a ce debit. La charge totale du reseau suit donc
 naturellement `num_festivaliers`, sans reglage a faire par scenario.
-Chaque message fait 20 a 512 octets, vit 1 800 s (`message_ttl_s`) et
+Chaque message fait 1 000 a 3 800 octets sur le fil (de « ok » a un texte
+de 200 caracteres dans le format actuel de l'app, `docs/radio/mesures.md`), vit 1 800 s (`message_ttl_s`) et
 au plus 8 sauts de relais (`message_ttl_hops`).
 
 **Destinataire : un ami.** On n'ecrit qu'a ses amis
@@ -470,7 +471,8 @@ la portee radio :
   etablie et avant les donnees, chaque cote envoie son vecteur de resume
   (4 octets par message pas encore annonce sur cette connexion), les ACK
   que l'autre demande (messages qu'il annonce et dont celui-ci sait qu'ils
-  sont livres, 8 octets chacun) et, une fois par connexion, les tables de
+  sont livres, 210 octets chacun comme un accuse de reception de l'app ;
+  222 avec la position pour `tide_g2` et `geo_spray_focus`) et, une fois par connexion, les tables de
   l'algorithme (dates de rencontre, predictibilites...). Tout cela coute du
   temps d'antenne, des retransmissions et de l'energie comme les donnees.
   Le destinataire emet l'ACK a la livraison ; un telephone qui l'apprend
@@ -646,7 +648,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   de stockage-transport cote source) et, sans ACK apres `ack_timeout_s`,
   le reemet avec un nouveau SEQ, au plus `max_source_retransmissions`
   fois. Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes`
-  (defaut 16 o) mais pas de bande passante (le budget de lien du moteur ne
+  (defaut 210 o, la taille d'un accuse de l'app Nice, pas celle de
+  Bluetooth Mesh : l'algo est compare pour cette app) mais pas de bande passante (le budget de lien du moteur ne
   le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
 - `bitchat` (`routing/bitchat.py`) — messages prives de bitchat (code iOS
