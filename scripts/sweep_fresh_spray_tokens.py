@@ -7,7 +7,9 @@ import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from typing import Any, Dict, List, MutableMapping, Optional, Tuple
-from compare_algorithms import REPORT_FIELDS, STATUS_REFRESH_S, build_config, format_duration, render_status
+from compare_algorithms import (
+    REPORT_FIELDS, STATUS_REFRESH_S, add_run_arguments, build_config, format_duration, render_status, run_config_kwargs,
+)
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import SITE_PRESETS, resolve_cli_args
@@ -38,10 +40,11 @@ def _run_one(
     mobility: str,
     reply_probability: float,
     size: Optional[str] = None,
+    config_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     progress = _worker_progress
     config = build_config(
-        beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, size=size
+        beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability, size=size, **(config_kwargs or {})
     )
     total_s = config.total_s
     label = run_label(tokens, seed)
@@ -78,6 +81,7 @@ def run_sweep(
     workers: int = 1,
     show_progress: bool = False,
     csv_path: Optional[str] = None,
+    config_kwargs: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     tasks: List[Tuple[int, int]] = [(tokens, seed) for tokens in tokens_list for seed in seeds]
     results: Dict[int, Dict[str, Any]] = {}
@@ -88,7 +92,8 @@ def run_sweep(
     try:
         futures: Dict[Future, int] = {
             executor.submit(
-                _run_one, tokens, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability, size
+                _run_one, tokens, seed, duration_s, num_festivaliers, beacon_count, mobility, reply_probability, size,
+                config_kwargs,
             ): index
             for index, (tokens, seed) in enumerate(tasks)
         }
@@ -173,28 +178,30 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     parser.add_argument("--workers", type=int, default=2, help="Nombre de simulations lancees en parallele (defaut 2)")
     parser.add_argument("--archive-dir", default=DEFAULT_ARCHIVE_DIR, help="Dossier d'archive du CSV et de son .json (defaut archives)")
+    add_run_arguments(parser)
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
     if min(args.tokens) < 1:
         parser.error("--tokens doit etre >= 1")
     resolve_cli_args(args, 200, parser.error)
+    run_kwargs = run_config_kwargs(args, parser.error)
+    try:
+        config = build_config(
+            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility,
+            args.reply_probability, size=args.size, **run_kwargs,
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     stem = archive_stem(args.archive_dir, "sweep_fresh_spray_tokens")
     archive_csv = str(stem.with_suffix(".csv"))
     # initial_tokens isn't part of SimulationConfig: it lives in the CLI args.
-    write_params(
-        stem.with_suffix(".json"),
-        vars(args),
-        build_config(
-            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility,
-            args.reply_probability, size=args.size,
-        ),
-    )
+    write_params(stem.with_suffix(".json"), vars(args), config)
     rows = run_sweep(
         args.tokens, args.seeds, args.duration, args.num_festivaliers, args.beacon_count,
         mobility=args.mobility, reply_probability=args.reply_probability, size=args.size,
-        workers=args.workers, show_progress=True, csv_path=archive_csv,
+        workers=args.workers, show_progress=True, csv_path=archive_csv, config_kwargs=run_kwargs,
     )
     print_summary(summarize(rows))
     print(f"\nArchive ecrite dans {archive_csv} / .json")

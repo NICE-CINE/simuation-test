@@ -8,10 +8,11 @@ import statistics
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
-from typing import Any, Dict, List, MutableMapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, MutableMapping, Optional, Sequence, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
 from festival_ble_sim.metrics import SimulationReport
+from festival_ble_sim.overrides import add_override_arguments, apply_cli_overrides, collect_overrides, override_paths
 from festival_ble_sim.presets import MOBILITY_MODELS, mobility_factory
 from festival_ble_sim.presets import (
     DEFAULT_WARMUP_S, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_schedule_argument,
@@ -98,6 +99,7 @@ def build_config(
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
     schedule: bool = False,
+    overrides: Sequence[str] = (),
 ) -> SimulationConfig:
     num_festivaliers, area, mobility_config = build_site(size, num_festivaliers, mobility)
     traffic = TrafficConfig(
@@ -105,7 +107,7 @@ def build_config(
         followup_probability=followup_probability,
         lost_messages_per_hour=0.0 if no_lost_messages else TrafficConfig.lost_messages_per_hour,
     )
-    return SimulationConfig(
+    config = SimulationConfig(
         duration_s=duration_s,
         # Default: the message TTL, so every counted message gets its full lifetime.
         cooldown_s=cooldown_s if cooldown_s is not None else traffic.message_ttl_s,
@@ -120,6 +122,7 @@ def build_config(
         energy=energy_config(random_charge),
         social=social_config(no_outside_friends),
     )
+    return apply_cli_overrides(config, overrides, cooldown_s)
 
 
 _worker_progress: Optional[MutableMapping[str, float]] = None
@@ -150,12 +153,13 @@ def _run_one(
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
     schedule: bool = False,
+    overrides: Sequence[str] = (),
 ) -> Tuple[dict, float]:
     progress = _worker_progress
     config = build_config(
         beacon_count, seed, duration_s, num_festivaliers, mobility, reply_probability,
         followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
-        no_lost_messages, schedule,
+        no_lost_messages, schedule, overrides,
     )
     total_s = config.total_s
     label = run_label(algo_name, beacon_count, seed)
@@ -199,6 +203,7 @@ def run_matrix(
     no_outside_friends: bool = False,
     no_lost_messages: bool = False,
     schedule: bool = False,
+    overrides: Sequence[str] = (),
 ) -> List[dict]:
     names = list(ALGORITHMS) if algorithms is None else algorithms
     # Every algorithm runs on the same seeds, so runs are paired by seed.
@@ -213,7 +218,7 @@ def run_matrix(
             executor.submit(
                 _run_one, algo_name, count, seed, duration_s, num_festivaliers, mobility, reply_probability,
                 followup_probability, gps_fix_failure, size, cooldown_s, random_charge, warmup_s, no_outside_friends,
-                no_lost_messages, schedule,
+                no_lost_messages, schedule, tuple(overrides),
             ): index
             for index, (algo_name, count, seed) in enumerate(tasks)
         }
@@ -291,6 +296,47 @@ def write_csv(rows: List[dict], path: str, headers: Optional[List[str]] = None) 
         writer.writerows(rows)
 
 
+def add_run_arguments(parser: argparse.ArgumentParser) -> None:
+    # Shared by this script and the two sweeps, so they accept the same runs.
+    parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
+    parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
+    parser.add_argument(
+        "--followup-probability", type=float, default=0.0,
+        help="Probabilite qu'un message spontane soit suivi d'une relance au meme destinataire (0 = pas de rafales)",
+    )
+    parser.add_argument(
+        "--gps-fix-failure", type=float, default=0.0,
+        help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
+    )
+    add_random_charge_argument(parser)
+    add_social_arguments(parser)
+    add_schedule_argument(parser)
+    parser.add_argument(
+        "--churn", action="store_true",
+        help="Arrivees/departs echelonnes des festivaliers (fenetres : --set churn.arrival_window_s=LO,HI "
+        "et churn.session_duration_range_s=LO,HI)",
+    )
+    add_override_arguments(parser)
+
+
+def run_config_kwargs(args: argparse.Namespace, error: Callable[[str], None]) -> Dict[str, Any]:
+    # build_config's keyword arguments for the options of add_run_arguments.
+    overrides = (["churn.enabled=True"] if args.churn else []) + collect_overrides(args)
+    if "beacons.count" in override_paths(overrides):
+        error("--set beacons.count : le nombre de bornes se regle avec --beacon-count")
+    return dict(
+        followup_probability=args.followup_probability,
+        gps_fix_failure=args.gps_fix_failure,
+        cooldown_s=args.cooldown,
+        random_charge=args.random_charge,
+        warmup_s=args.warmup,
+        no_outside_friends=args.no_outside_friends,
+        no_lost_messages=args.no_lost_messages,
+        schedule=args.schedule,
+        overrides=tuple(overrides),
+    )
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(description="Compare les algos de routing avec/sans bornes")
     parser.add_argument(
@@ -298,8 +344,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Une ou plusieurs seeds ; avec plusieurs, un resume moyenne +/- IC 95 %% par algo x bornes",
     )
     parser.add_argument("--duration", type=float, default=3600.0, help="Duree mesuree de chaque run en secondes (defaut 3600)")
-    parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
-    parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
     parser.add_argument("--num-festivaliers", type=int, default=None, help="200 par defaut, fixe par --size")
     parser.add_argument(
         "--beacon-count", type=int, default=6,
@@ -316,17 +360,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--reply-probability", type=float, default=0.0,
         help="Probabilite qu'un message livre recoive une reponse du destinataire (0 = pas de reponses)",
     )
-    parser.add_argument(
-        "--followup-probability", type=float, default=0.0,
-        help="Probabilite qu'un message spontane soit suivi d'une relance au meme destinataire (0 = pas de rafales)",
-    )
-    parser.add_argument(
-        "--gps-fix-failure", type=float, default=0.0,
-        help="Probabilite qu'un fix GPS echoue (0 = fix toujours reussi)",
-    )
-    add_random_charge_argument(parser)
-    add_social_arguments(parser)
-    add_schedule_argument(parser)
+    add_run_arguments(parser)
     parser.add_argument(
         "--algorithms", nargs="+", choices=sorted(ALGORITHMS), default=None,
         help="Sous-ensemble d'algos a lancer (defaut : tous)",
@@ -341,20 +375,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
     resolve_cli_args(args, 200, parser.error)
+    run_kwargs = run_config_kwargs(args, parser.error)
+    # Beacon count varies per row (0 or --beacon-count); the archived config
+    # is the "with beacons" one, the CSV's `beacons` column says which applied.
+    try:
+        config = build_config(
+            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
+            size=args.size, **run_kwargs,
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     stem = archive_stem(args.archive_dir, "comparaison")
     archive_csv = str(stem.with_suffix(".csv"))
-    # Beacon count varies per row (0 or --beacon-count); the archived config
-    # is the "with beacons" one, the CSV's `beacons` column says which applied.
-    write_params(
-        stem.with_suffix(".json"),
-        vars(args),
-        build_config(
-            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            args.followup_probability, args.gps_fix_failure, args.size, args.cooldown, args.random_charge,
-            args.warmup, args.no_outside_friends, args.no_lost_messages, args.schedule,
-        ),
-    )
+    write_params(stem.with_suffix(".json"), vars(args), config)
     rows = run_matrix(
         seeds=args.seeds,
         duration_s=args.duration,
@@ -365,16 +399,9 @@ def main(argv: Optional[List[str]] = None) -> None:
         csv_path=archive_csv,
         mobility=args.mobility,
         reply_probability=args.reply_probability,
-        followup_probability=args.followup_probability,
-        gps_fix_failure=args.gps_fix_failure,
         size=args.size,
-        cooldown_s=args.cooldown,
         algorithms=args.algorithms,
-        random_charge=args.random_charge,
-        warmup_s=args.warmup,
-        no_outside_friends=args.no_outside_friends,
-        no_lost_messages=args.no_lost_messages,
-        schedule=args.schedule,
+        **run_kwargs,
     )
     write_csv(rows, archive_csv)
     if args.csv:

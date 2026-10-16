@@ -15,6 +15,7 @@ from festival_ble_sim.config import (
     TrafficConfig,
 )
 from festival_ble_sim.metrics import format_report
+from festival_ble_sim.overrides import add_override_arguments, apply_cli_overrides, collect_overrides
 from festival_ble_sim.presets import (
     DEFAULT_WARMUP_S, MOBILITY_MODELS, SITE_PRESETS, WARMUP_HELP, add_random_charge_argument, add_schedule_argument,
     add_social_arguments, build_site, energy_config, mobility_factory, resolve_cli_args, social_config, with_schedule,
@@ -112,6 +113,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     add_random_charge_argument(parser)
     add_social_arguments(parser)
     add_schedule_argument(parser)
+    add_override_arguments(parser)
     parser.add_argument("--churn", action="store_true", help="Active les arrivees/departs echelonnes des festivaliers")
     parser.add_argument(
         "--churn-arrival-window-s", type=float, nargs=2, default=(0.0, 1800.0), metavar=("LO", "HI"),
@@ -137,7 +139,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         followup_probability=args.followup_probability,
         lost_messages_per_hour=0.0 if args.no_lost_messages else TrafficConfig.lost_messages_per_hour,
     )
-    return SimulationConfig(
+    config = SimulationConfig(
         duration_s=args.duration,
         cooldown_s=args.cooldown if args.cooldown is not None else traffic.message_ttl_s,
         warmup_s=args.warmup if args.warmup is not None else DEFAULT_WARMUP_S,
@@ -152,6 +154,7 @@ def build_config(args: argparse.Namespace) -> SimulationConfig:
         energy=energy_config(args.random_charge),
         social=social_config(args.no_outside_friends),
     )
+    return apply_cli_overrides(config, collect_overrides(args), args.cooldown)
 
 
 def _raise_value_error(message: str) -> None:
@@ -180,7 +183,10 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     resolve_cli_args(args, DEFAULT_NUM_FESTIVALIERS, parser.error)
-    config = build_config(args)
+    try:
+        config = build_config(args)
+    except ValueError as error:
+        parser.error(str(error))
     routing_algorithm = build_routing(args.routing, args.seed, args.spray_initial_copies)
     factory = mobility_factory(args.mobility, config.mobility)
     history = None

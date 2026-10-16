@@ -33,3 +33,12 @@ def test_main_rejects_size_with_a_different_num_festivaliers(tmp_path, capsys):
         sweep.main(["--size", "small", "--num-festivaliers", "10", "--archive-dir", str(tmp_path)])
     assert list(tmp_path.iterdir()) == []
     assert "--size" in capsys.readouterr().err
+
+
+def test_main_refuses_a_bad_override_before_archiving(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        sweep.main(["--set", "beacons.count=3", "--archive-dir", str(tmp_path)])
+    with pytest.raises(SystemExit):
+        sweep.main(["--set", "gps.noise=0", "--archive-dir", str(tmp_path)])
+    assert list(tmp_path.iterdir()) == []
+    assert "n'existe pas" in capsys.readouterr().err
