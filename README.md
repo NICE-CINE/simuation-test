@@ -64,6 +64,11 @@ CLI et `SimulationConfig` complete, pour pouvoir rejouer le run), ex.
     python main.py --routing epidemic --beacons 6 --duration 3600 \
         --num-festivaliers 200 --seed 42
 
+`python main.py --help` liste les options ci-dessous (avec leurs valeurs par
+defaut) et les autres commandes ; `python main.py --help-all` affiche en plus
+l'aide complete de chaque script (`compare_algorithms.py` et les deux
+balayages).
+
 Options disponibles :
 - `--routing` : `epidemic` (defaut), `spray_wait`, `prophet`,
   `beacon_priority`, `dasfv`, `gossip_a`, `bubble_f`, `managed_flood`, `tide`, `tide_g`, `tide_g2`, `fresh_spray`, `geo_spray_focus`, `eco_sf`, `band_fanout`, `bitchat` ou `horizon` (un seul choix a la fois, pas de `|`).

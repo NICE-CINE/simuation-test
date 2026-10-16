@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,11 +28,38 @@ from festival_ble_sim.viz.replay import render_replay_html
 DEFAULT_NUM_FESTIVALIERS = 4000
 PROGRESS_BAR_WIDTH = 30
 STATUS_REFRESH_S = 0.5
+OTHER_COMMANDS = (
+    ("scripts/compare_algorithms.py", "tous les algos x {avec, sans bornes}, memes seeds, en parallele (CSV + resume)"),
+    ("scripts/sweep_fresh_spray_tokens.py", "balaye initial_tokens de fresh_spray sur plusieurs seeds"),
+    ("scripts/sweep_band_fanout.py", "compare des variantes de band_fanout sur plusieurs seeds"),
+)
+EPILOG = "Autres commandes (chacune a son --help ; --help-all les affiche toutes) :\n" + "\n".join(
+    f"  python {script}\n      {what}" for script, what in OTHER_COMMANDS
+) + "\n\nTests : pytest ; lint : ruff check ."
+
+
+class _HelpAll(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.print_help()
+        for script, _ in OTHER_COMMANDS:
+            print(f"\n{'=' * 70}\npython {script} --help\n{'=' * 70}", flush=True)
+            subprocess.run([sys.executable, str(Path(__file__).parent / script), "--help"], check=False)
+        parser.exit()
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Simulateur de messagerie BLE mesh en festival")
-    parser.add_argument("--routing", choices=sorted(ROUTING_NAMES), default="epidemic")
+    parser = argparse.ArgumentParser(
+        description="Simulateur de messagerie BLE mesh en festival",
+        epilog=EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--help-all", action=_HelpAll, nargs=0, help="Affiche cette aide puis celle de toutes les autres commandes",
+    )
+    parser.add_argument(
+        "--routing", choices=sorted(ROUTING_NAMES), default="epidemic",
+        help="Algorithme de routage (defaut epidemic ; voir docs/algorithmes/)",
+    )
     parser.add_argument(
         "--mobility", choices=sorted(MOBILITY_MODELS), default=None,
         help="random_waypoint par defaut, group avec --size",
@@ -41,12 +69,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Preset de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la surface)",
     )
     parser.add_argument("--beacons", type=int, default=0, help="Nombre de bornes (0 = desactivees)")
-    parser.add_argument("--beacon-placement", choices=["grid", "manual"], default="grid")
-    parser.add_argument("--duration", type=float, default=3600.0, help="Duree de la simulation en secondes")
+    parser.add_argument(
+        "--beacon-placement", choices=["grid", "manual"], default="grid",
+        help="Placement des bornes : grille reguliere (defaut) ou coordonnees fixees dans la config",
+    )
+    parser.add_argument("--duration", type=float, default=3600.0, help="Duree mesuree de la simulation en secondes (defaut 3600)")
     parser.add_argument("--cooldown", type=float, default=None, help="Secondes simulees en plus apres --duration pour laisser arriver les messages crees pendant --duration (seuls eux sont comptes). Defaut : le TTL des messages (1800 s) ; 0 = coupure seche")
     parser.add_argument("--warmup", type=float, default=None, help=WARMUP_HELP)
     parser.add_argument("--num-festivaliers", type=int, default=None, help="4000 par defaut, fixe par --size")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=42, help="Graine aleatoire du run et de l'algorithme (defaut 42)")
     parser.add_argument("--output", default=None, help="Copie optionnelle du rapport, en plus de l'archive")
     parser.add_argument(
         "--archive-dir", default=DEFAULT_ARCHIVE_DIR,

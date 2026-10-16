@@ -10,6 +10,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
+# Every option of every command: python main.py --help-all (main.py --help lists the other commands)
+
 # Run the simulator (prints the report and archives it, see below)
 python main.py
 
