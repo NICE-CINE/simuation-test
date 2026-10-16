@@ -22,8 +22,10 @@ class GossipARouting(RoutingAlgorithm):
     # positives, counter-based suppression, epidemic purge tokens, per-session
     # byte/bundle budgets and "most replicated first" eviction. Its own purge
     # tokens (not the engine's acks) keep the spec's epidemic PURGE_SYNC,
-    # billed as its Bloom (1024 bits) once per connection.
-    purge_sync_bytes = 128
+    # billed once per connection as its Bloom (1024 bits = 128 bytes) in the
+    # Nice app's wire format, like the acks it replaces: ~210 + 14 bytes per
+    # content byte, the slope of the app's message sizes (docs/radio/mesures.md).
+    purge_sync_bytes = 2000
 
     def __init__(
         self,
@@ -36,7 +38,10 @@ class GossipARouting(RoutingAlgorithm):
         density_window_s: float = 10.0,
         density_ewma_alpha: float = 0.3,
         session_cooldown_s: float = 60.0,
-        session_budget_bytes: Optional[int] = 32 * 1024,
+        # The spec's 32 KiB assumed small bundles; at the Nice app's wire
+        # sizes (~2 400 bytes) it would allow ~13 per minute, so 256 KiB keeps
+        # the 50-bundle cap the binding limit as before (docs/radio/mesures.md).
+        session_budget_bytes: Optional[int] = 256 * 1024,
         max_bundles_per_peer_per_session: Optional[int] = 50,
         summary_bloom_bits: int = 4096,
         summary_bloom_hashes: int = 4,

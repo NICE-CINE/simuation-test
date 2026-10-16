@@ -19,9 +19,9 @@ stockage-transport :
   nouveau SEQ (nouveau PDU pour les caches), au plus
   `max_source_retransmissions` fois.
 
-Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes` (defaut 210 o, la taille d'un
-accuse de reception de l'app Nice et non celle de Bluetooth Mesh, puisque
-l'algo est compare pour cette app ;
+Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes` (defaut 16 o : les ACK inondes
+partent en diffusion, en paquets binaires, et non au format JSON de l'app,
+voir `docs/radio/mesures.md` ;
 cout calcule avec `EnergyConfig` par defaut ou celui passe en `energy`).
 
 Non modelise : chiffrement, IV index, relais friend/low-power, temps

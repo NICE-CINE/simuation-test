@@ -190,14 +190,45 @@ l'app : décision en attente.
 | `TrafficConfig.payload_size_range_bytes` | 20 à 512 o (le texte) | **1 000 à 3 800 o** | de « ok » à un texte de 200 o, tirage uniforme (moyenne 2 400 o, un peu au-dessus du message typique de 1 650 o) | **calculé** |
 | `RoutingAlgorithm.ack_size_bytes` | 8 o | **210 o** | un accusé de réception de l'app | **calculé** |
 | `ack_size_bytes` de `tide_g2` et `geo_spray_focus` | 20 o | **222 o** | 210 + 12 o de position | **calculé** pour 210, position **estimée** |
-| `ManagedFloodRouting(ack_size_bytes=...)` (`managed_flood`, `bitchat`) | 16 o | **210 o** | même format que les autres : on compare des algos pour l'app Nice, quelle que soit leur origine (Bluetooth Mesh, bitchat) | **calculé** |
+| `GossipARouting.purge_sync_bytes` | 128 o | **2 000 o** | son Bloom de 128 o écrit au format de l'app : 210 + 14 o par octet de contenu (la pente des tailles de messages : (3 800 − 1 000) / 198 ≈ 14) | **extrapolé** depuis les tailles calculées |
+| `ManagedFloodRouting(ack_size_bytes=...)` (`managed_flood`, `bitchat`) | 16 o | 16 o | accusés inondés en diffusion (`control_broadcasts`) : paquets binaires, pas le JSON de l'app | **estimé**, inchangé |
 | `BleConfig.summary_id_bytes` | 4 o | 4 o | — | **estimé**, inchangé |
 
-**Non changé** : le PURGE_SYNC de `gossip_a` (Bloom de 128 o par
-connexion), les annonces de `bitchat` et les beacons d'`eco_sf` (64 o)
-suivent leur propre format et restent estimés. `managed_flood` envoie ses
-accusés en diffusion, sans connexion, ce que l'app Nice ne fait pas : il
-reste un « et si » sur un autre transport.
+**Règle : la taille suit le canal.**
+
+- **Sur une connexion Nearby**, tout passe par le format JSON de l'app :
+  messages, accusés de réception du moteur, PURGE_SYNC de `gossip_a`. On les
+  compte à la taille de l'app (calculée, ou extrapolée avec ~14 o par octet
+  de contenu).
+- **En diffusion BLE** (`control_broadcasts`, `advertising_bearer`), les
+  paquets sont binaires et bornés par la radio. On garde des tailles
+  compactes : accusés inondés de `managed_flood` et `bitchat` (16 o),
+  annonces de `bitchat` (150 o), beacons d'`eco_sf` (64 o), vecteurs de
+  `horizon`. Ces valeurs restent estimées.
+
+**Limites connues** :
+
+- **Les résumés du moteur sont sous-estimés.** Le moteur échange des
+  résumés (4 o par message, `summary_id_bytes`) et des tables (8 o par
+  destination, `per_destination_table_bytes`) sur chaque connexion. Ils sont
+  comptés en binaire, alors qu'ils passent par une connexion : dans le
+  format de l'app, ils seraient plusieurs fois plus gros. Comme ils touchent
+  tous les algos à peu près de la même façon, ils faussent peu la
+  comparaison ; on les garde tels quels.
+- **`managed_flood` reste un « et si »** sur un autre transport. Ses
+  messages (1 000 à 3 800 o) partent eux aussi en diffusion, alors que
+  l'app Nice ne diffuse pas, et ils ne tiendraient pas dans des paquets
+  d'annonce.
+- **Le PURGE_SYNC est une extrapolation.** Il faudrait que l'équipe de
+  l'app calcule, depuis son code, la taille d'un bloc de 128 o et d'une
+  liste d'identifiants dans son format, comme elle l'a fait pour les
+  messages.
+
+**Effet sur `gossip_a`** : son budget par voisin et par minute
+(`session_budget_bytes`) passe de 32 Ko (valeur de sa spec) à 256 Ko. À
+~2 400 o par message, 32 Ko n'en laissaient passer que ~13 par minute,
+contre 50 avant le recalage ; avec 256 Ko, c'est de nouveau la limite de 50
+messages (`max_bundles_per_peer_per_session`) qui joue.
 
 **Format allégé** (÷4) : `--set traffic.payload_size_range_bytes=250,950`.
 Les accusés n'ont pas de raccourci, il faut changer `ack_size_bytes` dans le
@@ -239,5 +270,7 @@ connexion (0,028 mAh), des messages de 20 à 512 o et des accusés de 8 o
 colonnes de livraison, de latence, d'overhead et d'énergie mesh ne sont pas
 comparables aux nouvelles : les messages sont ~9 fois plus lourds en moyenne (2 400 o contre 266), les
 accusés 26 fois plus, et les connexions mettent plus longtemps à s'ouvrir.
-La config exacte de chaque run est dans son `.json`. La portée (30 m, 60 m)
-n'a pas changé.
+Pour `gossip_a`, le PURGE_SYNC est passé de 128 à 2 000 o et le budget par
+session de 32 à 256 Ko. La config exacte de chaque run est dans son `.json`
+(sauf ces deux réglages d'algorithme, qui n'y figurent pas). La portée
+(30 m, 60 m) n'a pas changé.
