@@ -231,3 +231,13 @@ def test_every_option_has_a_help_and_help_all_shows_every_command(capfd):
     out = capfd.readouterr().out
     for script, _ in main_module.OTHER_COMMANDS:
         assert f"usage: {Path(script).name}" in out
+
+
+def test_set_overrides_reach_the_config_and_bad_ones_exit(capsys):
+    args = main_module.build_arg_parser().parse_args(["--set", "traffic.message_ttl_s=600", "--set", "ble.max_concurrent_links=3"])
+    config = main_module.build_config(args)
+    assert config.traffic.message_ttl_s == 600.0 and config.cooldown_s == 600.0
+    assert config.ble.max_concurrent_links == 3
+    with pytest.raises(SystemExit):
+        main_module.main(["--set", "traffic.ttl=3"])
+    assert "n'existe pas" in capsys.readouterr().err

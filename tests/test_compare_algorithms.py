@@ -152,3 +152,17 @@ def test_algorithms_option_runs_only_the_chosen_subset(tmp_path):
 def test_unknown_algorithm_is_rejected():
     with pytest.raises(SystemExit):
         compare_algorithms.main(["--algorithms", "nope"])
+
+
+def test_main_refuses_to_override_the_beacon_count_and_writes_no_archive(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        compare_algorithms.main(["--set", "beacons.count=3", "--archive-dir", str(tmp_path)])
+    with pytest.raises(SystemExit):
+        compare_algorithms.main(["--set", "traffic.ttl=3", "--archive-dir", str(tmp_path)])
+    assert "n'existe pas" in capsys.readouterr().err
+    assert not list(tmp_path.iterdir())
+
+
+def test_build_config_applies_overrides():
+    config = compare_algorithms.build_config(2, 1, 60.0, 10, overrides=("traffic.message_ttl_s=300",))
+    assert config.traffic.message_ttl_s == 300.0 and config.cooldown_s == 300.0

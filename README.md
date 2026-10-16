@@ -119,6 +119,27 @@ Options disponibles :
   defaut, voir `docs/mobilite/poi.md`)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
+- `--set CHEMIN=VALEUR` (repetable) : change n'importe quel reglage de
+  `SimulationConfig` (voir ci-dessous)
+
+### Tout regler avec `--set`
+
+Chaque champ de `SimulationConfig` (`src/festival_ble_sim/config.py`) se
+change depuis la ligne de commande, en suivant son chemin :
+
+    python main.py --set traffic.message_ttl_s=900 \
+        --set mobility.group.split_probability=0.5 \
+        --set social.outside_friends_range=0,4 \
+        --set ble.phone_radio.shadowing_std_db=0 --set churn.enabled=True
+
+Valeurs : nombres, `True`/`False`, `None`, paires `a,b` ; le reste est lu
+comme du texte (`--set beacons.placement=manual`). Un chemin inconnu est
+refuse en listant les champs possibles, une valeur interdite par les
+verifications de la config. Les `--set` s'appliquent apres les autres
+options, et `--cooldown` (s'il n'est pas donne) suit un TTL change. Ils
+sont archives dans le `.json` du run avec la config finale.
+`compare_algorithms.py` refuse `--set beacons.count` (la matrice fixe
+0 et `--beacon-count`). Module : `festival_ble_sim/overrides.py`.
 
 ## Comparer les algorithmes
 
