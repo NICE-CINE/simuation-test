@@ -241,3 +241,18 @@ def test_set_overrides_reach_the_config_and_bad_ones_exit(capsys):
     with pytest.raises(SystemExit):
         main_module.main(["--set", "traffic.ttl=3"])
     assert "n'existe pas" in capsys.readouterr().err
+
+
+def test_named_override_options_set_their_fields():
+    args = main_module.build_arg_parser().parse_args([
+        "--no-gps-noise", "--no-shadowing", "--messages-per-hour", "1", "8", "--message-ttl", "900",
+        "--max-links", "3", "--phone-tx-power", "-6", "--set", "ble.max_concurrent_links=4",
+    ])
+    config = main_module.build_config(args)
+    assert config.gps.noise_std_m == 0.0
+    assert config.ble.phone_radio.shadowing_std_db == 0.0 and config.ble.beacon_radio.shadowing_std_db == 0.0
+    assert config.traffic.messages_per_hour_range == (1.0, 8.0)
+    assert config.traffic.message_ttl_s == 900.0 and config.cooldown_s == 900.0
+    assert config.ble.phone_radio.tx_power_dbm == -6.0
+    # --set comes after the named options.
+    assert config.ble.max_concurrent_links == 4

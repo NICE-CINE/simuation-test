@@ -12,11 +12,48 @@ SET_HELP = (
 
 
 def add_override_arguments(parser: Any) -> None:
+    parser.add_argument(
+        "--no-gps-noise", action="store_true", help="GPS exact (par defaut bruit de 5 m) = --set gps.noise_std_m=0",
+    )
+    parser.add_argument(
+        "--no-shadowing", action="store_true",
+        help="Radio deterministe, sans variation aleatoire du signal (par defaut 4 dB, telephones et bornes)",
+    )
+    parser.add_argument(
+        "--messages-per-hour", type=float, nargs=2, default=None, metavar=("LO", "HI"),
+        help="Rythme d'envoi de chaque personne, tire entre LO et HI (defaut 0 4)",
+    )
+    parser.add_argument(
+        "--message-ttl", type=float, default=None, metavar="S",
+        help="Duree de vie d'un message en secondes (defaut 1800) ; --cooldown la suit s'il n'est pas donne",
+    )
+    parser.add_argument(
+        "--max-links", type=int, default=None, metavar="N", help="Connexions simultanees par telephone (defaut 6)",
+    )
+    parser.add_argument(
+        "--phone-tx-power", type=float, default=None, metavar="DBM",
+        help="Puissance d'emission des telephones, qui fixe leur portee (defaut -10 dBm = 30 m ; "
+        "-20 = 13 m, -16 = 18 m, -12 = 26 m, -8 = 36 m, -6 = 43 m, -4 = 51 m, 0 = 71 m)",
+    )
     parser.add_argument("--set", dest="overrides", action="append", default=[], metavar="CHEMIN=VALEUR", help=SET_HELP)
 
 
 def collect_overrides(args: Any) -> List[str]:
-    return list(args.overrides)
+    # Named options first, so a --set can still refine them.
+    named: List[str] = []
+    if args.no_gps_noise:
+        named.append("gps.noise_std_m=0")
+    if args.no_shadowing:
+        named += ["ble.phone_radio.shadowing_std_db=0", "ble.beacon_radio.shadowing_std_db=0"]
+    if args.messages_per_hour is not None:
+        named.append("traffic.messages_per_hour_range={},{}".format(*args.messages_per_hour))
+    if args.message_ttl is not None:
+        named.append(f"traffic.message_ttl_s={args.message_ttl}")
+    if args.max_links is not None:
+        named.append(f"ble.max_concurrent_links={args.max_links}")
+    if args.phone_tx_power is not None:
+        named.append(f"ble.phone_radio.tx_power_dbm={args.phone_tx_power}")
+    return named + list(args.overrides)
 
 
 def override_paths(overrides: Sequence[str]) -> List[str]:

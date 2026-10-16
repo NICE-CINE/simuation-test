@@ -119,8 +119,18 @@ Options disponibles :
   defaut, voir `docs/mobilite/poi.md`)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
+- Raccourcis vers `--set`, pour les reglages qu'on fait varier le plus :
+  - `--no-gps-noise` : GPS exact (defaut : bruit de 5 m)
+  - `--no-shadowing` : radio deterministe, sans variation aleatoire du
+    signal (defaut 4 dB, telephones et bornes)
+  - `--messages-per-hour LO HI` : rythme d'envoi de chaque personne
+    (defaut 0 4), le levier principal de la charge
+  - `--message-ttl S` : duree de vie d'un message (defaut 1800 s)
+  - `--max-links N` : connexions simultanees par telephone (defaut 6)
+  - `--phone-tx-power DBM` : puissance d'emission, donc portee des
+    telephones (defaut -10 dBm = 30 m ; -16 = 18 m, -6 = 43 m, 0 = 71 m)
 - `--set CHEMIN=VALEUR` (repetable) : change n'importe quel reglage de
-  `SimulationConfig` (voir ci-dessous)
+  `SimulationConfig` (voir ci-dessous), apres les raccourcis
 
 ### Tout regler avec `--set`
 
