@@ -30,6 +30,8 @@ python scripts/compare_algorithms.py --seed 42 --duration 3600 \
 python scripts/compare_algorithms.py --seeds 1 2 3 4 5 --duration 3600 --num-festivaliers 200 --workers 12
 # ... or only some algorithms
 python scripts/compare_algorithms.py --algorithms tide fresh_spray spray_wait --seeds 1 2 3 4 5
+# ... or several site sizes, one after the other: one <...>_comparaison_<size>.csv (+ _resume, .json) each, --csv gets a _<size> suffix
+python scripts/compare_algorithms.py --size small medium large --seeds 1 2 3 --workers 12
 
 # Sweep fresh_spray's initial_tokens over seeds (per-token means at the end)
 python scripts/sweep_fresh_spray_tokens.py --tokens 4 8 16 32 --seeds 1 2 3 \
@@ -42,7 +44,7 @@ python scripts/sweep_band_fanout.py --seeds 1 2 3 --duration 3600 --num-festival
     [--variant "fanout=2,max_hops=4" ...]
 ```
 
-Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `replay/<same stem as the .txt>.html` + `.data.js` for `main.py --replay-html`, `<...>_comparaison.csv` for the comparison, `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args, the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run) *and* `git` (`commit`, `dirty`, porcelain `status`, `diff` against HEAD — untracked files are only listed, so commit a script before archiving runs made with it). `archive_stem` reserves the stem by creating the `.json` exclusively, so two runs in the same second get `<stem>` and `<stem>-2`. `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
+Every run of these scripts is archived in `archives/` (`--archive-dir` to override; tests must pass a `tmp_path` so they don't pollute it) via `festival_ble_sim/archive.py`: `<YYYY-MM-DD_HH-MM-SS>_<algo>.txt` for `main.py`, `replay/<same stem as the .txt>.html` + `.data.js` for `main.py --replay-html`, `<...>_comparaison.csv` for the comparison (`<...>_comparaison_<size>.csv` with `--size`), `<...>_sweep_fresh_spray_tokens.csv` for the token sweep (`initial_tokens` lives only in the CLI args part of its `.json`), `<...>_sweep_band_fanout.csv` for the band_fanout variants (the variant strings live only in the `.json` CLI args), each with a same-named `.json` holding the CLI args, the fully resolved `SimulationConfig` (config defaults drift over time, so args alone can't reproduce a run) *and* `git` (`commit`, `dirty`, porcelain `status`, `diff` against HEAD — untracked files are only listed, so commit a script before archiving runs made with it). `archive_stem` reserves the stem by creating the `.json` exclusively, so two runs in the same second get `<stem>` and `<stem>-2`. `--output`/`--csv` only write an extra copy. `archives/2026-09-28-comparaison.csv` predates this naming and has no `.json`.
 
 Pre-naming archives without a `.json`: `archives/2026-09-21-comparaison.csv` (formerly `comparaison.csv` at the repo root). Replays (`archives/replay/`, the `.html` and its `.data.js` together) are meant to be committed.
 

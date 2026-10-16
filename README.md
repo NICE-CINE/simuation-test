@@ -84,7 +84,8 @@ Options disponibles :
   soit ~3 m2 par personne, ratio 1,4:1). Fixe aussi la repartition de la
   foule (70 % du public cible 15 % de la surface, voir `presets.py`) et
   active `--mobility group` par defaut ; refuse un `--num-festivaliers`
-  different. Disponible aussi dans `compare_algorithms.py` et
+  different. Disponible aussi dans `compare_algorithms.py` (qui accepte
+  plusieurs tailles, voir "Comparer les algorithmes") et
   `sweep_fresh_spray_tokens.py`. Sans `--size`, le site reste 700x500 m,
   4 000 festivaliers. La part mesuree dans la zone dense est un peu sous
   70 % (~67 % small, ~63 % large) : les gens en transit sont hors zone dense.
@@ -183,10 +184,18 @@ par algo x bornes, la moyenne et la demi-largeur de l'IC 95 % (Student) de
 chaque metrique (`<metrique>_ci95`). Une seule seed ne dit rien de la
 variance : viser au moins 5 seeds avant de classer des algos.
 
+`--size small medium large` lance une comparaison complete par taille,
+l'une apres l'autre (meme matrice, memes seeds), chacune avec son archive
+`<date>_<heure>_comparaison_<taille>.csv` (+ `_resume.csv`, `.json`) ;
+`--csv out.csv` devient `out_<taille>.csv` avec plusieurs tailles. Toutes
+les configurations sont verifiees avant le premier run : une option
+invalide n'archive rien.
+
 `--workers N` (defaut 2) lance N simulations en parallele (un processus
 chacune) ; une ligne de statut affiche l'avancement de chaque run en
 direct. Chaque comparaison est archivee dans `archives/`
-(`--archive-dir` pour changer) : `<date>_<heure>_comparaison.csv` + `.json`
+(`--archive-dir` pour changer) : `<date>_<heure>_comparaison.csv`
+(`_comparaison_<taille>.csv` avec `--size`) + `.json`
 du meme nom (arguments CLI et `SimulationConfig` complete, dans sa
 variante avec bornes). Chaque ligne du CSV est ecrite des que son run se
 termine, donc un run interrompu garde les resultats deja obtenus.
