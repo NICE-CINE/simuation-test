@@ -166,7 +166,7 @@ def test_ack_purges_nothing_itself_and_brings_the_destination_position_to_the_so
     src.learn_ack(msg.msg_id, msg.creation_time + msg.ttl_s)
     algo.on_tick(12.0, ticks)
     assert src.known_positions[99] == (Position(60.0, 0.0), 1.0) and algo.stats["ack_hints"] == 1
-    assert algo.uses_delivery_acks and algo.ack_size_bytes == 20
+    assert algo.uses_delivery_acks and algo.ack_size_bytes == 222
 
 
 def test_carriers_policy_only_fixes_nodes_carrying_a_hinted_message():

@@ -264,13 +264,15 @@ def test_decide_cache_leaves_results_unchanged():
     # now) bookkeeping: the cache must be a pure speedup. Covers evictions,
     # backhaul, purges and replies. Engine changes legitimately move these;
     # regenerate them from main without the cache when that happens.
-    from festival_ble_sim.config import BeaconConfig, TrafficConfig
+    from festival_ble_sim.config import BeaconConfig, BleConfig, TrafficConfig
     config = SimulationConfig(
         duration_s=300.0, num_festivaliers=80, random_seed=11, node_buffer_capacity=10,
         area=AreaConfig(width_m=100.0, height_m=100.0), beacons=BeaconConfig(count=4),
-        traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5),
+        # These values predate the field-bench connection setup and message sizes.
+        traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5, payload_size_range_bytes=(20, 512)),
         # Friends = group: these values predate outside friends.
         social=SocialConfig(outside_friends_range=(0, 0)),
+        ble=BleConfig(connection_setup_s=7.0),
     )
     r = run_simulation(config, routing_algorithm=GossipARouting(seed=11))
     assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (54, 51, 3899)

@@ -30,12 +30,13 @@ class RadioParams:
     shadowing_std_db: float = 0.0
 
 
-# Defaults: -90 dBm sensitivity and exponent=2.7 (crowded/obstructed
-# festival ground, denser than free space's 2.0) are typical BLE figures;
-# tx_power is picked per node type below so the resulting max range lines
-# up with this simulator's previous fixed-radius defaults (~30m / ~60m).
-# shadowing_std_db=4.0 is a middle-of-the-road figure for short-range
-# obstructed/crowd shadowing reported in BLE/indoor propagation literature.
+# Phone range 30 m = the field bench's pass with 5 people standing in front
+# of a phone (16 Oct 2026, docs/radio/mesures.md): an upper bound for a
+# festival crowd, whose bodies spread along the whole path. Exponent 2.7 is
+# kept for that reason (estimated); open air measured 1.8 and ~50 m
+# (path_loss_exponent=1.8, tx_power_dbm=-19.4). Beacons: 2x the phone
+# range, not measured. shadowing_std_db=4.0 comes from the literature; the
+# bench saw ~11 dB between passes, a slow effect per-tick draws don't model.
 def _default_phone_radio() -> RadioParams:
     return RadioParams(
         tx_power_dbm=-10.0,
@@ -63,19 +64,21 @@ class BleConfig:
     phone_radio: RadioParams = field(default_factory=_default_phone_radio)
     beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
     # Bytes each radio can send + receive per tick, shared by all its links
-    # (network_engine tracks it per node for the whole tick): the ~37 kB/s
-    # Nearby measured over Bluetooth Classic between two phones alone
-    # (docs/energie/consommation.md). A crowd lowers it through the
-    # channel load below, not through this figure.
-    transfer_rate_bytes_per_s: float = 37_000.0
+    # (network_engine tracks it per node for the whole tick): the ~0.25
+    # Mbit/s Nearby measured at close range between two phones with 5 people
+    # in front of one (docs/radio/mesures.md; open air: 0.37-0.54). Other
+    # phones' transmissions lower it through the channel load below, not
+    # through this figure.
+    transfer_rate_bytes_per_s: float = 31_000.0
     contact_check_interval_s: float = 1.0
     # Simultaneous GATT-central connections a phone can realistically hold
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
     max_concurrent_links: Optional[int] = 6
     # A pair must stay in range this long before its connection carries
-    # anything: Nearby measured ~7 s from discovery to connection
-    # (docs/energie/consommation.md). 0 = usable on the first tick.
-    connection_setup_s: float = 7.0
+    # anything: Nearby took ~12 s to reconnect on coming back into range in
+    # the field (26-80 s farther away; 7 s on the desk bench),
+    # docs/radio/mesures.md. 0 = usable on the first tick.
+    connection_setup_s: float = 12.0
     # An established connection with no data either way for this long is
     # closed, freeing both slots (estimated, not measured).
     connection_idle_timeout_s: float = 30.0
@@ -84,9 +87,10 @@ class BleConfig:
     # Extra per-packet error for links near the edge of radio range: fades
     # linearly from 0 at signal_margin_cutoff_db (or above) to
     # weak_signal_max_probability at a 0 dB margin (received power at the
-    # receiver sensitivity floor).
-    signal_margin_cutoff_db: float = 6.0
-    weak_signal_max_probability: float = 0.30
+    # receiver sensitivity floor). Fitted on the field bench's throughput
+    # drop with distance, resends costing 1/(1-p) (docs/radio/mesures.md).
+    signal_margin_cutoff_db: float = 10.0
+    weak_signal_max_probability: float = 0.60
     # Collisions: a neighbor transmitting a share u of its airtime lands on a
     # packet's channel with probability ~u / channels. Data goes over
     # connections on Bluetooth Classic's 79 hopping channels, connectionless
@@ -173,7 +177,12 @@ class TrafficConfig:
     # Mean 2 msg/h: most people text a few times per hour ("t'es ou ?"),
     # some never do.
     messages_per_hour_range: Tuple[float, float] = (0.0, 4.0)
-    payload_size_range_bytes: Tuple[int, int] = (20, 512)
+    # Size on the wire, not the text: the Nice app's double JSON (bytes as
+    # number lists) plus encryption turns "ok" into ~1 000 bytes and a
+    # 200-byte text into ~3 800 (a typical 52-byte text: ~1 650), computed
+    # from the app's code, docs/radio/mesures.md. A /4 lighter format is
+    # pending.
+    payload_size_range_bytes: Tuple[int, int] = (1000, 3800)
     message_ttl_s: float = 1800.0
     # Bluetooth Mesh network-layer TTL, in hops rather than seconds: caps
     # how many times a message can be relayed regardless of how long it's
@@ -252,10 +261,10 @@ class EnergyConfig:
     # overhead measured 13 Oct over screen off, mean of both phones and three
     # app screens; the 20 % share is an estimate). 0 = count only the mesh.
     phone_current_ma: float = 82.0
-    # Opening a connection: ~7 s of discovery (BleConfig.connection_setup_s)
+    # Opening a connection: ~12 s of discovery (BleConfig.connection_setup_s)
     # at the measured "BLE advertising + scan" overhead (+18 / +11 mA, mean
     # 14.5), on both phones.
-    connection_setup_mah: float = 7.0 * 14.5 / 3600.0
+    connection_setup_mah: float = 12.0 * 14.5 / 3600.0
     # Each connection held beyond the first, per phone (background_current_ma
     # was measured with one): estimated, not measured.
     extra_connection_current_ma: float = 3.0

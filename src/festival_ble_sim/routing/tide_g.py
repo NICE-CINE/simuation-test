@@ -85,7 +85,7 @@ class TideGRouting(TideRouting):
         self._ack_hint = ack_hint
         # The destination's position rides on its delivery ack (+12 bytes).
         if ack_hint:
-            self.ack_size_bytes = 20
+            self.ack_size_bytes = 222
         self._geo_giveup_s = geo_giveup_s
         self._hint_scaled_tokens = hint_scaled_tokens
         self._hint_tokens_ref_m = hint_tokens_ref_m

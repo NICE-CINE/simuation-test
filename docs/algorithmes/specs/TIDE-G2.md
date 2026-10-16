@@ -36,7 +36,7 @@ Principe directeur, hérité de TIDE-G : **sans indice utilisable, on retombe ex
 
 **Modèle dans le simulateur.**
 
-- TIDE purge l'ACK instantanément dans tout le réseau (simplification existante). La position, elle, ne revient pas instantanément : elle est rendue disponible chez la source après `ack_hint_delay_factor × (latence aller)`. Valeur par défaut 1,0 : le retour prend autant de temps que l'aller. **Oct. 2026 :** l'ACK est maintenant un vrai paquet du moteur (`uses_delivery_acks`, propagé et facturé sur les connexions, 20 octets avec la position) ; `ack_hint_delay_factor` a disparu, la position arrive quand l'ACK atteint la source.
+- TIDE purge l'ACK instantanément dans tout le réseau (simplification existante). La position, elle, ne revient pas instantanément : elle est rendue disponible chez la source après `ack_hint_delay_factor × (latence aller)`. Valeur par défaut 1,0 : le retour prend autant de temps que l'aller. **Oct. 2026 :** l'ACK est maintenant un vrai paquet du moteur (`uses_delivery_acks`, propagé et facturé sur les connexions, 20 octets avec la position, 222 depuis le 16 oct. 2026 : 210 pour l'accusé de l'app + 12) ; `ack_hint_delay_factor` a disparu, la position arrive quand l'ACK atteint la source.
 - Le fix du destinataire réutilise son fix périodique s'il a moins de `fix_max_age_s` (**avec l'horodatage de ce fix**, pas celui de la livraison), sinon il prend un fix ponctuel (§2.5).
 - La position arrive dans `source.known_positions[dst]` via `record_known_position` (la plus récente gagne). Le moteur l'utilise ensuite tout seul pour remplir `dst_position` des messages suivants, et le rafraîchissement d'indice de TIDE-G (`refresh_hint`) met à jour la copie fantôme de la source.
 

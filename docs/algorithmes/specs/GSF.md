@@ -114,7 +114,7 @@ Les seuils 60 s et 180 s visent l'objectif du cahier des charges : livraison par
 ### 2.6 ACK et purge
 
 - **Purge** : par l'ACK du moteur (`uses_delivery_acks`), propagé et facturé sur les connexions vers les nœuds qui annoncent le message (oct. 2026 ; avant : purge globale instantanée au tick suivant).
-- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) voyage dans l'ACK (20 octets) et arrive chez la source quand l'ACK l'atteint (oct. 2026 ; avant : après `ack_hint_delay_factor × latence aller`).
+- **Position dans l'ACK** (`ack_hint`) : la position du destinataire (son fix frais, sinon un fix pris pour l'occasion) voyage dans l'ACK (222 octets : 210 pour l'accusé de l'app + 12 pour la position ; 20 avant le 16 oct. 2026) et arrive chez la source quand l'ACK l'atteint (oct. 2026 ; avant : après `ack_hint_delay_factor × latence aller`).
 - **Rafraîchissement** : la source remplace l'indice de sa propre copie si elle a reçu une position plus récente entre-temps.
 
 ### 2.7 Éviction
