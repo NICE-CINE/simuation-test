@@ -171,7 +171,8 @@ verifications de la config. Les `--set` s'appliquent apres les autres
 options, et `--cooldown` (s'il n'est pas donne) suit un TTL change. Ils
 sont archives dans le `.json` du run avec la config finale.
 `compare_algorithms.py` et les deux balayages refusent `--set beacons.count`
-(le nombre de bornes se regle avec `--beacon-count`). Module :
+(le nombre de bornes se regle avec `--beacon-count`, plus `--with-beacons`
+pour `compare_algorithms.py`, qui sinon tourne sans bornes). Module :
 `festival_ble_sim/overrides.py`.
 
 **Options communes aux trois scripts** (`compare_algorithms.py`,
@@ -185,13 +186,13 @@ sont archives dans le `.json` du run avec la config finale.
 ## Comparer les algorithmes
 
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
-        --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
+        --num-festivaliers 200 [--with-beacons --beacon-count 6] --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
         [--random-charge] [--no-outside-friends] [--no-lost-messages] [--schedule] [--churn] \
         [--no-gps-noise] [--max-links 4] [--set traffic.message_ttl_s=900 ...]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
-beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
+beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} sans bornes (avec `--with-beacons` : x {avec `--beacon-count` (defaut 6)/sans bornes}) avec le meme seed pour chaque run
 (comparabilite equitable) et affiche un tableau comparatif
 (taux de livraison, latence, sauts, overhead, energie, drops).
 

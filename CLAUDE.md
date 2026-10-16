@@ -22,9 +22,9 @@ pytest
 pytest tests/test_network.py -v
 pytest tests/test_network.py::test_network_engine_two_hop_relay_takes_two_intervals -v
 
-# Compare every routing algo x {with, without beacons}, same seed, in parallel
+# Compare every routing algo without beacons (--with-beacons: x {with --beacon-count, without}), same seed, in parallel
 python scripts/compare_algorithms.py --seed 42 --duration 3600 \
-    --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv out.csv]
+    --num-festivaliers 200 [--with-beacons --beacon-count 6] --workers 2 [--csv out.csv]
 
 # Same matrix over several paired seeds: one CSV row per run + a <...>_comparaison_resume.csv (mean, Student 95 % CI half-width per metric)
 python scripts/compare_algorithms.py --seeds 1 2 3 4 5 --duration 3600 --num-festivaliers 200 --workers 12
@@ -97,7 +97,7 @@ viz/history.py, viz/replay.py — optional: SimulationHistory is a plain data
 
 `main.py` is a thin CLI: build a `SimulationConfig`, call `run_simulation`, `format_report`, print + archive it (see above), optionally `render_replay_html` when the `--replay-html` flag is set (written next to the report as `<stem>.html`). Algorithms are selected (`--routing`) from the shared registry `routing/registry.py` (`ROUTING_NAMES`, `build_routing(name, seed, spray_initial_copies=8)`), which every script uses so one `--seed` seeds the algorithm the same way everywhere. `overrides.py` gives every command six named shortcuts (`--no-gps-noise`, `--no-shadowing`, `--messages-per-hour`, `--message-ttl`, `--max-links`, `--phone-tx-power`, turned into overrides by `collect_overrides`, before the user's own) and `--set path=value` (repeatable, any `SimulationConfig` field by dotted path, `ast.literal_eval` values, applied last through `dataclasses.replace` so `__post_init__` validates; `apply_cli_overrides` then re-defaults `cooldown_s` to the possibly overridden TTL unless it was given). Build the config before `archive_stem` so a bad override leaves no reserved `.json`.
 
-`scripts/compare_algorithms.py` runs the {algorithm} x {with/without beacons} matrix through a `ProcessPoolExecutor` (`--workers`), using `run_simulation`'s `progress_callback` for a live status line, and appends each finished row to the CSV as it completes. Its `ALGORITHMS` is the registry's `ROUTING_NAMES`, built with `build_routing(name, seed)`. `add_run_arguments`/`run_config_kwargs` hold the scenario options it shares with both sweeps (cooldown, warm-up, followups, GPS failure, random charge, social, schedule, `--churn` as an override, the named shortcuts and `--set`); the sweeps pass that dict through to `build_config` as `config_kwargs`, so a new shared option goes there once.
+`scripts/compare_algorithms.py` runs every algorithm without beacons (`--with-beacons`: the {algorithm} x {with `--beacon-count`/without beacons} matrix; the archived config then has the beacons) through a `ProcessPoolExecutor` (`--workers`), using `run_simulation`'s `progress_callback` for a live status line, and appends each finished row to the CSV as it completes. Its `ALGORITHMS` is the registry's `ROUTING_NAMES`, built with `build_routing(name, seed)`. `add_run_arguments`/`run_config_kwargs` hold the scenario options it shares with both sweeps (cooldown, warm-up, followups, GPS failure, random charge, social, schedule, `--churn` as an override, the named shortcuts and `--set`); the sweeps pass that dict through to `build_config` as `config_kwargs`, so a new shared option goes there once.
 
 ### Traffic
 
