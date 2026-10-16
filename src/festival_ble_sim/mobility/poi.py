@@ -1,6 +1,6 @@
 from __future__ import annotations
 import random
-from typing import Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from ..config import AreaConfig, MobilityConfig, PointOfInterest
 from ..models import Position
 from .base import MobilityModel
@@ -23,6 +23,34 @@ class PoiMobility(MobilityModel):
         self._speed_mps: float = 0.0
         self._pause_until: float = 0.0
         self._elapsed_s: float = 0.0
+        self._clock: Optional[Callable[[], float]] = None
+        self._set_index: Optional[int] = None
+
+    def set_clock(self, clock: Optional[Callable[[], float]]) -> None:
+        self._clock = clock
+
+    def _current_weights(self) -> List[float]:
+        schedule = self._config.schedule
+        if schedule is None:
+            return self._weights
+        now = self._clock() if self._clock is not None else self._elapsed_s
+        stage = schedule.stages[int(now // schedule.set_s) % len(schedule.stages)]
+        weights = list(self._weights)
+        weights[stage] *= schedule.boost
+        return weights
+
+    def _follow_programme(self) -> None:
+        # A set starts: some paused people leave for it (the next step picks
+        # a target under the new weights). Not on the first step.
+        schedule = self._config.schedule
+        now = self._clock() if self._clock is not None else self._elapsed_s
+        set_index = int(now // schedule.set_s)
+        if set_index == self._set_index:
+            return
+        paused = self._set_index is not None and self._elapsed_s < self._pause_until
+        self._set_index = set_index
+        if paused and self._rng.random() < schedule.rush_probability:
+            self._pause_until = self._elapsed_s
 
     def _uniform_position(self, area: AreaConfig) -> Position:
         return Position(
@@ -31,7 +59,7 @@ class PoiMobility(MobilityModel):
         )
 
     def _poi_position(self, area: AreaConfig) -> Position:
-        poi = self._rng.choices(self._config.points_of_interest, weights=self._weights, k=1)[0]
+        poi = self._rng.choices(self._config.points_of_interest, weights=self._current_weights(), k=1)[0]
         offset_x = self._rng.uniform(-poi.radius_m, poi.radius_m)
         offset_y = self._rng.uniform(-poi.radius_m, poi.radius_m)
         return Position(
@@ -56,6 +84,8 @@ class PoiMobility(MobilityModel):
 
     def step(self, current: Position, dt: float, area: AreaConfig) -> Position:
         self._elapsed_s += dt
+        if self._config.schedule is not None:
+            self._follow_programme()
         if self._target is None:
             self._pick_new_target(area)
             return current

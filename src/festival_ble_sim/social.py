@@ -18,3 +18,21 @@ def assign_friend_groups(people: List[int], config: SocialConfig, rng: random.Ra
         for member in group:
             friends[member] = group - {member}
     return friends
+
+
+def add_outside_friends(
+    groups: Dict[int, Set[int]], config: SocialConfig, rng: random.Random
+) -> Dict[int, Set[int]]:
+    # Each member draws how many outside friends it wants; stubs are paired
+    # at random and a pair within one group or already friends is dropped,
+    # so nobody exceeds its draw.
+    friends = {member: set(others) for member, others in groups.items()}
+    stubs: List[int] = []
+    for member in sorted(groups):
+        stubs.extend([member] * rng.randint(*config.outside_friends_range))
+    rng.shuffle(stubs)
+    for a, b in zip(stubs[::2], stubs[1::2]):
+        if a != b and b not in groups[a] and b not in friends[a]:
+            friends[a].add(b)
+            friends[b].add(a)
+    return friends

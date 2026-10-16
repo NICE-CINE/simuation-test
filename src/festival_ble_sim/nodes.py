@@ -33,6 +33,9 @@ class BaseNode:
         # flag means "died from battery depletion", so the final report's
         # dead_node_count isn't inflated by ordinary churn departures.
         self.battery_depleted = False
+        # The person, not the phone: only churn clears it. A dead phone's
+        # owner still walks (and leads their group), unseen by the radio.
+        self.on_site = True
         self.buffer: Dict[int, Message] = {}
         self.delivered_ids: Set[int] = set()
         self.buffer_evictions = 0

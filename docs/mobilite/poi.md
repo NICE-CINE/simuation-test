@@ -88,6 +88,22 @@ Ceux de `random_waypoint` (vitesse 0,3 a 1,2 m/s, pause 70 % de 5 a
 |---|---|---|
 | `points_of_interest` | `()` (le CLI fournit le plan) | points d'interet ponderes |
 | `background_probability` | `None` | part de cibles uniformes (et depart reparti si defini) |
+| `schedule` | `None` | programme du festival (`ScheduleConfig`), voir ci-dessous |
+
+### Programme du festival (`--schedule`, option)
+
+Avec `MobilityConfig.schedule = ScheduleConfig()` (`--schedule` dans
+`main.py` et `compare_algorithms.py`), des concerts de `set_s` (1 h)
+alternent entre les scenes `stages` (indices dans `points_of_interest` :
+`(0, 1)`, la grande et la deuxieme scene des deux plans), des le debut du
+run, chauffe comprise. Pendant un concert, le poids de sa scene est
+multiplie par `boost` (3), et au debut de chaque concert chaque personne
+en pause coupe sa pause avec la probabilite `rush_probability` (0,3) pour
+choisir une nouvelle cible : la foule bouge par vagues. Toutes ces valeurs
+sont estimees. L'heure vient de la simulation (`MobilityModel.set_clock`,
+appele par `run_simulation` avec `env.now`), pour que les sorties de
+`group` et les retardataires suivent le meme programme. Sans effet en
+`random_waypoint`, qui n'a pas de scenes.
 
 `MOBILITY_FACTORIES` (`main.py`) n'a pas d'option CLI propre : pour un
 autre plan, construire un `MobilityConfig(points_of_interest=(...))` et le
@@ -114,11 +130,12 @@ Plan par defaut, 1 000 noeuds, mesure directe du modele (sans radio) :
 
 ## Faiblesses
 
-- Choix de la cible sans memoire ni horaire : pas de programme de
-  concerts, pas d'heure de pointe au bar, pas de mouvement de foule
-  synchronise en fin de set.
-- Deplacements independants : des amis ne se deplacent pas ensemble
-  (pas de mobilite de groupe), ce qui penalise `bubble_f`.
+- Choix de la cible sans memoire. Sans `--schedule`, pas d'horaire du
+  tout ; avec, un programme simple (deux scenes en alternance, sets de
+  meme duree), sans heure de pointe au bar ni depart groupe en fin de
+  set.
+- Deplacements independants : des amis ne se deplacent pas ensemble,
+  ce qui penalise `bubble_f` ; c'est le role de `group`.
 - Pas d'evitement ni de ralentissement dans la foule dense : la vitesse
   ne depend pas de la densite, et les noeuds peuvent se superposer.
 - Zones carrees et, sans `--size`, carre de l'entree tronque par le bord

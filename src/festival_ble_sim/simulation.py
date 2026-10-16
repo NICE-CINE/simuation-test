@@ -16,9 +16,9 @@ from .nodes import BaseNode, BeaconNode, MobileNode
 from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
-from .social import assign_friend_groups
+from .social import add_outside_friends, assign_friend_groups
 from .spatial import SpatialGrid
-from .traffic import reply_process, traffic_process
+from .traffic import lost_process, reply_process, traffic_process
 from .viz.history import SimulationHistory
 
 
@@ -39,12 +39,9 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
     phone_mah_per_tick = config.energy.phone_current_ma * config.mobility.tick_interval_s / 3600.0
     while True:
         yield env.timeout(config.mobility.tick_interval_s)
-        if not node.is_active:
-            # Not yet arrived / already departed (see _churn_process) or
-            # battery-dead: frozen in place rather than wandering while it
-            # can't participate in BLE anyway.
+        if not node.on_site:
             continue
-        if env.now > config.warmup_s:
+        if node.is_active and env.now > config.warmup_s:
             node.consume_energy(mesh_mah_per_tick)
             node.consume_energy(phone_mah_per_tick, mesh=False)
         old_x, old_y = node.position.x, node.position.y
@@ -54,13 +51,13 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
 
 def _churn_process(env, node: MobileNode, arrival_time_s: float, departure_time_s: float):
     if arrival_time_s > 0:
-        node.is_active = False
+        node.is_active = node.on_site = False
         yield env.timeout(arrival_time_s)
-        node.is_active = True
+        node.is_active = node.on_site = True
     remaining_s = departure_time_s - max(arrival_time_s, 0.0)
     if remaining_s > 0:
         yield env.timeout(remaining_s)
-        node.is_active = False
+        node.is_active = node.on_site = False
 
 
 def _history_recorder(env, history: SimulationHistory, mobile_nodes: Dict[int, MobileNode], tick_interval_s: float):
@@ -157,6 +154,7 @@ def run_simulation(
         nodes[node_id] = mobile
         mobile_nodes[node_id] = mobile
         grid.insert(mobile)
+        mobility.set_clock(lambda: env.now)
         env.process(_mobile_process(env, mobile, config, grid))
 
         if config.churn.enabled:
@@ -171,17 +169,25 @@ def run_simulation(
             env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng, followup_rng
         )))
 
-    friends = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
+    groups = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
+    friends = add_outside_friends(groups, config.social, random.Random(f"{config.random_seed}-outside-friends"))
     gps_rng = random.Random(rng.randrange(1 << 30))
     for node_id, mobile in mobile_nodes.items():
-        group = sorted(friends.get(node_id, set()) | {node_id})
-        if group[0] != node_id:
-            start = mobile.mobility.join_group(mobile_nodes[group[0]])
+        if node_id in groups:
+            members = [mobile_nodes[i] for i in sorted(groups[node_id] | {node_id})]
+            start = mobile.mobility.join_group(mobile, members)
             if start is not None:
                 old_x, old_y = mobile.position.x, mobile.position.y
                 mobile.position = Position(min(max(start.x, 0.0), config.area.width_m),
                                            min(max(start.y, 0.0), config.area.height_m))
                 grid.update(mobile, old_x, old_y)
+    if config.traffic.lost_messages_per_hour > 0:
+        lost_rng = random.Random(f"{config.random_seed}-lost")
+        for node_id, mobile in mobile_nodes.items():
+            if node_id in groups and hasattr(mobile.mobility, "lost_peers"):
+                env.process(_after(env, config.warmup_s, lost_process(
+                    env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, lost_rng
+                )))
     for node_id, mobile in mobile_nodes.items():
         mobile.friends = friends.get(node_id, set())
         mobile.gps_noise_std_m = config.gps.noise_std_m

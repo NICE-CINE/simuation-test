@@ -23,7 +23,12 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   `extra_connection_current_ma`), fermeture d'une connexion inactive
   (`connection_idle_timeout_s`), taille des annonces bitchat et des
   beacons ECO-SF, tous les reglages de `GroupConfig` (sorties, attente au
-  rendez-vous, distance a laquelle on reconnait son groupe).
+  rendez-vous, distance a laquelle on reconnait son groupe, probabilite
+  qu'une sortie scinde le groupe en deux), le programme `--schedule`
+  (`ScheduleConfig` : sets d'1 h, scene x3, 30 % de pauses coupees), le nombre
+  d'amis venus a part (`SocialConfig.outside_friends_range`, 0 a 2), le
+  rythme des messages pendant un rendez-vous rate
+  (`TrafficConfig.lost_messages_per_hour`, 6/h).
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
   d'un voisin dans `on_tick` avant toute connexion ; les tables des
@@ -99,6 +104,14 @@ Options disponibles :
 - `--random-charge` : charge de depart tiree par telephone (graine du run)
   au lieu de 100 % : 50 % des gens entre 80 et 100 %, 30 % entre 50 et 80,
   12 % entre 30 et 50, 8 % entre 5 et 30 (voir `docs/energie/consommation.md`)
+- `--no-outside-friends` : pas d'amis venus a part, les amis sont
+  exactement le groupe (voir "Destinataire : un ami" plus bas)
+- `--no-lost-messages` : pas de messages en plus pendant un rendez-vous
+  rate (voir "Messages de perdu" plus bas)
+- `--schedule` : programme du festival (`poi` et `group`), concerts d'1 h
+  alternes entre les deux scenes, la scene qui joue attire 3 fois plus et
+  30 % des gens en pause partent au debut de chaque concert (desactive par
+  defaut, voir `docs/mobilite/poi.md`)
 - `--churn`, `--churn-arrival-window-s LO HI`, `--churn-session-duration-s LO HI` :
   arrivees/departs echelonnes des festivaliers (voir "Churn" plus bas)
 
@@ -107,7 +120,7 @@ Options disponibles :
     python scripts/compare_algorithms.py --seed 42 --duration 3600 \
         --num-festivaliers 200 --beacon-count 6 --workers 2 [--csv comparaison.csv] \
         [--mobility poi] [--reply-probability 0.5] [--followup-probability 0.5] [--gps-fix-failure 0.1] \
-        [--random-charge]
+        [--random-charge] [--no-outside-friends] [--no-lost-messages] [--schedule]
 
 Lance automatiquement la matrice {epidemic, spray_wait, prophet,
 beacon_priority, dasfv, gossip_a, bubble_f, managed_flood, tide, tide_g, tide_g2, fresh_spray, geo_spray_focus, eco_sf, band_fanout, bitchat, horizon} x {avec/sans bornes} avec le meme seed pour chaque run
@@ -199,12 +212,31 @@ selon `SimulationConfig.social` :
   (`no_friend_fraction`) et **n'envoient rien** ;
 - les autres sont repartis en groupes disjoints de 2 a 8 personnes
   (`group_size_range`), ou tout le monde est ami avec tout le monde ;
-- a chaque envoi, le destinataire est un ami actif tire au hasard (envoi
-  saute si aucun ami n'est present).
+- chaque membre d'un groupe a aussi 0 a 2 **amis venus a part**, tires
+  dans d'autres groupes (`outside_friends_range`, `social.add_outside_friends`,
+  RNG a part `f"{seed}-outside-friends"`) : ils ne se deplacent pas avec
+  lui, et ce sont souvent les messages les plus durs a livrer.
+  `--no-outside-friends` (`main.py`, `compare_algorithms.py`) les retire ;
+- a chaque envoi, le destinataire est un ami actif tire au hasard parmi
+  ceux a plus de 15 m (`skip_friends_within_m` : on n'ecrit pas a un ami
+  qu'on voit) ; envoi annule si aucun ne reste.
 
-Le meme graphe sert a `bubble_f`. Les amis ne se deplacent **pas**
-ensemble : la mobilite ignore le graphe. `friends_only=False` revient a un
+Le meme graphe sert a `bubble_f`. Avec `--mobility group` (defaut de
+`--size`), les groupes (sans les amis venus a part) se deplacent
+ensemble : les messages vont aux amis venus a part ou naissent des
+separations, et bien moins de messages sont crees qu'avec `poi` (voir
+`docs/mobilite/group.md`). Avec `random_waypoint` et `poi`, la
+mobilite ignore le graphe. `friends_only=False` revient a un
 destinataire tire parmi tous les festivaliers actifs.
+
+**Messages de perdu** (`--mobility group` seulement, en plus du rythme
+fixe) : pendant un rendez-vous rate, de l'heure prevue jusqu'au retour
+dans le groupe (et pour un ami arrive apres son groupe), le perdu ecrit a
+un membre du groupe et le meneur ecrit au perdu, chacun a
+`TrafficConfig.lost_messages_per_hour` (6/h, estime : « t'es ou ? »),
+toujours a plus de 15 m. RNG a part (`f"{seed}-lost"`), qui n'existe que
+si le rythme est > 0. Ce sont des messages spontanes, comptes dans le
+taux de livraison. `--no-lost-messages` les retire.
 
 **Reponses** (`--reply-probability P`, defaut 0) : un message livre a un
 festivalier recoit une reponse avec la probabilite P, envoyee 20 a 180 s
@@ -392,8 +424,10 @@ d'arrivee dans `arrival_window_s` et une duree de presence dans
 `session_duration_range_s`, et n'est `is_active` (participe au BLE,
 eligible comme source/destination de trafic) qu'entre les deux — le meme
 mecanisme deja utilise pour les noeuds a court de batterie. Un noeud non
-encore arrive ou deja parti ne bouge plus (`_mobile_process` le laisse en
-pause) et disparait des replays HTML. `SimulationReport.dead_node_count`
+encore arrive ou deja parti ne bouge plus (`BaseNode.on_site`, que seul le
+churn change) et disparait des replays HTML ; un festivalier dont le
+telephone est mort continue de marcher (et de mener son groupe), seule sa
+radio s'eteint. `SimulationReport.dead_node_count`
 ne compte que les morts par batterie (`BaseNode.battery_depleted`), pas
 les departs de churn.
 
@@ -446,12 +480,15 @@ Principe, diagramme, plans de site, ordres de grandeur, forces et
 faiblesses : un fichier par modele dans `docs/mobilite/`.
 
 - `group` (`mobility/group.py`, defaut avec `--size`) — les groupes
-  d'amis (les memes qui choisissent les destinataires) se deplacent
-  ensemble autour d'un meneur qui suit `poi` ; un membre part parfois seul
-  (bar 5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous
-  ou le groupe l'attend 15 min, sinon il cherche le groupe de point
-  d'interet en point d'interet. Personne n'ecrit a un ami qu'il voit
-  (`TrafficConfig.skip_friends_within_m`, 15 m). Voir `docs/mobilite/group.md`.
+  d'amis (sans les amis venus a part) se deplacent ensemble autour d'un
+  meneur (le premier membre present) qui suit `poi` ; un membre part
+  parfois, seul ou avec la moitie du groupe (30 % des sorties), (bar
+  5-30 min, autre scene 30 min-2 h), apres avoir fixe un rendez-vous ou le
+  groupe l'attend 15 min, sinon il cherche le groupe de point d'interet en
+  point d'interet, comme un ami arrive apres son groupe. Personne n'ecrit
+  a un ami qu'il voit (`TrafficConfig.skip_friends_within_m`, 15 m) ;
+  perdu et groupe s'ecrivent en plus pendant un rendez-vous rate. Voir
+  `docs/mobilite/group.md`.
 - `random_waypoint` (`mobility/random_waypoint.py`, defaut) — cible
   uniforme sur toute la zone, puis pause (70 % de chances, 5 a 45 min).
   Voir `docs/mobilite/random_waypoint.md`.
@@ -516,8 +553,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   progres, admission restreinte des buffers pleins a 80 %, epoques
   optionnelles (`epoch_s`). Les Bloom, `rankCap`, SOS et RSSI ne sont pas
   modelises (instance partagee = vues exactes, pas d'attaquant). Avec
-  `random_waypoint`, les amis ne se deplacent pas ensemble : la bulle
-  apporte peu tant qu'un modele de mobilite de groupe n'existe pas.
+  `random_waypoint` ou `poi`, les amis ne se deplacent pas ensemble et la
+  bulle apporte peu ; elle prend son sens avec `--mobility group`.
 - `managed_flood` (`routing/managed_flood.py`) — inondation geree du
   Bluetooth Mesh (couche reseau), sans stockage-transport : un noeud ne
   relaie un PDU que pendant `relay_window_s` apres l'avoir recu, puis

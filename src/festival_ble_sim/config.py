@@ -121,6 +121,24 @@ class GroupConfig:
     long_trip_s: Tuple[float, float] = (1800.0, 7200.0)
     # How long the leader waits at a rendezvous.
     rendezvous_max_wait_s: float = 900.0
+    # Chance that a trip splits the group in two: the member leaving takes
+    # about half of the others along (the leader stays); otherwise it goes
+    # alone.
+    split_probability: float = 0.3
+
+
+@dataclass(frozen=True)
+class ScheduleConfig:
+    # Festival programme (PoiMobility, so group leaders too): sets of set_s
+    # alternate between the stages (indices into points_of_interest) from
+    # the start of the run, warm-up included. The playing stage's weight is
+    # multiplied by boost, and when a set starts each paused person cuts
+    # their pause with rush_probability and picks a new target: the crowd
+    # moves in waves. Every value is an estimate.
+    stages: Tuple[int, ...] = (0, 1)
+    set_s: float = 3600.0
+    boost: float = 3.0
+    rush_probability: float = 0.3
 
 
 @dataclass(frozen=True)
@@ -141,6 +159,8 @@ class MobilityConfig:
     # target uniform over the whole area with that probability, POI otherwise.
     background_probability: Optional[float] = None
     group: GroupConfig = field(default_factory=GroupConfig)
+    # None = fixed POI weights (no programme).
+    schedule: Optional[ScheduleConfig] = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +188,11 @@ class TrafficConfig:
     # drawn as destinations (no candidate left = no message). Matters with
     # group mobility, where most friends walk alongside. 0 = off.
     skip_friends_within_m: float = 15.0
+    # On top of the fixed rate: during a missed rendezvous (group mobility
+    # only, from the meeting time until the member is back), the lost member
+    # writes to its group and the leader to the lost member, each at this
+    # rate (estimate, "t'es ou ?"). 0 = off.
+    lost_messages_per_hour: float = 6.0
     # Conversations: probability that a delivered message gets a reply from
     # its destination, after a delay drawn from reply_delay_range_s. Replies
     # can themselves be replied to. 0.0 = no replies (previous behavior).
@@ -185,6 +210,10 @@ class SocialConfig:
     # Friend groups (the QR-code graph) shared by traffic and bubble_f.
     group_size_range: Tuple[int, int] = (2, 8)
     no_friend_fraction: float = 0.2
+    # Friends who came separately: each group member also gets up to this
+    # many friends from other groups (estimate), who don't walk with them.
+    # (0, 0) = friends are exactly the group.
+    outside_friends_range: Tuple[int, int] = (0, 2)
 
 
 @dataclass(frozen=True)
@@ -316,6 +345,8 @@ class SimulationConfig:
             raise ValueError("reply_probability must be in [0, 1)")
         if not 0.0 <= self.traffic.followup_probability < 1.0:
             raise ValueError("followup_probability must be in [0, 1)")
+        if self.traffic.lost_messages_per_hour < 0:
+            raise ValueError("lost_messages_per_hour must be >= 0")
         followup_lo, followup_hi = self.traffic.followup_delay_range_s
         if followup_lo < 0 or followup_hi < followup_lo:
             raise ValueError("followup_delay_range_s must satisfy 0 <= lo <= hi")
@@ -359,11 +390,23 @@ class SimulationConfig:
             raise ValueError("group_size_range must satisfy 2 <= lo <= hi")
         if not (0.0 <= self.social.no_friend_fraction <= 1.0):
             raise ValueError("no_friend_fraction must be within [0, 1]")
+        outside_lo, outside_hi = self.social.outside_friends_range
+        if not 0 <= outside_lo <= outside_hi:
+            raise ValueError("outside_friends_range must satisfy 0 <= lo <= hi")
         group = self.mobility.group
         if group.radius_m < 0 or group.visual_range_m <= 0 or group.rendezvous_max_wait_s < 0:
             raise ValueError("group radius_m and rendezvous_max_wait_s must be >= 0, visual_range_m > 0")
         if group.short_trips_per_hour < 0 or group.long_trips_per_hour < 0:
             raise ValueError("group trip rates must be >= 0")
+        if not 0.0 <= group.split_probability <= 1.0:
+            raise ValueError("split_probability must be within [0, 1]")
+        schedule = self.mobility.schedule
+        if schedule is not None:
+            poi_count = len(self.mobility.points_of_interest)
+            if not schedule.stages or not all(0 <= s < poi_count for s in schedule.stages):
+                raise ValueError("schedule stages must index points_of_interest")
+            if schedule.set_s <= 0 or schedule.boost < 0 or not 0.0 <= schedule.rush_probability <= 1.0:
+                raise ValueError("schedule needs set_s > 0, boost >= 0, rush_probability in [0, 1]")
         for lo, hi in (group.short_trip_s, group.long_trip_s):
             if not 0 < lo <= hi:
                 raise ValueError("group trip durations must satisfy 0 < lo <= hi")

@@ -165,3 +165,32 @@ def test_no_message_to_a_friend_in_sight():
     nodes[2].position = Position(103.0, 0.0)
     _run_traffic(nodes, TrafficConfig(**_FAST))
     assert nodes[1].buffer and {m.dst_id for m in nodes[1].buffer.values()} == {3}
+
+
+def test_lost_member_and_leader_write_to_each_other_until_reunited():
+    from festival_ble_sim.config import AreaConfig, MobilityConfig, PointOfInterest
+    from festival_ble_sim.mobility.group import GroupMobility
+    from festival_ble_sim.nodes import MobileNode
+    from festival_ble_sim.traffic import lost_process
+    area = AreaConfig(width_m=200.0, height_m=200.0)
+    mobility = MobilityConfig(points_of_interest=(PointOfInterest(x=30.0, y=30.0, radius_m=10.0),))
+    nodes = {i: MobileNode(i, GroupMobility(mobility, random.Random(i)), 10.0, 100, 4500.0, area) for i in (1, 2, 3)}
+    members = list(nodes.values())
+    for node in members:
+        node.mobility.join_group(node, members)
+    nodes[1].position, nodes[2].position, nodes[3].position = Position(0, 0), Position(2, 2), Position(150, 150)
+    nodes[3].mobility._state = "search"
+    config = TrafficConfig(lost_messages_per_hour=360.0)
+    env = simpy.Environment()
+    metrics = MetricsCollector()
+    ids = itertools.count(1)
+    rng = random.Random(1)
+    for node in members:
+        env.process(lost_process(env, node, nodes, config, metrics, ids, rng))
+    env.run(until=600.0)
+    sent = {(m.src_id, m.dst_id) for n in members for m in n.buffer.values()}
+    assert sent == {(1, 3), (3, 1), (3, 2)}
+    nodes[3].mobility._state = "with"
+    before = sum(len(n.buffer) for n in members)
+    env.run(until=1200.0)
+    assert sum(len(n.buffer) for n in members) == before

@@ -96,3 +96,47 @@ def test_zero_background_probability_confines_initial_positions_to_points_of_int
 def test_background_probability_must_be_a_probability():
     with pytest.raises(ValueError):
         PoiMobility(_config(background_probability=1.5), rng=random.Random(1))
+
+
+_STAGES = (PointOfInterest(x=20.0, y=20.0, radius_m=5.0), PointOfInterest(x=180.0, y=180.0, radius_m=5.0))
+
+
+def _share_at_first_stage(model, area, draws=2000):
+    return sum(model._poi_position(area).x < 100.0 for _ in range(draws)) / draws
+
+
+def test_schedule_draws_the_crowd_to_the_stage_that_plays():
+    from festival_ble_sim.config import ScheduleConfig
+    area = AreaConfig(width_m=200.0, height_m=200.0)
+    model = PoiMobility(_config(points_of_interest=_STAGES, schedule=ScheduleConfig(set_s=100.0)), random.Random(1))
+    now = [50.0]
+    model.set_clock(lambda: now[0])
+    assert _share_at_first_stage(model, area) > 0.7
+    now[0] = 150.0
+    assert _share_at_first_stage(model, area) < 0.3
+
+
+def test_a_set_starting_cuts_pauses():
+    from festival_ble_sim.config import ScheduleConfig
+    area = AreaConfig(width_m=200.0, height_m=200.0)
+    config = _config(
+        points_of_interest=_STAGES, pause_probability=1.0, pause_duration_range_s=(10000.0, 10000.0),
+        schedule=ScheduleConfig(set_s=100.0, rush_probability=1.0),
+    )
+    model = PoiMobility(config, random.Random(1))
+    now = [0.0]
+    model.set_clock(lambda: now[0])
+    position = model.initial_position(area)
+    for _ in range(99):
+        now[0] += 1.0
+        position = model.step(position, 1.0, area)
+    assert model._elapsed_s < model._pause_until
+    now[0] = 101.0
+    model.step(position, 1.0, area)
+    assert model._pause_until == 0.0
+
+
+def test_schedule_must_name_existing_stages():
+    from festival_ble_sim.config import ScheduleConfig, SimulationConfig
+    with pytest.raises(ValueError):
+        SimulationConfig(mobility=_config(schedule=ScheduleConfig(stages=(0, 1))))
