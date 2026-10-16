@@ -30,12 +30,13 @@ class RadioParams:
     shadowing_std_db: float = 0.0
 
 
-# Defaults: -90 dBm sensitivity and exponent=2.7 (crowded/obstructed
-# festival ground, denser than free space's 2.0) are typical BLE figures;
-# tx_power is picked per node type below so the resulting max range lines
-# up with this simulator's previous fixed-radius defaults (~30m / ~60m).
-# shadowing_std_db=4.0 is a middle-of-the-road figure for short-range
-# obstructed/crowd shadowing reported in BLE/indoor propagation literature.
+# Phone range 30 m = the field bench's pass with 5 people standing in front
+# of a phone (16 Oct 2026, docs/radio/mesures.md): an upper bound for a
+# festival crowd, whose bodies spread along the whole path. Exponent 2.7 is
+# kept for that reason (estimated); open air measured 1.8 and ~50 m
+# (path_loss_exponent=1.8, tx_power_dbm=-19.4). Beacons: 2x the phone
+# range, not measured. shadowing_std_db=4.0 comes from the literature; the
+# bench saw ~11 dB between passes, a slow effect per-tick draws don't model.
 def _default_phone_radio() -> RadioParams:
     return RadioParams(
         tx_power_dbm=-10.0,

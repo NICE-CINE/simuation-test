@@ -10,14 +10,27 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   restrictions iOS en arriere-plan (deux iPhone en arriere-plan ne se
   decouvrent pas), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
   `docs/energie/consommation.md`).
-- [ ] **Radio** : la portee (30 m telephone, 60 m borne) n'est pas mesuree,
-  elle reprend d'anciens rayons fixes. A faire : mesurer RSSI/distance au
-  banc, ajouter une attenuation par les corps qui croit avec la densite de
-  la foule (l'exposant 2,7 est le meme a 3 m2/personne et sur un site
-  vide), un shadowing correle dans le temps et reciproque par paire (il est
-  tire independamment a chaque tick et par sens), et ne plus tronquer la
-  portee (un fading favorable ne prolonge jamais un lien au-dela du rayon
-  deterministe).
+- [ ] **Radio** (mesures du 16 oct., `docs/radio/mesures.md`) : les 30 m
+  du telephone sont mesures avec seulement 5 personnes groupees devant
+  l'ancre, une borne haute pour un festival. A faire :
+  - **mesurer dans une vraie foule**, les corps repartis sur tout le trajet
+    (sortie d'amphi, file de cantine, concert) : c'est la mesure qui manque
+    le plus, l'exposant 2,7 en foule est estime (plein air : 1,8) ;
+  - ajouter une attenuation par les corps qui croit avec la densite de la
+    foule (l'exposant est le meme a 3 m2/personne et sur un site vide) ;
+  - la **variabilite** : ~11 dB d'ecart a 1 m entre deux passes (orientation
+    du telephone, terrain), un effet lent ; le shadowing actuel (4 dB) est
+    tire independamment a chaque tick et par sens. Il faudrait un decalage
+    fixe par telephone et un shadowing correle dans le temps et reciproque
+    par paire ;
+  - le **lien fantome** : hors de portee, Nearby ne declare parfois jamais la
+    coupure (rien en 300 s) ; les messages confies au lien attendent et
+    arrivent d'un coup au retour, au lieu de passer par un autre voisin. Le
+    simulateur ferme toujours le lien des que la paire sort de portee ;
+  - ne plus tronquer la portee (un fading favorable ne prolonge jamais un
+    lien au-dela du rayon deterministe, alors qu'en plein air le lien tient
+    en dernier recours jusqu'a 100-150 m) ;
+  - la portee des bornes (60 m) n'est pas mesuree.
 - [ ] **Valeurs estimees a mesurer** : cout energetique d'une connexion et
   de chaque connexion en plus (`connection_setup_mah`,
   `extra_connection_current_ma`), fermeture d'une connexion inactive
@@ -129,7 +142,9 @@ Options disponibles :
   - `--message-ttl S` : duree de vie d'un message (defaut 1800 s)
   - `--max-links N` : connexions simultanees par telephone (defaut 6)
   - `--phone-tx-power DBM` : puissance d'emission, donc portee des
-    telephones (defaut -10 dBm = 30 m ; -16 = 18 m, -6 = 43 m, 0 = 71 m)
+    telephones (defaut -10 dBm = 30 m ; -18 = 15 m, -15 = 20 m, -6 = 43 m,
+    0 = 71 m). 30 m est une borne haute mesuree pour une foule
+    (`docs/radio/mesures.md`) : comparer aussi a 15 et 20 m
 - `--set CHEMIN=VALEUR` (repetable) : change n'importe quel reglage de
   `SimulationConfig` (voir ci-dessous), apres les raccourcis
 
@@ -389,7 +404,12 @@ d'emission en dBm, exposant d'attenuation, sensibilite du recepteur en
 dBm) plutot que d'un rayon fixe arbitraire — `RadioParams` dans
 `BleConfig.phone_radio` / `beacon_radio`. La portee effective
 (`radio.max_range_m`) est le point ou la puissance recue tombe au niveau
-de la sensibilite du recepteur.
+de la sensibilite du recepteur : 30 m pour un telephone, mesures sur le
+terrain avec 5 personnes devant le telephone (une borne haute pour une
+foule de festival), 60 m pour une borne (non mesure). En plein air le banc
+a mesure ~50 m et un exposant de 1,8 (`--set
+ble.phone_radio.path_loss_exponent=1.8 --phone-tx-power -19.4`). Mesures,
+derivations et recettes : `docs/radio/mesures.md`.
 
 **Fading log-normal** (`RadioParams.shadowing_std_db`, 4 dB par defaut) :
 la puissance recue n'est pas qu'une fonction deterministe de la distance,

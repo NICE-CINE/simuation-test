@@ -32,8 +32,10 @@ def add_override_arguments(parser: Any) -> None:
     )
     parser.add_argument(
         "--phone-tx-power", type=float, default=None, metavar="DBM",
-        help="Puissance d'emission des telephones, qui fixe leur portee (defaut -10 dBm = 30 m ; "
-        "-20 = 13 m, -16 = 18 m, -12 = 26 m, -8 = 36 m, -6 = 43 m, -4 = 51 m, 0 = 71 m)",
+        help="Puissance d'emission des telephones, qui fixe leur portee (defaut -10 dBm = 30 m, "
+        "borne haute mesuree pour une foule ; -20 = 13 m, -18 = 15 m, -15 = 20 m, -12 = 26 m, -8 = 36 m, "
+        "-6 = 43 m, -4 = 51 m, 0 = 71 m ; plein air mesure : -19.4 avec "
+        "--set ble.phone_radio.path_loss_exponent=1.8 = 50 m)",
     )
     parser.add_argument("--set", dest="overrides", action="append", default=[], metavar="CHEMIN=VALEUR", help=SET_HELP)
 
