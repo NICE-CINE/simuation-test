@@ -237,7 +237,7 @@ Les runs archivés avant le 16 oct. 2026 utilisaient 37 ko/s,
 connexion (0,028 mAh), des messages de 20 à 512 o et des accusés de 8 o
 (20 o pour `tide_g2`/GSF, 16 o pour `managed_flood`/`bitchat`). Leurs
 colonnes de livraison, de latence, d'overhead et d'énergie mesh ne sont pas
-comparables aux nouvelles : les messages sont 5 à 7 fois plus lourds, les
+comparables aux nouvelles : les messages sont ~9 fois plus lourds en moyenne (2 400 o contre 266), les
 accusés 26 fois plus, et les connexions mettent plus longtemps à s'ouvrir.
 La config exacte de chaque run est dans son `.json`. La portée (30 m, 60 m)
 n'a pas changé.

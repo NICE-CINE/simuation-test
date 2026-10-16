@@ -26,8 +26,8 @@ class RoutingAlgorithm(ABC):
     # destination mints one, each side acks the ids the other advertises, a
     # node that learns one drops its copy), billing ack_size_bytes each.
     # Never a global "delivered" set: a node only knows what reached it.
-    # ~210 bytes: a Nice app delivery receipt on the wire (docs/radio/mesures.md).
     uses_delivery_acks = False
+    # ~210 bytes: a Nice app delivery receipt on the wire (docs/radio/mesures.md).
     ack_size_bytes = 210
     # True: data goes out connectionless (Bluetooth Mesh's advertising
     # bearer): no connection setup or slots, one broadcast per message to
