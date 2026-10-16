@@ -431,7 +431,9 @@ charge de depart. Voir `docs/energie/consommation.md`.
 Le moteur reseau (`src/festival_ble_sim/network.py`) modelise, en plus de
 la portee radio :
 - un **debit limite par radio et par tick** (`BleConfig.transfer_rate_bytes_per_s`,
-  37 ko/s mesures en Bluetooth classique entre deux telephones seuls) :
+  31 ko/s, soit les 0,25 Mbit/s mesures de pres entre deux telephones avec
+  5 personnes devant l'un d'eux ; 46 a 68 ko/s en plein air,
+  `docs/radio/mesures.md`) :
   emissions et receptions d'un noeud partagent ce budget sur tous ses liens ;
   un message qui ne rentre pas dans le budget de l'emetteur ou du recepteur
   reste en buffer et retente au tick suivant (les emetteurs sont traites dans
@@ -450,7 +452,8 @@ la portee radio :
   exp(-charge entendue / canaux), sans plafond : une foule dense sature. La
   charge est ce que les voisins ont reellement emis au tick precedent ;
 - des **pertes** : collisions ci-dessus, marge de signal faible pres du bord
-  de portee (`signal_margin_cutoff_db` / `weak_signal_max_probability`) et
+  de portee (`signal_margin_cutoff_db` / `weak_signal_max_probability`,
+  10 dB et 0,6, cales sur la baisse du debit mesuree avec la distance) et
   perte residuelle (`packet_loss_base_probability`). Sur une connexion chaque
   paquet est acquitte et renvoye : une perte p coute 1/(1-p) fois le temps
   d'antenne et l'energie (`retransmitted_bytes` du rapport) au lieu de perdre

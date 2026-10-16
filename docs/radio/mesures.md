@@ -107,3 +107,35 @@ festival ; la vraie portée en foule est inconnue.
 - **Foule plus dense que la mesure** : la vraie portée en festival étant
   inconnue, comparer aussi les algorithmes à 20 m (`--phone-tx-power -15`)
   et 15 m (`--phone-tx-power -18`).
+
+## 3. Débit
+
+Le débit est **global à chaque téléphone** (partagé par toutes ses
+connexions), pas propre à chaque lien. La règle « débit ÷ n » avec plusieurs
+voisins vient de la documentation de Nearby, pas d'une mesure.
+
+| Paramètre | Ancienne valeur | Nouvelle valeur | Dérivation | Statut |
+| --- | --- | --- | --- | --- |
+| `transfer_rate_bytes_per_s` | 37 000 (banc à moins d'1 m, 12 oct.) | **31 000** | 0,25 Mbit/s de 1 à 10 m avec 5 personnes devant l'ancre (plein air : 0,37 à 0,54 Mbit/s, soit 46 à 68 ko/s) | **mesuré**, sans doute optimiste pour une vraie foule |
+| `signal_margin_cutoff_db` | 6 dB | **10 dB** | calé sur la baisse du débit avec la distance (ci-dessous) | **ajusté** sur une passe par condition |
+| `weak_signal_max_probability` | 0,30 | **0,60** | idem | **ajusté** |
+
+Les autres téléphones qui émettent (la charge du canal) font encore baisser
+ce débit dans le simulateur : ce sont les collisions et retransmissions de
+`network.py`. Les 5 personnes du banc n'avaient pas l'app : leur effet est
+celui des corps, d'où la baisse de `transfer_rate_bytes_per_s`, sans double
+compte avec les collisions.
+
+**Baisse avec la distance.** Près du bord de portée, une part p des paquets
+est renvoyée (perte « signal faible », de 0 à la marge
+`signal_margin_cutoff_db` jusqu'à `weak_signal_max_probability` à la
+sensibilité), ce qui coûte 1/(1−p) fois le temps d'antenne. Débit utile
+moyen simulé (hasard de 4 dB compris, coupures comptées à 0), rapporté au
+débit de près, contre le mesuré :
+
+| Distance | Simulé, réglage par défaut | Mesuré, 5 personnes | Simulé, plein air | Mesuré, plein air (passes 1 / 2) |
+| --- | --- | --- | --- | --- |
+| 10 m | 0,96 | 1,0 | 0,95 | 0,95 / 0,78 |
+| 20 m | 0,64 | 0,7 | 0,78 | 0,6 / 0,63 |
+| 30 m | 0,30 | coupure (90 % de pertes) | 0,59 | 0,55 / 0,68 |
+| 50 m | hors portée | 97 % de pertes | 0,30 | 0,42 / 0,35 |

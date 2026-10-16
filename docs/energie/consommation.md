@@ -209,10 +209,10 @@ des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
   festival.
 - **Réseau cellulaire saturé** : un téléphone qui cherche du réseau dans une
   foule consomme beaucoup plus. Ce n'est compté nulle part.
-- **Débit** : `BleConfig.transfer_rate_bytes_per_s` vaut les 37 ko/s
-  mesurés en Bluetooth classique entre deux téléphones seuls ; la foule
-  agit par la charge du canal (collisions, retransmissions), pas par ce
-  chiffre.
+- **Débit** : `BleConfig.transfer_rate_bytes_per_s` vaut 31 ko/s, mesurés
+  sur le terrain avec 5 personnes devant un téléphone (voir
+  `docs/radio/mesures.md`) ; les autres téléphones agissent par la charge du
+  canal (collisions, retransmissions), pas par ce chiffre.
 - **Connexion** : Nearby met environ 7 s entre la découverte et la
   connexion (`BleConfig.connection_setup_s`). Ces 7 s sont facturées au
   courant « annonces + scan » (`connection_setup_mah`), et chaque connexion

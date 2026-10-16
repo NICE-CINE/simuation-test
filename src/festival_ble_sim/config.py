@@ -64,11 +64,12 @@ class BleConfig:
     phone_radio: RadioParams = field(default_factory=_default_phone_radio)
     beacon_radio: RadioParams = field(default_factory=_default_beacon_radio)
     # Bytes each radio can send + receive per tick, shared by all its links
-    # (network_engine tracks it per node for the whole tick): the ~37 kB/s
-    # Nearby measured over Bluetooth Classic between two phones alone
-    # (docs/energie/consommation.md). A crowd lowers it through the
-    # channel load below, not through this figure.
-    transfer_rate_bytes_per_s: float = 37_000.0
+    # (network_engine tracks it per node for the whole tick): the ~0.25
+    # Mbit/s Nearby measured at close range between two phones with 5 people
+    # in front of one (docs/radio/mesures.md; open air: 0.37-0.54). Other
+    # phones' transmissions lower it through the channel load below, not
+    # through this figure.
+    transfer_rate_bytes_per_s: float = 31_000.0
     contact_check_interval_s: float = 1.0
     # Simultaneous GATT-central connections a phone can realistically hold
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
@@ -85,9 +86,10 @@ class BleConfig:
     # Extra per-packet error for links near the edge of radio range: fades
     # linearly from 0 at signal_margin_cutoff_db (or above) to
     # weak_signal_max_probability at a 0 dB margin (received power at the
-    # receiver sensitivity floor).
-    signal_margin_cutoff_db: float = 6.0
-    weak_signal_max_probability: float = 0.30
+    # receiver sensitivity floor). Fitted on the field bench's throughput
+    # drop with distance, resends costing 1/(1-p) (docs/radio/mesures.md).
+    signal_margin_cutoff_db: float = 10.0
+    weak_signal_max_probability: float = 0.60
     # Collisions: a neighbor transmitting a share u of its airtime lands on a
     # packet's channel with probability ~u / channels. Data goes over
     # connections on Bluetooth Classic's 79 hopping channels, connectionless
