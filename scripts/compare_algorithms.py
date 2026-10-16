@@ -353,8 +353,9 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--mobility", choices=sorted(MOBILITY_MODELS), default=None, help="random_waypoint par defaut, group avec --size",
     )
     parser.add_argument(
-        "--size", choices=sorted(SITE_PRESETS), default=None,
-        help="Preset de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la surface)",
+        "--size", choices=sorted(SITE_PRESETS), nargs="+", default=None,
+        help="Un ou plusieurs presets de site (festivaliers, surface a 3 m2/pers., 70%% du public sur 15%% de la "
+        "surface) ; avec plusieurs, une comparaison (CSV + resume) par taille, l'une apres l'autre",
     )
     parser.add_argument(
         "--reply-probability", type=float, default=0.0,
@@ -374,19 +375,35 @@ def main(argv: Optional[List[str]] = None) -> None:
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers doit etre >= 1")
-    resolve_cli_args(args, 200, parser.error)
     run_kwargs = run_config_kwargs(args, parser.error)
-    # Beacon count varies per row (0 or --beacon-count); the archived config
-    # is the "with beacons" one, the CSV's `beacons` column says which applied.
-    try:
-        config = build_config(
-            args.beacon_count, args.seeds[0], args.duration, args.num_festivaliers, args.mobility, args.reply_probability,
-            size=args.size, **run_kwargs,
-        )
-    except ValueError as error:
-        parser.error(str(error))
+    sizes = args.size or [None]
+    # Every size's config is built before any archive is reserved, so a bad
+    # option leaves no .json behind.
+    comparisons = []
+    for size in sizes:
+        size_args = argparse.Namespace(**{**vars(args), "size": size})
+        if args.csv and len(sizes) > 1:
+            root, dot, ext = args.csv.rpartition(".")
+            size_args.csv = f"{root}_{size}.{ext}" if dot else f"{args.csv}_{size}"
+        resolve_cli_args(size_args, 200, parser.error)
+        # Beacon count varies per row (0 or --beacon-count); the archived config
+        # is the "with beacons" one, the CSV's `beacons` column says which applied.
+        try:
+            config = build_config(
+                size_args.beacon_count, size_args.seeds[0], size_args.duration, size_args.num_festivaliers,
+                size_args.mobility, size_args.reply_probability, size=size, **run_kwargs,
+            )
+        except ValueError as error:
+            parser.error(str(error))
+        comparisons.append((size_args, config))
+    for size_args, config in comparisons:
+        run_comparison(size_args, config, run_kwargs)
 
-    stem = archive_stem(args.archive_dir, "comparaison")
+
+def run_comparison(args: argparse.Namespace, config: SimulationConfig, run_kwargs: Dict[str, Any]) -> None:
+    if args.size is not None:
+        print(f"\n=== --size {args.size} ({args.num_festivaliers} festivaliers) ===")
+    stem = archive_stem(args.archive_dir, f"comparaison_{args.size}" if args.size else "comparaison")
     archive_csv = str(stem.with_suffix(".csv"))
     write_params(stem.with_suffix(".json"), vars(args), config)
     rows = run_matrix(
