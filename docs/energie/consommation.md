@@ -46,7 +46,7 @@ Par exemple 2,4e-7 mAh/octet × 3,6 × 3,84 V ≈ 3,3 µJ/octet ≈ 0,42 µJ/bit
 | `tx_cost_mah_per_event` | 1,4e-5 | **2,9e-5** | ~5 ms d'antenne à +21 mA | courant mesuré, durée supposée |
 | `rx_cost_mah_per_event` | 1,4e-5 | **1,7e-5** | ~5 ms d'antenne à +12 mA | courant mesuré, durée supposée |
 | `initial_charge_bins` | — | **100 % pour tous** (défaut) ; tranches avec `--random-charge` | voir §4 | choisi |
-| `connection_setup_mah` | — (connexion gratuite) | **0,028** | 7 s de découverte (`BleConfig.connection_setup_s`, mesuré) à +14,5 mA (« BLE annonces + scan » : +18 et +11 mA), sur chacun des deux téléphones | courant et durée mesurés, assimilation à une phase d'annonce + scan **supposée** |
+| `connection_setup_mah` | — (connexion gratuite), puis 0,028 (7 s) | **0,048** | 12 s de découverte (`BleConfig.connection_setup_s`, reconnexion mesurée sur le terrain le 16 oct., voir `docs/radio/mesures.md`) à +14,5 mA (« BLE annonces + scan » : +18 et +11 mA), sur chacun des deux téléphones | courant et durée mesurés, assimilation à une phase d'annonce + scan **supposée** |
 | `extra_connection_current_ma` | — | **3 mA** | chaque connexion tenue au-delà de la première, par téléphone (`background_current_ma` a été mesuré avec une seule) | **estimé** |
 
 L'ancienne réception coûtait autant que l'émission, soit 3 à 7 fois trop cher.
@@ -213,8 +213,10 @@ des téléphones meurent en cours de route. Sur un run d'1 h, aucun ne meurt.
   sur le terrain avec 5 personnes devant un téléphone (voir
   `docs/radio/mesures.md`) ; les autres téléphones agissent par la charge du
   canal (collisions, retransmissions), pas par ce chiffre.
-- **Connexion** : Nearby met environ 7 s entre la découverte et la
-  connexion (`BleConfig.connection_setup_s`). Ces 7 s sont facturées au
+- **Connexion** : sur le terrain, Nearby met environ 12 s à se reconnecter
+  quand on revient à portée (26 à 80 s plus loin ; 7 s au banc, à moins d'un
+  mètre), voir `docs/radio/mesures.md` (`BleConfig.connection_setup_s`).
+  Ces 12 s sont facturées au
   courant « annonces + scan » (`connection_setup_mah`), et chaque connexion
   au-delà de la première 3 mA (`extra_connection_current_ma`) : ni l'un ni
   l'autre n'a été mesuré à part, c'est le prochain banc à faire.

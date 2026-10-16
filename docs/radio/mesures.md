@@ -139,3 +139,31 @@ débit de près, contre le mesuré :
 | 20 m | 0,64 | 0,7 | 0,78 | 0,6 / 0,63 |
 | 30 m | 0,30 | coupure (90 % de pertes) | 0,59 | 0,55 / 0,68 |
 | 50 m | hors portée | 97 % de pertes | 0,30 | 0,42 / 0,35 |
+
+## 4. Connexion et coupures
+
+- **Reconnexion** : pendant la passe libre n°2 et la passe foule, quand le
+  marcheur revient à portée après une coupure, Nearby se reconnecte en
+  ~**12 s** ; plus loin (vers 100 m, ou pendant la passe foule) en 26 à
+  80 s. Les heures exactes sont dans `samsung_anchor.csv`. Au banc, à moins
+  d'un mètre, la découverte puis la connexion prenaient ~7 s, et un essai de
+  reconnexion au bureau a donné 1 réussite en 1,4 s et 2 échecs à 60 s (dus
+  au Bluetooth du Honor).
+- **Lien fantôme** : pendant la passe n°1, hors de portée, Nearby n'a
+  **jamais déclaré la coupure** (rien en 300 s) ; les messages attendaient
+  dans la file et sont arrivés d'un coup au retour, retardés mais pas
+  perdus. Pendant la passe n°2, les coupures ont bien été déclarées : les
+  deux comportements existent.
+
+| Paramètre | Ancienne valeur | Nouvelle valeur | Dérivation | Statut |
+| --- | --- | --- | --- | --- |
+| `connection_setup_s` | 7 s (banc, < 1 m) | **12 s** | reconnexion au retour à portée, sur le terrain | **mesuré** (quelques coupures, 2 passes) ; les 26–80 s plus loin ne sont pas modélisés |
+| `connection_setup_mah` (`EnergyConfig`) | 0,028 mAh | **0,048 mAh** | 12 s à +14,5 mA, voir `docs/energie/consommation.md` | durée mesurée, courant mesuré au banc |
+| `connection_idle_timeout_s` | 30 s | 30 s | — | **estimé**, inchangé |
+| `max_concurrent_links` | 6 | 6 | — | **estimé**, inchangé (il faut 3 téléphones ou plus pour le mesurer) |
+
+**Non modélisé** : le lien fantôme. Le simulateur ferme toujours une
+connexion dès que la paire sort de portée, et le message reste chez
+l'émetteur, libre de passer par un autre voisin. Dans l'app, un lien
+fantôme peut au contraire retenir des messages et occuper une place de
+connexion.

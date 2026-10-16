@@ -440,7 +440,8 @@ la portee radio :
   un ordre tire au hasard a chaque tick) ;
 - des **connexions** : un lien n'existe que si les deux telephones s'entendent
   (portee mutuelle : une borne ne peut pas joindre un telephone qui ne peut
-  pas lui repondre), met `connection_setup_s` (7 s mesurees avec Nearby) a
+  pas lui repondre), met `connection_setup_s` (12 s, reconnexion mesuree sur le terrain avec
+  Nearby) a
   s'etablir, garde sa place tant que la paire reste a portee et se ferme
   apres `connection_idle_timeout_s` (30 s, estime) sans echange ; un
   telephone tient au plus `max_concurrent_links` connexions (defaut 6),

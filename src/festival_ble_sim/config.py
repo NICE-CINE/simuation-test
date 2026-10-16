@@ -75,9 +75,10 @@ class BleConfig:
     # per tick (iPhone/Android chipsets typically sustain ~4-8). None = no cap.
     max_concurrent_links: Optional[int] = 6
     # A pair must stay in range this long before its connection carries
-    # anything: Nearby measured ~7 s from discovery to connection
-    # (docs/energie/consommation.md). 0 = usable on the first tick.
-    connection_setup_s: float = 7.0
+    # anything: Nearby took ~12 s to reconnect on coming back into range in
+    # the field (26-80 s farther away; 7 s on the desk bench),
+    # docs/radio/mesures.md. 0 = usable on the first tick.
+    connection_setup_s: float = 12.0
     # An established connection with no data either way for this long is
     # closed, freeing both slots (estimated, not measured).
     connection_idle_timeout_s: float = 30.0
@@ -255,10 +256,10 @@ class EnergyConfig:
     # overhead measured 13 Oct over screen off, mean of both phones and three
     # app screens; the 20 % share is an estimate). 0 = count only the mesh.
     phone_current_ma: float = 82.0
-    # Opening a connection: ~7 s of discovery (BleConfig.connection_setup_s)
+    # Opening a connection: ~12 s of discovery (BleConfig.connection_setup_s)
     # at the measured "BLE advertising + scan" overhead (+18 / +11 mA, mean
     # 14.5), on both phones.
-    connection_setup_mah: float = 7.0 * 14.5 / 3600.0
+    connection_setup_mah: float = 12.0 * 14.5 / 3600.0
     # Each connection held beyond the first, per phone (background_current_ma
     # was measured with one): estimated, not measured.
     extra_connection_current_ma: float = 3.0

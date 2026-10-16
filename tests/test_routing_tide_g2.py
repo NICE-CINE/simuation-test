@@ -2,7 +2,7 @@ from __future__ import annotations
 import itertools
 import random
 import simpy
-from festival_ble_sim.config import AreaConfig, MobilityConfig, SimulationConfig, SocialConfig, TrafficConfig
+from festival_ble_sim.config import AreaConfig, BleConfig, MobilityConfig, SimulationConfig, SocialConfig, TrafficConfig
 from festival_ble_sim.metrics import MetricsCollector
 from festival_ble_sim.mobility.random_waypoint import RandomWaypointMobility
 from festival_ble_sim.models import Message, Position
@@ -173,6 +173,8 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
         traffic=TrafficConfig(messages_per_hour_range=(4.0, 8.0), reply_probability=0.9),
         # Friends = group: these values predate outside friends.
         social=SocialConfig(outside_friends_range=(0, 0)),
+        # ... and the field-bench connection setup.
+        ble=BleConfig(connection_setup_s=7.0),
     )
     algo = TideGRouting(seed=3)
     report = run_simulation(config, routing_algorithm=algo)
