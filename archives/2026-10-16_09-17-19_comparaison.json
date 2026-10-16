@@ -1,0 +1,215 @@
+{
+  "cli": {
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "duration": 1800.0,
+    "num_festivaliers": 300,
+    "beacon_count": 6,
+    "mobility": "group",
+    "size": null,
+    "reply_probability": 0.5,
+    "cooldown": null,
+    "warmup": null,
+    "followup_probability": 0.0,
+    "gps_fix_failure": 0.0,
+    "random_charge": false,
+    "no_outside_friends": false,
+    "no_lost_messages": false,
+    "schedule": false,
+    "churn": false,
+    "no_gps_noise": false,
+    "no_shadowing": false,
+    "messages_per_hour": null,
+    "message_ttl": null,
+    "max_links": null,
+    "phone_tx_power": null,
+    "overrides": [],
+    "algorithms": null,
+    "workers": 7,
+    "csv": null,
+    "archive_dir": "archives"
+  },
+  "config": {
+    "duration_s": 1800.0,
+    "cooldown_s": 1800.0,
+    "warmup_s": 2700.0,
+    "num_festivaliers": 300,
+    "node_buffer_capacity": 100,
+    "random_seed": 1,
+    "area": {
+      "width_m": 700.0,
+      "height_m": 500.0
+    },
+    "ble": {
+      "phone_radio": {
+        "tx_power_dbm": -10.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "beacon_radio": {
+        "tx_power_dbm": -2.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "transfer_rate_bytes_per_s": 37000.0,
+      "contact_check_interval_s": 1.0,
+      "max_concurrent_links": 6,
+      "connection_setup_s": 7.0,
+      "connection_idle_timeout_s": 30.0,
+      "packet_loss_base_probability": 0.01,
+      "signal_margin_cutoff_db": 6.0,
+      "weak_signal_max_probability": 0.3,
+      "data_channels": 79,
+      "advertising_channels": 3,
+      "summary_id_bytes": 4
+    },
+    "mobility": {
+      "speed_min_mps": 0.3,
+      "speed_max_mps": 1.2,
+      "pause_probability": 0.7,
+      "pause_duration_range_s": [
+        300.0,
+        2700.0
+      ],
+      "tick_interval_s": 1.0,
+      "points_of_interest": [
+        {
+          "x": 175.0,
+          "y": 375.0,
+          "radius_m": 75.0,
+          "weight": 4.0
+        },
+        {
+          "x": 560.0,
+          "y": 350.0,
+          "radius_m": 50.0,
+          "weight": 2.0
+        },
+        {
+          "x": 385.00000000000006,
+          "y": 175.0,
+          "radius_m": 60.0,
+          "weight": 3.0
+        },
+        {
+          "x": 350.0,
+          "y": 25.0,
+          "radius_m": 40.0,
+          "weight": 1.0
+        }
+      ],
+      "background_probability": null,
+      "group": {
+        "radius_m": 5.0,
+        "visual_range_m": 15.0,
+        "short_trips_per_hour": 0.5,
+        "short_trip_s": [
+          300.0,
+          1800.0
+        ],
+        "long_trips_per_hour": 0.2,
+        "long_trip_s": [
+          1800.0,
+          7200.0
+        ],
+        "rendezvous_max_wait_s": 900.0,
+        "split_probability": 0.3
+      },
+      "schedule": null
+    },
+    "traffic": {
+      "messages_per_hour_range": [
+        0.0,
+        4.0
+      ],
+      "payload_size_range_bytes": [
+        20,
+        512
+      ],
+      "message_ttl_s": 1800.0,
+      "message_ttl_hops": 8,
+      "friends_only": true,
+      "skip_friends_within_m": 15.0,
+      "lost_messages_per_hour": 6.0,
+      "reply_probability": 0.5,
+      "reply_delay_range_s": [
+        20.0,
+        180.0
+      ],
+      "followup_probability": 0.0,
+      "followup_delay_range_s": [
+        10.0,
+        120.0
+      ]
+    },
+    "energy": {
+      "battery_capacity_mah": 4500.0,
+      "initial_charge_bins": [
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "tx_cost_mah_per_event": 2.9e-05,
+      "tx_cost_mah_per_byte": 2.4e-07,
+      "rx_cost_mah_per_event": 1.7e-05,
+      "rx_cost_mah_per_byte": 6.3e-08,
+      "background_current_ma": 31.0,
+      "phone_current_ma": 82.0,
+      "connection_setup_mah": 0.028194444444444446,
+      "extra_connection_current_ma": 3.0
+    },
+    "beacons": {
+      "count": 6,
+      "placement": "grid",
+      "manual_positions": null,
+      "unlimited_power": true,
+      "backhaul_latency_s": 0.05,
+      "backhaul_loss_probability": 0.0
+    },
+    "churn": {
+      "enabled": false,
+      "arrival_window_s": [
+        0.0,
+        1800.0
+      ],
+      "session_duration_range_s": [
+        1800.0,
+        10800.0
+      ]
+    },
+    "social": {
+      "group_size_range": [
+        2,
+        8
+      ],
+      "no_friend_fraction": 0.2,
+      "outside_friends_range": [
+        0,
+        2
+      ]
+    },
+    "gps": {
+      "noise_std_m": 5.0,
+      "fix_failure_probability": 0.0
+    }
+  },
+  "git": {
+    "commit": "bb9e5e537fac85334cb880c24d150e70e87b70e7",
+    "dirty": true,
+    "status": [
+      "?? archives/2026-10-16_09-17-19_comparaison.json"
+    ],
+    "diff": ""
+  }
+}
