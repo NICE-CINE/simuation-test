@@ -116,15 +116,16 @@ def test_main_with_several_sizes_runs_one_comparison_per_size(tmp_path, monkeypa
         return [{"algorithm": "epidemic", "beacons": 0, "seed": 1, **{f: 0.5 for f in compare_algorithms.REPORT_FIELDS}}]
 
     monkeypatch.setattr(compare_algorithms, "run_matrix", fake_run_matrix)
+    (tmp_path / "res.v2").mkdir()
     compare_algorithms.main([
         "--size", "small", "medium", "--algorithms", "epidemic", "--archive-dir", str(tmp_path),
-        "--csv", str(tmp_path / "out.csv"),
+        "--csv", str(tmp_path / "res.v2" / "out.csv"),
     ])
     assert calls == [("small", 4000, "group"), ("medium", 10000, "group")]
     names = sorted(p.name for p in tmp_path.iterdir())
     assert sum(n.endswith("_comparaison_small.csv") for n in names) == 1
     assert sum(n.endswith("_comparaison_medium.json") for n in names) == 1
-    assert {"out_small.csv", "out_medium.csv"} <= set(names)
+    assert sorted(p.name for p in (tmp_path / "res.v2").iterdir()) == ["out_medium.csv", "out_small.csv"]
 
 
 def test_summarize_gives_mean_and_student_ci95_per_algorithm_and_beacons():

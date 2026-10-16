@@ -8,6 +8,7 @@ import statistics
 import sys
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from pathlib import Path
 from typing import Any, Callable, Dict, List, MutableMapping, Optional, Sequence, Tuple
 from festival_ble_sim.archive import DEFAULT_ARCHIVE_DIR, archive_stem, write_params
 from festival_ble_sim.config import BeaconConfig, GpsConfig, SimulationConfig, TrafficConfig
@@ -383,8 +384,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     for size in sizes:
         size_args = argparse.Namespace(**{**vars(args), "size": size})
         if args.csv and len(sizes) > 1:
-            root, dot, ext = args.csv.rpartition(".")
-            size_args.csv = f"{root}_{size}.{ext}" if dot else f"{args.csv}_{size}"
+            csv_path = Path(args.csv)
+            size_args.csv = str(csv_path.with_name(f"{csv_path.stem}_{size}{csv_path.suffix}"))
         resolve_cli_args(size_args, 200, parser.error)
         # Beacon count varies per row (0 or --beacon-count); the archived config
         # is the "with beacons" one, the CSV's `beacons` column says which applied.
