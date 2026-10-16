@@ -18,6 +18,8 @@ Version reduite au niveau reseau (pas de crypto, etiquettes, PoW ni SOS) :
   ~2 400 o sur le fil (`docs/radio/mesures.md`), 32 Ko n'en laisseraient
   passer que ~13 par minute vers un meme voisin ; avec 256 Ko, c'est la
   limite de 50 messages par minute qui joue, comme avant le recalage.
+  Le PURGE_SYNC (Bloom de 128 o par connexion) est facture 2 000 o, sa
+  taille estimee au format de l'app (`purge_sync_bytes`).
 
 Les interrupteurs `adaptive`, `suppression` et
 `replicated_first_eviction` permettent des ablations.

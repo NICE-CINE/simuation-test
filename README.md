@@ -624,7 +624,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   borne `H_MAX`, faux positifs du Bloom SUMMARY, suppression par compteur
   (message deja vu chez `K_SUP` voisins), jetons de purge propages de
   proche en proche (son propre mecanisme, facture comme un Bloom
-  PURGE_SYNC de 128 octets par connexion), budgets par session et eviction du buffer « plus
+  PURGE_SYNC de 2 000 octets par connexion : son Bloom de 128 o au
+  format de l'app, `docs/radio/mesures.md`), budgets par session et eviction du buffer « plus
   repliques d'abord » (hook `RoutingAlgorithm.choose_eviction`). Les
   interrupteurs `adaptive`, `suppression` et `replicated_first_eviction`
   servent aux ablations.
@@ -654,8 +655,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   de stockage-transport cote source) et, sans ACK apres `ack_timeout_s`,
   le reemet avec un nouveau SEQ, au plus `max_source_retransmissions`
   fois. Chaque saut d'ACK coute l'energie tx/rx de `ack_size_bytes`
-  (defaut 210 o, la taille d'un accuse de l'app Nice, pas celle de
-  Bluetooth Mesh : l'algo est compare pour cette app) mais pas de bande passante (le budget de lien du moteur ne
+  (defaut 16 o : un ACK inonde part en diffusion, en binaire, pas au format
+  JSON de l'app) mais pas de bande passante (le budget de lien du moteur ne
   le voit pas). Pense pour une topologie connexe : en festival clairseme,
   la livraison chute par rapport aux algos DTN, c'est attendu.
 - `bitchat` (`routing/bitchat.py`) — messages prives de bitchat (code iOS

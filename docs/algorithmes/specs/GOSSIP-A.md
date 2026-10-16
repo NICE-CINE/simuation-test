@@ -321,7 +321,7 @@ Les sources étant anonymes pour les relais, on ne peut pas faire de rate-limit 
 | `H_MAX` | 15 | **oui** |
 | `K_SUP` / fenêtre | 3 / 60 s | **oui** |
 | SUMMARY Bloom | 4096 bits, k = 4 | non |
-| PURGE_SYNC Bloom | 1024 bits, k = 4 | non |
+| PURGE_SYNC Bloom | 1024 bits, k = 4 (facturé 2 000 o par connexion : ce Bloom au format de l'app, `docs/radio/mesures.md`) | non |
 | `B_SESSION` | 256 Ko (32 Ko avant le 16 oct. 2026) | oui |
 | Buffer | 1 000 bundles | oui |
 | Jetons de purge max | 5 000 | non |

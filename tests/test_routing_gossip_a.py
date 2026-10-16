@@ -274,6 +274,8 @@ def test_decide_cache_leaves_results_unchanged():
         social=SocialConfig(outside_friends_range=(0, 0)),
         ble=BleConfig(connection_setup_s=7.0),
     )
-    r = run_simulation(config, routing_algorithm=GossipARouting(seed=11))
+    algo = GossipARouting(seed=11)
+    algo.purge_sync_bytes = 128
+    r = run_simulation(config, routing_algorithm=algo)
     assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (54, 51, 3899)
     assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (0, 3998, 23, 23)

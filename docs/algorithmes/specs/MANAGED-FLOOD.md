@@ -82,7 +82,7 @@ FIFO du moteur, rarement sollicité : un PDU ne reste que `relay_window_s` dans 
 | `acknowledged` | `True` | ACK de bout en bout et réémission par la source |
 | `ack_timeout_s` | 30 s | délai avant réémission |
 | `max_source_retransmissions` | 2 | réémissions maximum |
-| `ack_size_bytes` | 210 o | taille facturée pour chaque saut d'ACK : celle d'un accusé de l'app Nice (`docs/radio/mesures.md`), pas celle de Bluetooth Mesh (16 o avant le 16 oct. 2026) |
+| `ack_size_bytes` | 16 o | taille facturée pour chaque saut d'ACK, une diffusion binaire (pas le format JSON de l'app, `docs/radio/mesures.md`) |
 | `energy` | `EnergyConfig()` | modèle d'énergie pour le coût des ACK |
 
 ---
