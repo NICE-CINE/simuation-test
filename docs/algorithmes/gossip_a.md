@@ -13,7 +13,11 @@ Version reduite au niveau reseau (pas de crypto, etiquettes, PoW ni SOS) :
 - suppression par compteur (message deja vu chez `K_SUP` voisins) ;
 - jetons de purge propages de proche en proche apres livraison ;
 - budgets par session (octets, bundles) et eviction « plus repliques
-  d'abord » (`choose_eviction`).
+  d'abord » (`choose_eviction`). Le budget en octets (`session_budget_bytes`)
+  vaut 256 Ko et non les 32 Ko de la spec : un message de l'app pese
+  ~2 400 o sur le fil (`docs/radio/mesures.md`), 32 Ko n'en laisseraient
+  passer que ~13 par minute vers un meme voisin ; avec 256 Ko, c'est la
+  limite de 50 messages par minute qui joue, comme avant le recalage.
 
 Les interrupteurs `adaptive`, `suppression` et
 `replicated_first_eviction` permettent des ablations.

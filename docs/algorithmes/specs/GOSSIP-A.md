@@ -289,7 +289,7 @@ Le gossip remplit les buffers plus vite que le spray : capacité plus grande, et
 | Probabilité `p` | adaptée à la densité (§5) |
 | Suppression par compteur | `K_SUP` voisins suffisent (§5.1) |
 | Limite de sauts | `H_MAX` |
-| Budget par session | ≤ `B_SESSION = 32 Ko` envoyés par sens et par session |
+| Budget par session | ≤ `B_SESSION = 256 Ko` envoyés par sens et par session (32 Ko avant le 16 oct. 2026 : à ~2 400 o par message sur le fil, `docs/radio/mesures.md`, 32 Ko ne laissaient passer que ~13 bundles par minute, sous la limite de 50) |
 | Entrée par pair | ≤ 50 bundles / min acceptés d'un même voisin |
 | Advertising, Trickle, scan | comme [DASF §11] |
 
@@ -322,7 +322,7 @@ Les sources étant anonymes pour les relais, on ne peut pas faire de rate-limit 
 | `K_SUP` / fenêtre | 3 / 60 s | **oui** |
 | SUMMARY Bloom | 4096 bits, k = 4 | non |
 | PURGE_SYNC Bloom | 1024 bits, k = 4 | non |
-| `B_SESSION` | 32 Ko | oui |
+| `B_SESSION` | 256 Ko (32 Ko avant le 16 oct. 2026) | oui |
 | Buffer | 1 000 bundles | oui |
 | Jetons de purge max | 5 000 | non |
 | `POW_BITS` | 16 (0 = désactivé) | oui |

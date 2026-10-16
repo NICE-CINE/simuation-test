@@ -199,6 +199,12 @@ suivent leur propre format et restent estimés. `managed_flood` envoie ses
 accusés en diffusion, sans connexion, ce que l'app Nice ne fait pas : il
 reste un « et si » sur un autre transport.
 
+**Effet sur `gossip_a`** : son budget par voisin et par minute
+(`session_budget_bytes`) passe de 32 Ko (valeur de sa spec) à 256 Ko. À
+~2 400 o par message, 32 Ko n'en laissaient passer que ~13 par minute,
+contre 50 avant le recalage ; avec 256 Ko, c'est de nouveau la limite de 50
+messages (`max_bundles_per_peer_per_session`) qui joue.
+
 **Format allégé** (÷4) : `--set traffic.payload_size_range_bytes=250,950`.
 Les accusés n'ont pas de raccourci, il faut changer `ack_size_bytes` dans le
 code.
