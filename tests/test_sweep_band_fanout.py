@@ -19,6 +19,12 @@ def test_parse_variant_reads_typed_values():
     }
 
 
+def test_parse_variant_reads_the_met_destination_window():
+    assert sweep.parse_variant("met_dst_window_s=600") == {"met_dst_window_s": 600.0}
+    assert sweep.parse_variant("met_dst_window_s=none") == {"met_dst_window_s": None}
+    assert sweep.build_algorithm({"met_dst_window_s": None}, seed=1)._met_window is None
+
+
 def test_parse_variant_empty_means_defaults():
     assert sweep.parse_variant("") == {}
 

@@ -16,10 +16,11 @@ from festival_ble_sim.routing.band_fanout import BandFanoutRouting
 from festival_ble_sim.simulation import run_simulation
 
 HEADERS = ["variant", "seed", "beacons"] + REPORT_FIELDS + ["wall_s"]
-SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "overhead_bytes", "total_energy_consumed_mah"]
+SUMMARY_FIELDS = ["delivery_ratio", "avg_latency_s", "p95_latency_s", "overhead", "overhead_bytes", "packet_loss_count", "total_mesh_energy_consumed_mah"]
 DEFAULT_VARIANTS = [
     "",
     "purge_delivered=0",
+    "met_dst_window_s=none",
     "band_low=0,band_high=1",
     "fanout=2",
     "fanout=4",
@@ -35,12 +36,19 @@ def _parse_bool(value: str) -> bool:
     return value == "1"
 
 
+def _parse_window(value: str) -> Optional[float]:
+    if value == "none":
+        return None
+    return float(value)
+
+
 _PARSERS: Dict[str, Callable[[str], Any]] = {
     "fanout": int,
     "max_hops": int,
     "band_low": float,
     "band_high": float,
     "purge_delivered": _parse_bool,
+    "met_dst_window_s": _parse_window,
 }
 
 _worker_progress: Optional[MutableMapping[str, float]] = None

@@ -32,7 +32,15 @@ de portee ou le shadowing fait perdre des paquets.
    directe contourne `decide` mais a besoin d'un lien), puis les relais
    choisis (les plus proches parmi eux si le plafond coupe), puis les plus
    proches du reste. Le plafond reste respecte.
-5. **Purge par ACK** (`purge_delivered=True`) : le destinataire emet un ACK
+5. **Relais "a croise le destinataire"** (`met_dst_window_s`, 1200 s par
+   defaut, `None` = desactive) : l'algo note a chaque tick qui etait a
+   portee de qui. Un voisin qui a ete a portee du destinataire du message
+   dans la fenetre recoit la copie sans entamer le budget `fanout` du
+   porteur (il est aussi servi en priorite par `select_links`). La copie
+   qu'il recoit ne repart ensuite que vers d'autres voisins de ce type
+   (budget a zero), ce qui garde le cout au niveau d'avant. Meme idee que
+   le `met_dst` de `fresh_spray`.
+6. **Purge par ACK** (`purge_delivered=True`) : le destinataire emet un ACK
    que le moteur propage sur les connexions, vers les noeuds qui annoncent
    le message ; chacun supprime sa copie en l'apprenant.
 
@@ -61,6 +69,7 @@ flowchart TD
 | `band` | (0.4, 0.6) | fenetre de distance / portee, `0 <= bas < haut` |
 | `seed` | 0 | RNG du tirage des relais |
 | `purge_delivered` | True | ACK du moteur (`uses_delivery_acks`) |
+| `met_dst_window_s` | 1200 | fenetre "a croise le destinataire" en s (`None` = desactive) |
 
 Un arbre complet de copies peut atteindre `1 + 3 + 3^2 + 3^3 + 3^4 = 121`
 porteurs avec les defauts. Cette borne n'est pas stricte : chaque borne
@@ -74,19 +83,62 @@ s'il la recoit de nouveau.
   bande lit encore la position GPS bruitee des voisins sans annonce radio.
 - Le classement des voisins utilise la position GPS bruitee (`gps_position()`)
   du porteur et de chaque voisin, sans cout energetique de fix facture.
+- La memoire "qui a croise qui" est globale (instance partagee) et lue sur
+  le voisin sans echange radio ni cout, comme dans `fresh_spray`.
 - Le choix des relais se fait dans `on_tick` : sans `ble_config`, le moteur
   n'appelle pas `on_tick` et l'algo ne relaie rien.
 - Pas d'eviction dediee (FIFO du moteur).
 
-## Resultats (balayage de variantes)
+## Mesures actuelles (petit echantillon)
+
+Mesure faite avec la purge globale instantanee, avant le passage aux ACK du
+moteur (a refaire) : moteur au 15 oct. 2026, mobilite `poi`, 300 festivaliers, 1200 s + 600 s de
+cooldown, 6 bornes, `reply_probability` 0.5, graines 1 a 6 (environ 300
+messages par run), ecarts apparies par graine. Echelle reduite : a
+confirmer avec `scripts/sweep_band_fanout.py` a 500+ festivaliers.
+
+| variante | livraison | latence moy. (s) | p95 (s) | overhead | paquets perdus |
+|---|---|---|---|---|---|
+| sans `met_dst_window_s` (ancien comportement) | 0.941 | 265 | 813 | 60.5 | 11 483 |
+| **defauts** (`met_dst_window_s=1200`) | 0.968 | 221 | 674 | 61.9 | 13 110 |
+| defauts avec `fanout=2` | 0.926 | 258 | 751 | 41.1 | 8 010 |
+| `fresh_spray` (reference) | 0.963 | 215 | 671 | 32.4 | 4 803 |
+
+- Les relais "a croise le destinataire" apportent +2.7 points de livraison
+  (t = 5.3 sur 6 graines appariees) et 44 s de latence en moins, pour un
+  overhead inchange (+2 %, non significatif).
+- A livraison egale, `fresh_spray` coute encore moitie moins d'overhead et
+  2.7 fois moins de pertes : `band_fanout` reste un gossip a budget non borne
+  globalement (`fanout^max_hops`), pas une alternative a `fresh_spray`.
+- L'energie du mesh est quasi identique pour tous (le courant de fond
+  domine), elle ne departage pas : lire l'overhead et les pertes.
+- La bande ne se mesure pas : sans bande (0-100 %) la livraison varie de
+  moins de 1 point, et avec un GPS exact (sans bruit) l'ecart reste dans le
+  bruit. Avec le bruit GPS de 5 m par axe, l'erreur sur la distance (~7 m)
+  est plus large que la bande (6 m) : seuls 34 % des voisins classes "dans la
+  bande" y sont vraiment (20 % au hasard) et 13 % sont a plus de 24 m. A
+  18 m la marge de liaison vaut deja 6.1 dB (pas de perte de signal faible)
+  et la coupure par shadowing seulement 6 %.
+- Essais ecartes : etaler le budget dans le temps (un relais toutes les
+  30 s) fait perdre 2 points et ajoute 55 s de latence ; servir d'abord les
+  amis du destinataire n'ameliore rien (0.903 contre 0.922).
+- Correctif de reproductibilite : le tirage du bruit GPS suivait l'ordre des
+  voisins renvoye par `SpatialGrid` (ensembles d'objets, donc adresses
+  memoire) : deux runs de meme graine donnaient des resultats differents.
+  Les voisins sont maintenant tries par id avant le tirage.
+
+## Resultats du balayage du 9 octobre (perimes)
 
 `scripts/sweep_band_fanout.py`, mobilite `poi`, 500 festivaliers, 3600 s,
 6 bornes, `reply_probability` 0.5, moyenne des seeds 1-3. Archive :
 `archives/2026-10-09_09-47-35_sweep_band_fanout.csv` (+ `.json`).
 
 Attention : ce balayage date d'avant le correctif `d775dbc` (liaisons
-reservees aux destinataires, budget par porteur, voisins inutiles ecartes) ;
-les chiffres ne correspondent pas exactement au code actuel.
+reservees aux destinataires, budget par porteur, voisins inutiles ecartes)
+et d'avant les corrections du moteur du 12 octobre (budget de liaison
+partage par radio, noeuds inactifs ecartes, fenetre de mesure) et les
+relais "a croise le destinataire" : les chiffres ne correspondent plus au
+code actuel. La mesure plus recente est ci-dessus.
 
 | variante | livraison | latence moy. (s) | p95 (s) | overhead | energie (mAh) |
 |---|---|---|---|---|---|
@@ -127,7 +179,9 @@ les chiffres ne correspondent pas exactement au code actuel.
 
 - Plus gourmand en energie et en overhead que `spray_wait` : pas de budget
   global de copies, chaque copie relayee repart avec un budget neuf.
-- La bande de distance n'a pas prouve son interet (voir ci-dessus).
+- La bande de distance n'a pas prouve son interet (voir ci-dessus) ; le
+  budget `fanout^max_hops` n'est pas borne globalement (contrairement a
+  `spray_wait`).
 - La position GPS des voisins est supposee disponible sans annonce radio.
 - Pas de notion de destination : les relais sont tires au hasard, sans
   utiliser `dst_position` ni l'historique de rencontres.
