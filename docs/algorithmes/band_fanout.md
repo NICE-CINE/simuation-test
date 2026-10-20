@@ -83,8 +83,11 @@ s'il la recoit de nouveau.
   bande lit encore la position GPS bruitee des voisins sans annonce radio.
 - Le classement des voisins utilise la position GPS bruitee (`gps_position()`)
   du porteur et de chaque voisin, sans cout energetique de fix facture.
-- La memoire "qui a croise qui" est globale (instance partagee) et lue sur
-  le voisin sans echange radio ni cout, comme dans `fresh_spray`.
+- La memoire "qui a croise qui" est globale (instance partagee). Sur une
+  connexion, sa lecture est facturee comme dans `fresh_spray`
+  (`connection_table_bytes`, 8 octets par destination portee par le voisin),
+  mais `select_links` la lit encore avant toute connexion pour donner un
+  lien aux voisins qui ont croise le destinataire, gratuitement.
 - Le choix des relais se fait dans `on_tick` : sans `ble_config`, le moteur
   n'appelle pas `on_tick` et l'algo ne relaie rien.
 - Pas d'eviction dediee (FIFO du moteur).

@@ -2,7 +2,7 @@ from __future__ import annotations
 import random
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 from ..models import Message
-from .base import RoutingAlgorithm, RoutingDecision
+from .base import RoutingAlgorithm, RoutingDecision, per_destination_table_bytes
 
 if TYPE_CHECKING:
     from ..nodes import BaseNode
@@ -141,6 +141,10 @@ class BandFanoutRouting(RoutingAlgorithm):
         chosen = [n for n in ranked if n.id in chosen_ids and n.id not in dst_ids]
         others = [n for n in ranked if n.id not in dst_ids and n.id not in chosen_ids]
         return (destinations + chosen + others)[:max_links]
+
+    def connection_table_bytes(self, node: "BaseNode", peer: "BaseNode") -> int:
+        # When node last met each destination the peer carries messages for.
+        return per_destination_table_bytes(peer)
 
     def decide(self, message: Message, holder: "BaseNode", contact: "BaseNode", now: float) -> RoutingDecision:
         self._now = now

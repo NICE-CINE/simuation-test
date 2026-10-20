@@ -50,7 +50,11 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   `docs/radio/mesures.md` §7.
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
-  d'un voisin dans `on_tick` avant toute connexion ; les tables des
+  d'un voisin dans `on_tick` avant toute connexion ; `band_fanout` lit
+  aussi « ce voisin a croise le destinataire » avant toute connexion pour
+  lui donner un lien (la table n'est payee qu'une fois connecte ; mesure
+  oct. 2026 sans ces deux lectures : livraison inchangee, +56 % de latence
+  en zone dense) ; les tables des
   algorithmes sont facturees une fois par connexion mais lues a jour
   ensuite ; la joignabilite bitchat ignore les pertes de ses annonces.
 - [ ] **Validation** : comparer les durees de contact, les temps entre
