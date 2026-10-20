@@ -656,6 +656,9 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   l'oublie. Boucles et tempetes bornees par le TTL (`ttl`, en sauts), un
   cache de messages par noeud de taille fixe (`cache_size`, FIFO, cle
   `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
+  Un relais ne sait pas ce que ses voisins ont deja : il diffuse a tous a
+  chaque tick de sa fenetre, chacun paie la reception et son cache jette
+  les doublons.
   Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
   ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
   les copies ; la source oublie elle aussi le PDU apres sa fenetre (pas
