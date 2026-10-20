@@ -757,7 +757,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
 - `eco_sf` (`routing/eco_sf.py`) — ECO-SF, Spray-and-Focus sans GPS econome
   en reveils radio. Modelise : beacons a cadence Trickle (Imin 2 s, Imax
   30/60/120 s selon la batterie, suppression k = 1) qui conditionnent la
-  decouverte (pas de connexion sans beacon entendu dans un sens), utilite
+  decouverte (pas de connexion, ni logique ni radio via `select_links`,
+  sans beacon entendu dans un sens), utilite
   PRoPHET allegee (vieillissement par minute, table de 64 entrees,
   transitivite sur les 32 meilleures, echangee seulement en connexion),
   budget de 2 a 16 copies selon les voisins entendus sur 60 s, partage

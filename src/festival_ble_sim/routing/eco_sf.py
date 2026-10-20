@@ -182,6 +182,7 @@ class EcoSfRouting(RoutingAlgorithm):
             receiver.heard += 1
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        self._now = now
         self._connections.clear()
         self._refused.clear()
         if now - self._last_prune >= self._cooldown:
@@ -231,6 +232,17 @@ class EcoSfRouting(RoutingAlgorithm):
             if entry is not None and now <= entry[1]:
                 return True
         return False
+
+    def select_links(self, sender: "BaseNode", neighbors: List["BaseNode"], max_links: int) -> List["BaseNode"]:
+        # Discovery gates the radio link too, not only decide(): a phone
+        # can't connect to one it never heard, nor redial within the cooldown.
+        now = self._now
+        reachable = [
+            n for n in neighbors
+            if self._discovered(sender.id, n.id, now)
+            and now - self._last_connect.get((min(sender.id, n.id), max(sender.id, n.id)), -math.inf) >= self._cooldown
+        ]
+        return super().select_links(sender, reachable, max_links)
 
     def _should_connect(self, holder: "BaseNode", peer: "BaseNode", now: float) -> bool:
         if peer.battery_fraction < self._battery_silent:

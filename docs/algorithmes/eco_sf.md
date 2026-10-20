@@ -12,7 +12,8 @@ connexions :
   nouveau voisin, message cree ou recu, purge ;
 - une paire ne peut se connecter que si l'un des deux a entendu un beacon
   de l'autre (entree valable `3 x Imax`), avec un cooldown de 20 s par
-  paire ; la livraison directe au destinataire reste geree par le moteur ;
+  paire, y compris pour la liaison radio du moteur (`select_links`) ; la
+  livraison directe au destinataire reste geree par le moteur ;
 - connexion seulement si le porteur a un message pour le pair, ou un
   message que le pair n'a pas et pour lequel son utilite depasse
   `dest_bloom_threshold` (0,05) ;
