@@ -376,7 +376,8 @@ colonnes du CSV :
 | Octets par message livre (`overhead_bytes`) | tous les octets emis (donnees retransmissions comprises, resumes, ACK, tables des algorithmes, diffusions de controle) / messages livres : **le cout radio a comparer entre algorithmes**. Detail dans `data_bytes`, `summary_bytes`, `ack_bytes`, `table_bytes`, `control_bytes` ; seuls les octets non lies a un message emis avant la fin de `--duration` sont comptes |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
-| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 82 mA du telephone etant identiques pour tous |
+| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos), les 82 mA du telephone etant identiques pour tous |
+| Energie de l'algo (`total_algo_energy_consumed_mah`, ligne « dont algo, hors base ») | l'energie mesh sans `background_current_ma` (31 mA pour rester joignable) : ce que l'algorithme depense lui-meme (emission/reception, connexions, GPS, annonces) : **la colonne a comparer entre algorithmes**. La base ecrase souvent l'ecart entre deux algos dans l'energie mesh, pas ici |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Annonces perdues (`packet_loss_count`) | receptions de diffusions de controle perdues (sans connexion, donc sans renvoi) |

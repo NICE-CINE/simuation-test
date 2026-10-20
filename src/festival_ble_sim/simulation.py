@@ -42,7 +42,7 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
         if not node.on_site:
             continue
         if node.is_active and env.now > config.warmup_s:
-            node.consume_energy(mesh_mah_per_tick)
+            node.consume_energy(mesh_mah_per_tick, background=True)
             node.consume_energy(phone_mah_per_tick, mesh=False)
         old_x, old_y = node.position.x, node.position.y
         node.move(config.mobility.tick_interval_s, config.area)
@@ -238,5 +238,6 @@ def run_simulation(
     dead_count = sum(1 for n in nodes.values() if n.battery_depleted)
     buffer_evictions = sum(n.buffer_evictions for n in nodes.values())
     return metrics.build_report(
-        energy_samples, dead_count, buffer_evictions, [n.mesh_energy_consumed_mah for n in phones]
+        energy_samples, dead_count, buffer_evictions, [n.mesh_energy_consumed_mah for n in phones],
+        [n.mesh_energy_consumed_mah - n.background_energy_consumed_mah for n in phones],
     )

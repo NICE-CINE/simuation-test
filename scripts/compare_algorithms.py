@@ -36,6 +36,7 @@ REPORT_FIELDS = [
     "retransmitted_bytes",
     "total_energy_consumed_mah",
     "total_mesh_energy_consumed_mah",
+    "total_algo_energy_consumed_mah",
     "buffer_eviction_count",
     "packet_loss_count",
     "backhaul_transmissions",

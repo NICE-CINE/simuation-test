@@ -27,6 +27,7 @@ class BaseNode:
         self.battery_mah = battery_mah * charge_fraction
         self.initial_charge_mah = self.battery_mah
         self.mesh_energy_consumed_mah = 0.0
+        self.background_energy_consumed_mah = 0.0
         self.is_active = True
         # Distinct from is_active=False, which also covers a churned-out/
         # not-yet-arrived node (see simulation._churn_process): only this
@@ -98,13 +99,15 @@ class BaseNode:
         self.delivered_ids.add(msg_id)
         self.buffer.pop(msg_id, None)
 
-    def consume_energy(self, mah: float, mesh: bool = True) -> None:
+    def consume_energy(self, mah: float, mesh: bool = True, background: bool = False) -> None:
         if self.battery_mah == math.inf:
             return
         spent = min(mah, self.battery_mah)
         self.battery_mah -= spent
         if mesh:
             self.mesh_energy_consumed_mah += spent
+        if background:
+            self.background_energy_consumed_mah += spent
         if self.battery_mah <= 0.0:
             self.is_active = False
             self.battery_depleted = True
