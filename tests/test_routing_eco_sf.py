@@ -1,4 +1,4 @@
-from festival_ble_sim.models import Message
+from festival_ble_sim.models import Message, Position
 from festival_ble_sim.routing.base import RoutingDecision
 from festival_ble_sim.routing.eco_sf import EcoSfRouting
 
@@ -11,6 +11,7 @@ class _Node:
         self.battery_capacity_mah = 100.0
         self.battery_mah = battery
         self.buffer = {}
+        self.position = Position(float(node_id), 0.0)
 
     @property
     def battery_fraction(self):
@@ -64,6 +65,16 @@ def test_no_connection_before_any_beacon_is_heard():
     holder.buffer[1] = msg
     algo.on_simulation_start({1: holder, 2: contact})
     assert algo.decide(msg, holder, contact, 0.0) is RoutingDecision.IGNORE
+
+
+def test_links_only_open_to_discovered_neighbors_outside_the_cooldown():
+    algo, holder, contact = _setup()
+    stranger = _Node(5)
+    assert algo.select_links(holder, [stranger, contact], 6) == [contact]
+    msg = _msg(copies=8)
+    holder.buffer[1] = msg
+    assert algo.decide(msg, holder, contact, 3.0) is RoutingDecision.FORWARD
+    assert algo.select_links(holder, [stranger, contact], 6) == []
 
 
 def test_spray_gives_the_better_carrier_the_larger_share():

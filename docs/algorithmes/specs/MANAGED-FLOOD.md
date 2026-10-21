@@ -54,9 +54,10 @@ Pour chaque message `m` du porteur `A`, à chaque contact avec `B` :
 ```
 si refresh(A, m) interdit le relais                   → IGNORE
 si m.hops ≥ ttl                                       → IGNORE
-si B détient m, a (msg_id, SEQ) en cache, ou connaît l'ACK → IGNORE
-sinon                                                 → FORWARD ; (msg_id, SEQ) entre dans le cache de B
+sinon                                                 → FORWARD
 ```
+
+`A` ne sait pas ce que `B` détient : tous ses voisins reçoivent la diffusion et paient la réception. À l'arrivée (`on_forward`), si `B` a déjà `(msg_id, SEQ)` en cache ou connaît l'ACK, il jette la copie (il garde celle qu'il relayait encore) ; sinon `(msg_id, SEQ)` entre dans son cache.
 
 ### 3.5 Mode acquitté
 
@@ -100,7 +101,7 @@ FIFO du moteur, rarement sollicité : un PDU ne reste que `relay_window_s` dans 
 
 | Bluetooth Mesh | Simulateur |
 |---|---|
-| Relais avec un nombre de retransmissions et un intervalle | Fenêtre de relais en secondes, une transmission par voisin et par contact |
+| Relais avec un nombre de retransmissions et un intervalle | Fenêtre de relais en secondes, une diffusion par tick à tous les voisins |
 | TTL décrémenté ; un PDU à TTL ≤ 1 n'est pas relayé | Compteur de sauts du moteur comparé à `ttl` ; la livraison directe reste possible au-delà (règle commune à tous les algorithmes) |
 | Chiffrement réseau, IV index, SEQ sur 24 bits | Non modélisés ; SEQ = numéro de tentative |
 | Nœuds *Friend* / *Low Power*, proxy GATT | Non modélisés |

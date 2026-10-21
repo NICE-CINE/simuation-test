@@ -103,7 +103,7 @@ Limites de cette mesure :
 
 ### Deux colonnes d'énergie
 
-Le rapport donne deux mesures, sur les téléphones seulement (bornes exclues) :
+Le rapport donne trois mesures, sur les téléphones seulement (bornes exclues) :
 
 - **Énergie totale** (`total_energy_consumed_mah`, `avg_energy_consumed_mah`) :
   tout ce que la batterie a perdu, téléphone compris. C'est elle qui décide
@@ -111,13 +111,21 @@ Le rapport donne deux mesures, sur les téléphones seulement (bornes exclues) :
 - **Énergie mesh** (`total_mesh_energy_consumed_mah`,
   `avg_mesh_energy_consumed_mah`, ligne « dont mesh » du rapport) : la même
   chose **sans** `phone_current_ma`, c'est-à-dire rester joignable, plus
-  l'émission, la réception et les coûts propres aux algorithmes. **C'est la
-  colonne à utiliser pour comparer les algorithmes** : les 82 mA du
-  téléphone sont identiques pour tous et masqueraient les écarts.
+  l'émission, la réception et les coûts propres aux algorithmes : les 82 mA
+  du téléphone sont identiques pour tous et masqueraient les écarts.
+- **Énergie de l'algorithme** (`total_algo_energy_consumed_mah`,
+  `avg_algo_energy_consumed_mah`, ligne « dont algo, hors base ») : l'énergie
+  mesh **sans** `background_current_ma` non plus, donc ce que l'algorithme
+  dépense lui-même (émission, réception, connexions, GPS, annonces). Les
+  31 mA de base pèsent souvent plus que tout le reste et sont identiques
+  pour tous les algorithmes tant que les téléphones vivent. **C'est la
+  colonne à utiliser pour comparer les algorithmes.**
 
 `BaseNode.consume_energy(mah, mesh=False)` est le seul appel qui ne compte
-pas dans la part mesh ; tout nouveau coût facturé par un algorithme y
-entre par défaut. `compare_algorithms.py` écrit les deux totaux dans son CSV.
+pas dans la part mesh, `consume_energy(mah, background=True)` (la base, dans
+`simulation._mobile_process`) le seul qui ne compte pas dans celle de
+l'algorithme ; tout nouveau coût facturé par un algorithme entre dans les
+deux par défaut. `compare_algorithms.py` écrit les trois totaux dans son CSV.
 
 Pour ne simuler que le mesh, sans le téléphone lui-même :
 `EnergyConfig(phone_current_ma=0.0)`.

@@ -157,17 +157,21 @@ class ManagedFloodRouting(RoutingAlgorithm):
             return RoutingDecision.IGNORE
         if message.hops >= self._ttl:
             return RoutingDecision.IGNORE
-        attempt = message.routing_state.get("attempt", 0)
-        if (
-            contact.has_message(message.msg_id)
-            or self.in_cache(contact.id, message.msg_id, attempt)
-            or self.knows_ack(contact.id, message.msg_id)
-        ):
-            return RoutingDecision.IGNORE
+        # A relay can't tell what its neighbors already hold: it broadcasts
+        # to all of them, and each pays the reception (see on_forward).
         return RoutingDecision.FORWARD
 
     def on_forward(self, message: Message, holder: "BaseNode", contact: "BaseNode", forwarded_copy: Message) -> None:
+        # The receiver's own cache drops a PDU it has already seen (or whose
+        # ack it knows); store_message kept any copy it was still relaying.
         attempt = forwarded_copy.routing_state.get("attempt", 0)
+        duplicate = self.in_cache(contact.id, forwarded_copy.msg_id, attempt) or self.knows_ack(
+            contact.id, forwarded_copy.msg_id
+        )
+        if duplicate:
+            if contact.buffer.get(forwarded_copy.msg_id) is forwarded_copy:
+                del contact.buffer[forwarded_copy.msg_id]
+            return
         self._remember(contact.id, (forwarded_copy.msg_id, attempt), self._now)
 
     def on_delivered(self, message: Message, holder: "BaseNode") -> None:

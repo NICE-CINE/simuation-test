@@ -50,7 +50,11 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   `docs/radio/mesures.md` §7.
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
   sans annonce radio ; `band_fanout` et `eco_sf` consultent le buffer
-  d'un voisin dans `on_tick` avant toute connexion ; les tables des
+  d'un voisin dans `on_tick` avant toute connexion ; `band_fanout` lit
+  aussi « ce voisin a croise le destinataire » avant toute connexion pour
+  lui donner un lien (la table n'est payee qu'une fois connecte ; mesure
+  oct. 2026 sans ces deux lectures : livraison inchangee, +56 % de latence
+  en zone dense) ; les tables des
   algorithmes sont facturees une fois par connexion mais lues a jour
   ensuite ; la joignabilite bitchat ignore les pertes de ses annonces.
 - [ ] **Validation** : comparer les durees de contact, les temps entre
@@ -376,7 +380,8 @@ colonnes du CSV :
 | Octets par message livre (`overhead_bytes`) | tous les octets emis (donnees retransmissions comprises, resumes, ACK, tables des algorithmes, diffusions de controle) / messages livres : **le cout radio a comparer entre algorithmes**. Detail dans `data_bytes`, `summary_bytes`, `ack_bytes`, `table_bytes`, `control_bytes` ; seuls les octets non lies a un message emis avant la fin de `--duration` sont comptes |
 | Transmissions totales | transmissions BLE reussies (relais et livraisons) |
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
-| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos) : **la colonne a comparer entre algorithmes**, les 82 mA du telephone etant identiques pour tous |
+| Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos), les 82 mA du telephone etant identiques pour tous |
+| Energie de l'algo (`total_algo_energy_consumed_mah`, ligne « dont algo, hors base ») | l'energie mesh sans `background_current_ma` (31 mA pour rester joignable) : ce que l'algorithme depense lui-meme (emission/reception, connexions, GPS, annonces) : **la colonne a comparer entre algorithmes**. La base ecrase souvent l'ecart entre deux algos dans l'energie mesh, pas ici |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Annonces perdues (`packet_loss_count`) | receptions de diffusions de controle perdues (sans connexion, donc sans renvoi) |
@@ -651,6 +656,9 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
   l'oublie. Boucles et tempetes bornees par le TTL (`ttl`, en sauts), un
   cache de messages par noeud de taille fixe (`cache_size`, FIFO, cle
   `(msg_id, SEQ)`) qui rejette tout PDU deja vu, et la fenetre de relais.
+  Un relais ne sait pas ce que ses voisins ont deja : il diffuse a tous a
+  chaque tick de sa fenetre, chacun paie la reception et son cache jette
+  les doublons.
   Mode acquitte (`acknowledged=True`, defaut) : la destination emet un
   ACK propage par inondation geree (memes regles TTL/fenetre) qui purge
   les copies ; la source oublie elle aussi le PDU apres sa fenetre (pas
@@ -749,7 +757,8 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
 - `eco_sf` (`routing/eco_sf.py`) — ECO-SF, Spray-and-Focus sans GPS econome
   en reveils radio. Modelise : beacons a cadence Trickle (Imin 2 s, Imax
   30/60/120 s selon la batterie, suppression k = 1) qui conditionnent la
-  decouverte (pas de connexion sans beacon entendu dans un sens), utilite
+  decouverte (pas de connexion, ni logique ni radio via `select_links`,
+  sans beacon entendu dans un sens), utilite
   PRoPHET allegee (vieillissement par minute, table de 64 entrees,
   transitivite sur les 32 meilleures, echangee seulement en connexion),
   budget de 2 a 16 copies selon les voisins entendus sur 60 s, partage

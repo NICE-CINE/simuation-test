@@ -33,6 +33,7 @@ def test_idle_phones_drain_background_radio_current():
     assert report.total_transmissions == 0
     assert abs(report.avg_energy_consumed_mah - 5.0) < 0.01
     assert abs(report.avg_mesh_energy_consumed_mah - 3.0) < 0.01
+    assert report.avg_algo_energy_consumed_mah == 0.0
 
 
 def test_random_initial_charge_is_seeded_and_kills_only_low_phones():

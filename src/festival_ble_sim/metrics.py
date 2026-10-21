@@ -32,6 +32,11 @@ class SimulationReport:
     # extras, without EnergyConfig.phone_current_ma (identical for every algorithm).
     total_mesh_energy_consumed_mah: float = 0.0
     avg_mesh_energy_consumed_mah: float = 0.0
+    # Mesh energy without background_current_ma either: what the algorithm
+    # itself spends (tx/rx, connections, GPS, beacons), which the baseline
+    # otherwise drowns (it is identical for every algorithm while phones live).
+    total_algo_energy_consumed_mah: float = 0.0
+    avg_algo_energy_consumed_mah: float = 0.0
     # Bytes put on the air: data (resends included) of measured messages;
     # summaries, acks, algorithm tables and control broadcasts sent before
     # the end of the measured window. overhead_bytes = all of it per
@@ -123,6 +128,7 @@ class MetricsCollector:
         dead_node_count: int,
         buffer_eviction_count: int = 0,
         node_mesh_energy_consumed_mah: Optional[List[float]] = None,
+        node_algo_energy_consumed_mah: Optional[List[float]] = None,
     ) -> SimulationReport:
         # Delivery, latency and hops: spontaneous messages only, the same set
         # for every algorithm at a given seed. Overhead covers all traffic.
@@ -144,6 +150,8 @@ class MetricsCollector:
         avg_energy = total_energy / len(node_energy_consumed_mah) if node_energy_consumed_mah else 0.0
         mesh = node_mesh_energy_consumed_mah or []
         total_mesh = sum(mesh)
+        algo = node_algo_energy_consumed_mah or []
+        total_algo = sum(algo)
         return SimulationReport(
             messages_created=self._messages_created,
             messages_delivered=delivered,
@@ -166,6 +174,8 @@ class MetricsCollector:
             reply_delivery_ratio=replies_delivered / self._replies_created if self._replies_created else 0.0,
             total_mesh_energy_consumed_mah=total_mesh,
             avg_mesh_energy_consumed_mah=total_mesh / len(mesh) if mesh else 0.0,
+            total_algo_energy_consumed_mah=total_algo,
+            avg_algo_energy_consumed_mah=total_algo / len(algo) if algo else 0.0,
             data_bytes=self._data_bytes,
             summary_bytes=self._overhead_bytes["summary"],
             ack_bytes=self._overhead_bytes["ack"],
@@ -196,6 +206,7 @@ def format_report(report: SimulationReport) -> str:
         f"Energie totale consommee  : {report.total_energy_consumed_mah:.2f} mAh\n"
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
         f"  dont mesh (totale / moy): {report.total_mesh_energy_consumed_mah:.2f} / {report.avg_mesh_energy_consumed_mah:.2f} mAh\n"
+        f"  dont algo, hors base    : {report.total_algo_energy_consumed_mah:.2f} / {report.avg_algo_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
         f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
         f"Annonces perdues (radio)  : {report.packet_loss_count}\n"

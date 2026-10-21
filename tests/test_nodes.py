@@ -66,9 +66,11 @@ def test_partial_charge_counts_energy_from_the_starting_charge():
     assert node.battery_mah == pytest.approx(60.0)
     node.consume_energy(10.0)
     node.consume_energy(5.0, mesh=False)
-    assert node.energy_consumed_mah == pytest.approx(15.0)
-    assert node.mesh_energy_consumed_mah == pytest.approx(10.0)
-    assert node.battery_fraction == pytest.approx(0.45)
+    node.consume_energy(4.0, background=True)
+    assert node.energy_consumed_mah == pytest.approx(19.0)
+    assert node.mesh_energy_consumed_mah == pytest.approx(14.0)
+    assert node.background_energy_consumed_mah == pytest.approx(4.0)
+    assert node.battery_fraction == pytest.approx(0.41)
 
 
 def test_unlimited_power_node_never_deactivates():

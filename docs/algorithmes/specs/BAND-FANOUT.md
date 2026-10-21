@@ -125,8 +125,8 @@ Avec les défauts, un arbre de copies issu d'une seule source compte au plus `1 
 
 ## 6. Ce qui est simplifié
 
-- `_delivered` est global et instantané (instance partagée) : aucun ACK n'est transmis ni facturé. C'est optimiste, comme pour `dasfv`, `fresh_spray` ou `geo_spray_focus`.
-- La mémoire « qui a croisé qui » est globale et lue chez le voisin sans échange radio ni coût (comme `fresh_spray`).
+- Les ACK de livraison passent par le moteur (`uses_delivery_acks`) : résumés, ACK et temps d'antenne payés.
+- La mémoire « qui a croisé qui » est globale. Sur une connexion, sa lecture est facturée comme dans `fresh_spray` (`connection_table_bytes` = 8 octets par destination portée par le voisin) ; `select_links` et le tirage de `on_tick` la lisent encore avant toute connexion, ainsi que le buffer des voisins (qui a déjà le message), sans rien payer.
 - Les positions GPS du porteur et des voisins sont lues sans fix facturé, et sans échec de fix (`gps_position()`, pas `gps_fix()`). Un vrai téléphone devrait mesurer la distance au RSSI ou recevoir la position du voisin.
 - `select_links` classe par position réelle, la bande par position bruitée : un relais tiré peut se trouver un peu hors bande en réalité.
 

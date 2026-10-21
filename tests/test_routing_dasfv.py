@@ -340,3 +340,14 @@ def test_a_walking_phone_with_high_turnover_is_a_mule():
     algo._prev_window_contacts[phone.id] = {5, 6, 7}
     algo._prev2_window_contacts[phone.id] = {1, 2, 3}
     assert algo._is_mule(phone)
+
+
+def test_sightings_older_than_the_windows_are_forgotten():
+    algo = DasfVRouting()
+    a, b, c = _node(1), _node(2), _node(3)
+    _meet(algo, a, b, 0.0)
+    algo.on_tick(1.0, {})
+    _meet(algo, a, c, 30.0)
+    assert algo._last_seen[a.id] == {c.id: 30.0}
+    assert b.id not in algo._last_seen
+    assert algo._density(a.id, 30.0) == 1

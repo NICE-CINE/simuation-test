@@ -94,6 +94,7 @@ class DasfVRouting(RoutingAlgorithm):
         self._motion_anchor: Dict[int, Tuple[float, float, float]] = {}
         self._speed: Dict[int, float] = {}
         self._prev_tick: Optional[float] = None
+        self._last_prune = 0.0
 
     def _decayed(self, a: int, b: int, now: float) -> float:
         p = self._predictability.get(a, {}).get(b, 0.0)
@@ -127,6 +128,7 @@ class DasfVRouting(RoutingAlgorithm):
         self._window_id = window_id
 
     def on_tick(self, now: float, neighbors_by_node: Dict[int, List["BaseNode"]]) -> None:
+        self._prune_sightings(now)
         # Every in-range pair feeds density, the 2-hop check and turnover:
         # decide() only sees contacts the holder has something to offer.
         for node_id, neighbors in neighbors_by_node.items():
@@ -134,6 +136,24 @@ class DasfVRouting(RoutingAlgorithm):
                 self._touch_encounter(node_id, neighbor.id, now)
                 self._observe_motion(neighbor, now)
         self._prev_tick = now
+
+    def _prune_sightings(self, now: float) -> None:
+        # Sightings older than both windows never count again, and a missing
+        # one reads as a new contact just like an old one: same results,
+        # without _density scanning everyone a node ever met.
+        horizon = max(self._density_window_s, self._two_hop_freshness_s)
+        if now - self._last_prune < horizon:
+            return
+        self._last_prune = now
+        for node_id in list(self._last_seen):
+            kept = {
+                other: t for other, t in self._last_seen[node_id].items()
+                if now - t <= horizon or t == self._prev_tick
+            }
+            if kept:
+                self._last_seen[node_id] = kept
+            else:
+                del self._last_seen[node_id]
 
     def _touch_encounter(self, a: int, b: int, now: float) -> bool:
         seen = self._last_seen.get(a, {}).get(b)
