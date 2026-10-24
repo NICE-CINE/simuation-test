@@ -21,9 +21,10 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
     foule (l'exposant est le meme a 3 m2/personne et sur un site vide) ;
   - la **variabilite** : ~11 dB d'ecart a 1 m entre deux passes (orientation
     du telephone, terrain), un effet lent ; le shadowing actuel (4 dB) est
-    tire independamment a chaque tick et par sens. Il faudrait un decalage
-    fixe par telephone et un shadowing correle dans le temps et reciproque
-    par paire ;
+    tire a chaque tick, un echantillon par paire (reciproque, partage par
+    les donnees et les resumes du lien) mais sans correlation d'un tick au
+    suivant. Il faudrait un decalage fixe par telephone et un shadowing
+    correle dans le temps ;
   - le **lien fantome** : hors de portee, Nearby ne declare parfois jamais la
     coupure (rien en 300 s) ; les messages confies au lien attendent et
     arrivent d'un coup au retour, au lieu de passer par un autre voisin. Le
@@ -31,7 +32,10 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   - ne plus tronquer la portee (un fading favorable ne prolonge jamais un
     lien au-dela du rayon deterministe, alors qu'en plein air le lien tient
     en dernier recours jusqu'a 100-150 m) ;
-  - la portee des bornes (60 m) n'est pas mesuree.
+  - la portee des bornes (60 m) n'est pas mesuree, et elle ne joue qu'entre
+    deux bornes : la portee etant mutuelle, un lien telephone-borne a celle
+    du telephone (30 m). Donner un avantage aux bornes (antenne,
+    sensibilite) demande une liaison asymetrique.
 - [ ] **Valeurs estimees a mesurer** : cout energetique d'une connexion et
   de chaque connexion en plus (`connection_setup_mah`,
   `extra_connection_current_ma`), fermeture d'une connexion inactive
@@ -420,7 +424,9 @@ dBm) plutot que d'un rayon fixe arbitraire — `RadioParams` dans
 (`radio.max_range_m`) est le point ou la puissance recue tombe au niveau
 de la sensibilite du recepteur : 30 m pour un telephone, mesures sur le
 terrain avec 5 personnes devant le telephone (une borne haute pour une
-foule de festival), 60 m pour une borne (non mesure). En plein air le banc
+foule de festival), 60 m pour une borne (non mesure, et sans effet sur un
+lien avec un telephone : la portee est mutuelle, c'est celle du telephone).
+En plein air le banc
 a mesure ~50 m et un exposant de 1,8 (`--set
 ble.phone_radio.path_loss_exponent=1.8 --phone-tx-power -19.4`). Mesures,
 derivations et recettes : `docs/radio/mesures.md`.
@@ -428,7 +434,8 @@ derivations et recettes : `docs/radio/mesures.md`.
 **Fading log-normal** (`RadioParams.shadowing_std_db`, 4 dB par defaut) :
 la puissance recue n'est pas qu'une fonction deterministe de la distance,
 un echantillon gaussien (obstruction par les corps dans la foule) est
-ajoute a chaque tick. Un lien peut donc tomber en dessous de la
+ajoute a chaque tick, un par paire : le meme dans les deux sens et pour les
+donnees comme pour les resumes du lien. Un lien peut donc tomber en dessous de la
 sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
 "moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
 retrouve le modele deterministe (equivalent a un cercle fixe).
@@ -488,8 +495,10 @@ la portee radio :
   222 avec la position pour `tide_g2` et `geo_spray_focus`) et, une fois par connexion, les tables de
   l'algorithme (dates de rencontre, predictibilites...). Tout cela coute du
   temps d'antenne, des retransmissions et de l'energie comme les donnees.
-  Le destinataire emet l'ACK a la livraison ; un telephone qui l'apprend
-  supprime sa copie, et la source le recoit comme un accuse de reception.
+  Le destinataire emet l'ACK a la livraison, sur la connexion de la
+  livraison, avec le meme temps d'antenne, les memes renvois et la meme
+  charge de canal que les donnees ; un telephone qui l'apprend supprime sa
+  copie, et la source le recoit comme un accuse de reception.
   Aucun algorithme ne voit plus d'ensemble global des messages livres ;
 - un **TTL reseau en nombre de sauts** (`TrafficConfig.message_ttl_hops`,
   defaut 8, a la Bluetooth Mesh) en plus du TTL temporel `message_ttl_s` :
@@ -505,8 +514,8 @@ la portee radio :
   d'origine, a durcir via la config pour un backbone plus realiste.
 
 Ces effets sont visibles dans le rapport via `Copies evincees (buffer)`,
-`Paquets perdus (radio)`, `Transmissions backhaul`,
-`Backoffs (contention)` et `Paquets perdus (backhaul)`.
+`Annonces perdues (radio)`, `Octets retransmis (radio)`,
+`Transmissions backhaul` et `Paquets perdus (backhaul)`.
 
 ## Churn (arrivees/departs des festivaliers)
 
@@ -854,11 +863,12 @@ un fichier par algorithme dans `docs/algorithmes/specs/`.
    - un etat par message (ex. `copies_left` de Spray & Wait) se stocke dans
      `message.routing_state[...]` (dict libre reserve a cet usage).
 
-2. Rends-le selectionnable depuis le CLI et le script de comparaison en
-   l'ajoutant aux deux tables de correspondance :
-   - `main.py` → `ROUTING_FACTORIES["mon_algo"] = lambda args: MonAlgoRouting()`
-     (les `choices` de `--routing` en sont derives automatiquement).
-   - `scripts/compare_algorithms.py` → `ALGORITHMS["mon_algo"] = MonAlgoRouting`.
+2. Rends-le selectionnable depuis le CLI et les scripts en l'ajoutant a la
+   table de correspondance `_FACTORIES` de `routing/registry.py` :
+   `"mon_algo": lambda seed, copies: MonAlgoRouting()` (`seed=seed` s'il
+   tire au hasard). `main.py`,
+   `compare_algorithms.py` et les balayages en derivent leurs choix
+   (`ROUTING_NAMES`) et construisent l'algorithme avec `build_routing`.
 
    Ou utilise-le directement sans passer par le CLI :
 

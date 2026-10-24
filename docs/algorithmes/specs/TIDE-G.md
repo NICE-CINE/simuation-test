@@ -514,12 +514,9 @@ La réponse reprend automatiquement la position que la source vient de transmett
 
 ### 4.5 Enregistrement
 
-- `main.py` :
-  - `from festival_ble_sim.routing.tide_g import TideGRouting` ;
-  - `"tide_g": lambda args: TideGRouting(seed=args.seed)` dans `ROUTING_FACTORIES` ;
-  - option `--reply-probability`, passée en `traffic=TrafficConfig(reply_probability=args.reply_probability)` dans `build_config`.
-- `scripts/compare_algorithms.py` : `"tide_g": TideGRouting` dans `ALGORITHMS`.
-- À prévoir dans le script de comparaison, qui n'a aujourd'hui ni `--mobility` ni réponses : ajouter `--mobility poi` et `--reply-probability` à `build_config`. Sans pauses (`random_waypoint`) et sans conversations, la comparaison TIDE / TIDE-G n'a pas de sens.
+- `routing/registry.py` : `"tide_g": lambda seed, copies: TideGRouting(seed=seed)` dans `_FACTORIES` ; `main.py` et les scripts en dérivent leurs choix.
+- `main.py` : option `--reply-probability`, passée en `traffic=TrafficConfig(reply_probability=args.reply_probability)` dans `build_config`.
+- Le script de comparaison a depuis `--mobility` et `--reply-probability` : lancer la comparaison TIDE / TIDE-G avec `--mobility poi --reply-probability 0.5`. Sans pauses (`random_waypoint`) et sans conversations, elle n'a pas de sens.
 
 ```bash
 python main.py --routing tide_g --mobility poi --reply-probability 0.5 --duration 1800 --num-festivaliers 1000

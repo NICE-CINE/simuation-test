@@ -38,7 +38,9 @@ class BaseNode:
         # owner still walks (and leads their group), unseen by the radio.
         self.on_site = True
         self.buffer: Dict[int, Message] = {}
-        self.delivered_ids: Set[int] = set()
+        # msg_id -> expiry, like acked and outbox: once the message is dead
+        # no copy can reach this node again, so the record can go.
+        self.delivered_ids: Dict[int, float] = {}
         self.buffer_evictions = 0
         self.is_beacon = False
         self.friends: Set[int] = set()
@@ -95,8 +97,8 @@ class BaseNode:
             self.buffer_evictions += 1
         self.buffer[message.msg_id] = message
 
-    def mark_delivered(self, msg_id: int) -> None:
-        self.delivered_ids.add(msg_id)
+    def mark_delivered(self, msg_id: int, expiry: float = math.inf) -> None:
+        self.delivered_ids[msg_id] = expiry
         self.buffer.pop(msg_id, None)
 
     def consume_energy(self, mah: float, mesh: bool = True, background: bool = False) -> None:

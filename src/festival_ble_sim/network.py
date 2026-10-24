@@ -17,7 +17,7 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
     expired_ids = [mid for mid, m in node.buffer.items() if m.is_expired(now)]
     for mid in expired_ids:
         del node.buffer[mid]
-    for table in (node.acked, node.outbox):
+    for table in (node.acked, node.outbox, node.delivered_ids):
         for mid in [mid for mid, expiry in table.items() if expiry < now]:
             del table[mid]
 
@@ -173,6 +173,17 @@ def _weak_signal_loss_probability(margin_db: float, ble_config: BleConfig) -> fl
     return ble_config.weak_signal_max_probability * (1.0 - margin_db / cutoff)
 
 
+def _pair_fade_db(a: BaseNode, b: BaseNode, radio, rng: Optional[random.Random], fades: Dict[Tuple[int, int], float]) -> float:
+    # One fade per unordered pair per tick: the channel is reciprocal, and
+    # the data and the summaries of a link can't see different fades.
+    key = (min(a.id, b.id), max(a.id, b.id))
+    fade = fades.get(key)
+    if fade is None:
+        fade = rng.gauss(0.0, radio.shadowing_std_db) if rng is not None and radio.shadowing_std_db > 0.0 else 0.0
+        fades[key] = fade
+    return fade
+
+
 def _link_failure_probability(
     sender: BaseNode,
     contact: BaseNode,
@@ -181,12 +192,20 @@ def _link_failure_probability(
     heard: Optional[Dict[int, float]],
     duty: Optional[Dict[int, float]],
     channels: int,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> float:
     # Shadowing (see radio.RadioParams.shadowing_std_db) makes the margin a
     # stochastic per-tick sample: an unlucky fade can push the received
     # power below the sensitivity floor even inside the range used to
-    # shortlist neighbors, a true outage nothing gets through.
-    margin_db = link_margin_db(sender.position.distance_to(contact.position), _link_radio(ble_config, sender, contact), rng)
+    # shortlist neighbors, a true outage nothing gets through. With `fades`
+    # (network_engine passes a fresh dict each tick) the sample is shared
+    # by the pair; without, every call draws its own.
+    radio = _link_radio(ble_config, sender, contact)
+    distance_m = sender.position.distance_to(contact.position)
+    if fades is None:
+        margin_db = link_margin_db(distance_m, radio, rng)
+    else:
+        margin_db = link_margin_db(distance_m, radio) + _pair_fade_db(sender, contact, radio, rng, fades)
     if margin_db < 0.0:
         return 1.0
     # Frequency hopping: a neighbor transmitting a share u of the time lands
@@ -217,6 +236,7 @@ def _send_control_broadcast(
     airtime_left: Dict[int, float],
     received: Dict[int, List[int]],
     now: float = 0.0,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> bool:
     # One connectionless broadcast to every active node in range: no link
     # slot, no acknowledgment and so no retransmission, each reception is
@@ -246,7 +266,7 @@ def _send_control_broadcast(
             sender, contact, ble_config, rng,
             channel.heard_control if channel is not None else None,
             channel.duty_control if channel is not None else None,
-            ble_config.advertising_channels,
+            ble_config.advertising_channels, fades,
         )
         if failure >= 1.0 or (rng is not None and failure > 0.0 and rng.random() < failure):
             metrics.record_packet_loss()
@@ -268,6 +288,7 @@ def _exchange_metadata(
     airtime_left: Dict[int, float],
     metrics: Optional[MetricsCollector] = None,
     now: float = 0.0,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> None:
     # What decide() and has_message() read about the peer has to cross the
     # link first, every tick, before any data: each side's summary vector
@@ -304,7 +325,7 @@ def _exchange_metadata(
         a, b, ble_config, rng,
         channel.heard_data if channel is not None else None,
         channel.duty_data if channel is not None else None,
-        ble_config.data_channels,
+        ble_config.data_channels, fades,
     )
     if failure >= 1.0:
         return
@@ -347,6 +368,7 @@ def process_node_contacts(
     neighbors: Optional[List[BaseNode]] = None,
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
     airtime_left: Optional[Dict[int, float]] = None,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> List[int]:
     # Returns the contacts the sender put anything on the air towards:
     # network_engine reads it as connection activity.
@@ -384,7 +406,7 @@ def process_node_contacts(
     if ble_config is not None and routing_algorithm.advertising_bearer:
         return _broadcast_messages(
             now, sender, neighbors, messages, routing_algorithm, energy_model, metrics, ble_config, rng, channel,
-            event_log, on_delivery, airtime_left,
+            event_log, on_delivery, airtime_left, fades,
         )
 
     sent_to: List[int] = []
@@ -401,7 +423,7 @@ def process_node_contacts(
                 sender, contact, ble_config, rng,
                 channel.heard_data if channel is not None else None,
                 channel.duty_data if channel is not None else None,
-                ble_config.data_channels,
+                ble_config.data_channels, fades,
             )
             if failure >= 1.0:
                 continue
@@ -440,7 +462,7 @@ def process_node_contacts(
             contact.consume_energy(energy_model.cost_of_rx(message.size_bytes) * attempts)
             metrics.record_transmission(message, airtime)
             _hand_over(now, sender, contact, message, is_delivery, routing_algorithm, energy_model, metrics,
-                       event_log, on_delivery)
+                       event_log, on_delivery, attempts, airtime_left, radio_budget_bytes, channel)
     return sent_to
 
 
@@ -458,6 +480,7 @@ def _broadcast_messages(
     event_log: Optional[List[Dict[str, Any]]],
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
     airtime_left: Dict[int, float],
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> List[int]:
     # Connectionless bearer (Bluetooth Mesh advertising bearer): no
     # connection to wait for, each message goes out once to every neighbor
@@ -492,7 +515,7 @@ def _broadcast_messages(
                 sender, contact, ble_config, rng,
                 channel.heard_control if channel is not None else None,
                 channel.duty_control if channel is not None else None,
-                ble_config.advertising_channels,
+                ble_config.advertising_channels, fades,
             )
             if failure >= 1.0 or (rng is not None and failure > 0.0 and rng.random() < failure):
                 metrics.record_packet_loss(message)
@@ -532,18 +555,31 @@ def _hand_over(
     metrics: MetricsCollector,
     event_log: Optional[List[Dict[str, Any]]],
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
+    attempts: float = 1.0,
+    airtime_left: Optional[Dict[int, float]] = None,
+    radio_budget_bytes: Optional[float] = None,
+    channel: Optional[ChannelState] = None,
 ) -> None:
     copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
     if is_delivery:
-        contact.mark_delivered(copy.msg_id)
+        contact.mark_delivered(copy.msg_id, copy.creation_time + copy.ttl_s)
         if routing_algorithm.uses_delivery_acks:
-            # The destination acks straight back on this connection.
+            # The destination acks straight back on this connection: same
+            # resends, airtime and channel load as the data it answers. The
+            # airtime may overshoot the tick's budget by an ack at most (it
+            # can't be deferred), the next sends just find less left.
             expiry = copy.creation_time + copy.ttl_s
             contact.acked[copy.msg_id] = expiry
             sender.learn_ack(copy.msg_id, expiry)
-            contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
-            sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
-            metrics.record_overhead_bytes("ack", routing_algorithm.ack_size_bytes, now)
+            ack_airtime = routing_algorithm.ack_size_bytes * attempts
+            contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes) * attempts)
+            sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes) * attempts)
+            metrics.record_overhead_bytes("ack", ack_airtime, now)
+            if airtime_left is not None and radio_budget_bytes is not None:
+                for node in (sender, contact):
+                    airtime_left[node.id] = max(0.0, airtime_left.get(node.id, radio_budget_bytes) - ack_airtime)
+            if channel is not None:
+                channel.sent_data[contact.id] = channel.sent_data.get(contact.id, 0.0) + ack_airtime
         if copy.src_position is not None:
             contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
         metrics.record_delivery(copy, now)
@@ -672,6 +708,7 @@ def network_engine(
             broadcasts = routing_algorithm.control_broadcasts(now)
             channel = channel.next_tick(neighbors_by_node, _radio_budget_bytes(ble_config))
         airtime_left: Dict[int, float] = {}
+        fades: Dict[Tuple[int, int], float] = {}
         received: Dict[int, List[int]] = {}
         sent: List[int] = []
         # Senders compete for receivers' airtime, so a fixed order would let
@@ -696,14 +733,14 @@ def network_engine(
                 if conn.ready_at <= now:
                     _exchange_metadata(
                         nodes[a_id], nodes[b_id], conn, routing_algorithm, energy_model, ble_config, rng, channel,
-                        airtime_left, metrics, now,
+                        airtime_left, metrics, now, fades,
                     )
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
             if node_id in broadcasts and sender.is_active and _send_control_broadcast(
                 sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                ble_config, rng, channel, airtime_left, received, now,
+                ble_config, rng, channel, airtime_left, received, now, fades,
             ):
                 sent.append(node_id)
             sent_to = process_node_contacts(
@@ -719,6 +756,7 @@ def network_engine(
                 ),
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
+                fades=fades,
             )
             for contact_id in sent_to:
                 key = (min(node_id, contact_id), max(node_id, contact_id))

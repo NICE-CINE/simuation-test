@@ -166,7 +166,8 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     # Golden values from main before TIDE-G2 landed (rerun with l_max=16, the
     # first-tick encounter fix and the per-radio airtime budget): any drift
     # means a default-off addition leaked into tide_g. Engine changes legitimately
-    # move them; regenerate them from main when that happens.
+    # move them; regenerate them from main when that happens (last time:
+    # fades shared per pair and tick, delivery acks billed in airtime).
     config = SimulationConfig(
         duration_s=600.0, num_festivaliers=60, random_seed=3,
         area=AreaConfig(width_m=120.0, height_m=120.0),
@@ -181,9 +182,9 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
     report = run_simulation(config, routing_algorithm=algo)
     created = report.messages_created + report.replies_created
     delivered = report.messages_delivered + report.replies_delivered
-    assert (created, delivered, report.total_transmissions) == (97, 90, 2118)
+    assert (created, delivered, report.total_transmissions) == (94, 87, 2180)
     assert {k: algo.hint_stats[k] for k in ("routed", "hinted", "delivered", "delivered_hinted", "gps_fixes")} == {
-        "routed": 95, "hinted": 63, "delivered": 90, "delivered_hinted": 62, "gps_fixes": 1200,
+        "routed": 93, "hinted": 62, "delivered": 87, "delivered_hinted": 61, "gps_fixes": 1200,
     }
 
 
