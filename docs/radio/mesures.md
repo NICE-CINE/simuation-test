@@ -96,8 +96,23 @@ festival ; la vraie portée en foule est inconnue.
 | --- | --- | --- | --- |
 | portée téléphone (`radio.max_range_m`) | **30 m** | `tx_power_dbm=-10`, `reference_loss_db=40`, `receiver_sensitivity_dbm=-90`, exposant 2,7 | **mesurée** avec 5 personnes devant l'ancre, borne haute pour une foule |
 | `path_loss_exponent` | **2,7** | corps répartis sur le trajet en foule | **estimé** (plein air mesuré : 1,8) |
-| portée borne (`beacon_radio`) | **60 m** | 2 × la portée téléphone, `tx_power_dbm=-2` | **choisi**, non mesuré |
+| portée borne (`beacon_radio`) | **60 m** | 2 × la portée téléphone, `tx_power_dbm=-2` | **choisi**, non mesuré ; **ne joue qu'entre deux bornes** (voir ci-dessous) |
 | `shadowing_std_db` | **4 dB** | littérature BLE en intérieur et en foule | **estimé** ; le banc voit ~11 dB entre passes, mais c'est un effet lent (orientation, terrain), qu'un tirage indépendant à chaque tick ne reproduit pas |
+
+**La portée des bornes ne compte pas face à un téléphone.** La portée d'un
+lien est mutuelle (`network._active_nearby`) : un paquet est acquitté par
+l'autre côté, donc une borne ne joint un téléphone que si celui-ci peut lui
+répondre. Un lien téléphone-borne a donc la portée du téléphone (30 m) et la
+radio du téléphone (`_link_radio` prend le côté le plus faible) ; les 60 m de
+`beacon_radio` ne servent qu'entre deux bornes, que le backhaul contourne.
+Les bornes aident par leur position fixe, leur alimentation et leur backhaul,
+pas par leur portée. Un avantage radio (antenne, sensibilité) demanderait une
+liaison asymétrique ; un test (`tests/test_network.py`) fixe ce comportement.
+
+**Portée nominale et portée fiable.** À 30 m la marge moyenne est de 0 dB :
+avec le shadowing de 4 dB, environ la moitié des ticks y sont en panne
+totale et le débit utile tombe à ~30 % de celui de près. Le débit utile reste
+au-dessus de 90 % jusqu'à ~12 m, 65 % à 20 m (voir §3).
 
 ### Recettes
 
@@ -161,6 +176,12 @@ débit de près, contre le mesuré :
 | `connection_setup_mah` (`EnergyConfig`) | 0,028 mAh | **0,048 mAh** | 12 s à +14,5 mA, voir `docs/energie/consommation.md` | durée mesurée, courant mesuré au banc |
 | `connection_idle_timeout_s` | 30 s | 30 s | — | **estimé**, inchangé |
 | `max_concurrent_links` | 6 | 6 | — | **estimé**, inchangé (il faut 3 téléphones ou plus pour le mesurer) |
+
+**Tick en panne et connexion.** Un tick où le fading fait tomber la marge
+sous zéro ne transporte rien, mais ne ferme pas la connexion : seuls la sortie
+de la portée déterministe, un téléphone inactif ou les 30 s sans données la
+ferment. C'est cohérent avec le banc, où Nearby n'a jamais déclaré la
+coupure, et le lien garde sa place pendant ces ticks.
 
 **Non modélisé** : le lien fantôme. Le simulateur ferme toujours une
 connexion dès que la paire sort de portée, et le message reste chez
@@ -262,6 +283,15 @@ Par ordre d'importance pour le simulateur :
    « Bien-être numérique », sondage).
 
 ## 8. Comparabilité avec les archives
+
+Les runs archivés avant le 24 oct. 2026 tiraient un fading indépendant à
+chaque appel (un pour les résumés d'un lien, un autre pour ses données, un
+par sens) et ne facturaient à l'accusé de réception de livraison ni temps
+d'antenne, ni renvois, ni charge de canal. Un accusé pèse 210 o pour 31 ko/s
+par tick, donc l'effet sur une moyenne de graines est petit (écarts mesurés
+dans `docs/revue/2026-10-24-realisme.md`), mais les mêmes graines ne rejouent
+plus les mêmes trajectoires : comparer des runs d'avant et d'après sur une
+graine seule n'a pas de sens.
 
 Les runs archivés avant le 16 oct. 2026 utilisaient 37 ko/s,
 `signal_margin_cutoff_db=6` et `weak_signal_max_probability=0.30`, 7 s de

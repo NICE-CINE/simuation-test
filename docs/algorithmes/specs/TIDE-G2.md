@@ -437,8 +437,9 @@ Point d'architecture : `_flush_ack_hints` écrit dans `node.known_positions`, qu
 
 ### 3.4 Enregistrement
 
-- `main.py` : `"tide_g2": lambda args: TideGRouting(seed=args.seed, **TIDE_G2_KWARGS)` dans `ROUTING_FACTORIES` ; options `--followup-probability` et `--gps-fix-failure`, passées à `TrafficConfig(followup_probability=…)` et `GpsConfig(fix_failure_probability=…)` dans `build_config`.
-- `scripts/compare_algorithms.py` : `"tide_g2": lambda: TideGRouting(**TIDE_G2_KWARGS)` dans `ALGORITHMS` ; les deux mêmes options, propagées dans `build_config`, `_run_one` et `run_matrix` comme `reply_probability`.
+- `routing/registry.py` : `"tide_g2": lambda seed, copies: TideGRouting(seed=seed, **TIDE_G2_KWARGS)` dans `_FACTORIES` ; `main.py` et les scripts en dérivent leurs choix.
+- `main.py` : options `--followup-probability` et `--gps-fix-failure`, passées à `TrafficConfig(followup_probability=…)` et `GpsConfig(fix_failure_probability=…)` dans `build_config`.
+- `scripts/compare_algorithms.py` : les deux mêmes options, propagées dans `build_config`, `_run_one` et `run_matrix` comme `reply_probability`.
 
 ```bash
 python main.py --routing tide_g2 --mobility poi --reply-probability 0.5 --followup-probability 0.5 \

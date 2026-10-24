@@ -35,7 +35,9 @@ class RadioParams:
 # festival crowd, whose bodies spread along the whole path. Exponent 2.7 is
 # kept for that reason (estimated); open air measured 1.8 and ~50 m
 # (path_loss_exponent=1.8, tx_power_dbm=-19.4). Beacons: 2x the phone
-# range, not measured. shadowing_std_db=4.0 comes from the literature; the
+# range, not measured, and only between two beacons: a link's range is
+# mutual (network._active_nearby), so a phone-beacon link gets the phone's.
+# shadowing_std_db=4.0 comes from the literature; the
 # bench saw ~11 dB between passes, a slow effect per-tick draws don't model.
 def _default_phone_radio() -> RadioParams:
     return RadioParams(

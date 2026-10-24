@@ -147,6 +147,6 @@ Balayage `scripts/sweep_band_fanout.py` : voir la fiche `docs/algorithmes/band_f
   - Un nœud qui perd sa copie (éviction FIFO) puis la reçoit de nouveau repart avec un budget neuf.
 - **Un tirage par porteur, pas par message** : un voisin tiré pour un message qu'il possède déjà peut ne servir que pour un autre message, ou pour aucun si `max_concurrent_links` ou le budget de liaison coupe.
 - **Tirage refait à chaque tick** : pendant un long contact, le porteur retire des relais à chaque tick. C'est le budget `fanout`, pas le tirage, qui borne la réplication.
-- **Ordre du tick** : le moteur prend son instantané des buffers et fait le backhaul avant `on_tick`. Une borne qui détient un message livré au tick précédent peut donc encore le cloner vers les autres bornes (transmissions de backhaul comptées), puis la purge l'efface partout. La contention de ce tick compte aussi les messages déjà purgés.
+- **Ordre du tick** : le moteur prend son instantané des buffers et fait le backhaul avant `on_tick`. Une borne qui détient un message livré au tick précédent peut donc encore le cloner vers les autres bornes (transmissions de backhaul comptées), puis la purge l'efface partout. Le canal ne compte que ce qui est réellement émis (`ChannelState`), pas le contenu des buffers.
 - **Nœuds inactifs** (churn, batterie vide) : absents de `neighbors_by_node`, ils ne sont purgés qu'à leur retour.
 - **`_delivered` ne se vide jamais** : un entier par message livré, négligeable même en 3 h à 5 000 nœuds.
