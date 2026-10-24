@@ -263,7 +263,8 @@ def test_decide_cache_leaves_results_unchanged():
     # Golden values from main before decide() cached its per-(holder, contact,
     # now) bookkeeping: the cache must be a pure speedup. Covers evictions,
     # backhaul, purges and replies. Engine changes legitimately move these;
-    # regenerate them from main without the cache when that happens.
+    # regenerate them from main without the cache when that happens (last
+    # time: fades shared per pair and tick, delivery acks billed in airtime).
     from festival_ble_sim.config import BeaconConfig, BleConfig, TrafficConfig
     config = SimulationConfig(
         duration_s=300.0, num_festivaliers=80, random_seed=11, node_buffer_capacity=10,
@@ -277,5 +278,5 @@ def test_decide_cache_leaves_results_unchanged():
     algo = GossipARouting(seed=11)
     algo.purge_sync_bytes = 128
     r = run_simulation(config, routing_algorithm=algo)
-    assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (54, 51, 3899)
-    assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (0, 3998, 23, 23)
+    assert (r.messages_created, r.messages_delivered, r.total_transmissions) == (54, 49, 3663)
+    assert (r.packet_loss_count, r.buffer_eviction_count, r.replies_created, r.replies_delivered) == (0, 3600, 24, 22)
