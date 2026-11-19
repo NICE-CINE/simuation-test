@@ -273,7 +273,8 @@ def test_decide_cache_leaves_results_unchanged():
         traffic=TrafficConfig(messages_per_hour_range=(8.0, 16.0), reply_probability=0.5, payload_size_range_bytes=(20, 512)),
         # Friends = group: these values predate outside friends.
         social=SocialConfig(outside_friends_range=(0, 0)),
-        ble=BleConfig(connection_setup_s=7.0),
+        # ... and the redial backoff: an idle pair was redialed at once.
+        ble=BleConfig(connection_setup_s=7.0, reconnect_backoff_s=0.0),
     )
     algo = GossipARouting(seed=11)
     algo.purge_sync_bytes = 128

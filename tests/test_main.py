@@ -256,3 +256,20 @@ def test_named_override_options_set_their_fields():
     assert config.ble.phone_radio.tx_power_dbm == -6.0
     # --set comes after the named options.
     assert config.ble.max_concurrent_links == 4
+
+
+def test_cli_simulates_the_crowd_radio_unless_told_otherwise():
+    parser = main_module.build_arg_parser()
+    config = main_module.build_config(parser.parse_args([]))
+    assert config.ble.phone_radio.path_loss_exponent == 1.8 and config.ble.phone_radio.tx_power_dbm == -19.4
+    assert config.ble.body_loss_db == 0.8
+    assert config.ble.shadowing_coherence_s == 20.0
+    assert config.adoption_fraction == 1.0
+    config = main_module.build_config(
+        parser.parse_args(["--no-body-loss", "--fading-coherence", "0", "--adoption", "0.3"])
+    )
+    assert config.ble == main_module.SimulationConfig().ble
+    assert config.adoption_fraction == 0.3
+    # A named option still wins over the crowd radio it follows.
+    config = main_module.build_config(parser.parse_args(["--phone-tx-power", "-25"]))
+    assert config.ble.phone_radio.tx_power_dbm == -25.0 and config.ble.body_loss_db == 0.8

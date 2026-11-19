@@ -175,7 +175,8 @@ def test_tide_g_is_unchanged_with_every_tide_g2_flag_off():
         # Friends = group: these values predate outside friends.
         social=SocialConfig(outside_friends_range=(0, 0)),
         # ... and the field-bench connection setup, message and ack sizes.
-        ble=BleConfig(connection_setup_s=7.0),
+        # ... and the redial backoff: an idle pair was redialed at once.
+        ble=BleConfig(connection_setup_s=7.0, reconnect_backoff_s=0.0),
     )
     algo = TideGRouting(seed=3)
     algo.ack_size_bytes = 8

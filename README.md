@@ -4,27 +4,28 @@
 
 Limites connues du simulateur, a traiter dans cet ordre de priorite :
 
-- [ ] **Participation reelle** : tout le monde a l'app et elle tourne au
-  premier plan. A modeliser : taux d'adoption (une partie seulement des
-  festivaliers est un noeud, les autres ne font qu'attenuer le signal ;
-  l'app est Android uniquement, les possesseurs d'iPhone n'en font donc
-  pas partie), gel de l'app ecran eteint sur EMUI (Huawei/Honor, voir
-  `docs/energie/consommation.md` ; Samsung avec les reglages d'usine pas
-  encore teste).
+- [ ] **Participation reelle** : le taux d'adoption existe (`--adoption`,
+  les autres festivaliers restent sur le site et attenuent le signal), mais
+  il vaut 1 par defaut faute de chiffre : a fixer (l'app est Android
+  uniquement, les possesseurs d'iPhone n'en font pas partie). L'adoption
+  est tiree par groupe d'amis entier : pas de groupe a moitie equipe.
+  Reste a modeliser : gel de l'app ecran eteint sur
+  EMUI (Huawei/Honor, voir `docs/energie/consommation.md` ; Samsung avec
+  les reglages d'usine pas encore teste).
 - [ ] **Radio** (mesures du 16 oct., `docs/radio/mesures.md`) : les 30 m
   du telephone sont mesures avec seulement 5 personnes groupees devant
   l'ancre, une borne haute pour un festival. A faire :
   - **mesurer dans une vraie foule**, les corps repartis sur tout le trajet
     (sortie d'amphi, file de cantine, concert) : c'est la mesure qui manque
     le plus, l'exposant 2,7 en foule est estime (plein air : 1,8) ;
-  - ajouter une attenuation par les corps qui croit avec la densite de la
-    foule (l'exposant est le meme a 3 m2/personne et sur un site vide) ;
+  - l'attenuation par les corps croit maintenant avec la densite
+    (`ble.body_loss_db`, actif par defaut en ligne de commande), mais ses
+    0,8 dB par corps sont extrapoles d'une seule passe a 5 personnes, et la
+    perte est supposee lineaire avec le nombre de corps : a mesurer ;
   - la **variabilite** : ~11 dB d'ecart a 1 m entre deux passes (orientation
-    du telephone, terrain), un effet lent ; le shadowing actuel (4 dB) est
-    tire a chaque tick, un echantillon par paire (reciproque, partage par
-    les donnees et les resumes du lien) mais sans correlation d'un tick au
-    suivant. Il faudrait un decalage fixe par telephone et un shadowing
-    correle dans le temps ;
+    du telephone, terrain), un effet lent. Le fading d'un lien a maintenant
+    une memoire (`ble.shadowing_coherence_s`, 20 s en ligne de commande,
+    estime) ; il manque un decalage fixe par telephone ;
   - le **lien fantome** : hors de portee, Nearby ne declare parfois jamais la
     coupure (rien en 300 s) ; les messages confies au lien attendent et
     arrivent d'un coup au retour, au lieu de passer par un autre voisin. Le
@@ -49,7 +50,10 @@ Limites connues du simulateur, a traiter dans cet ordre de priorite :
   (`TrafficConfig.lost_messages_per_hour`, 6/h), connexions simultanees
   (`max_concurrent_links`, 6) et debit avec plusieurs voisins (il faut 3
   telephones ou plus), delai de connexion en distribution plutot que les
-  12 s fixes (26 a 80 s mesures loin de l'ancre), taille d'un resume
+  12 s fixes (26 a 80 s mesures loin de l'ancre), delai avant de rappeler
+  un voisin a qui l'on n'a rien de neuf a dire (`reconnect_backoff_s`,
+  300 s), largeur d'un corps et memoire du fading (`body_width_m`,
+  `shadowing_coherence_s`), taille d'un resume
   (`summary_id_bytes`, 4 o) ; liste et priorites radio dans
   `docs/radio/mesures.md` §7.
 - [ ] **Oracles restants** : `band_fanout` lit la position GPS des voisins
@@ -116,6 +120,10 @@ Options disponibles :
   `sweep_fresh_spray_tokens.py`. Sans `--size`, le site reste 700x500 m,
   4 000 festivaliers. La part mesuree dans la zone dense est un peu sous
   70 % (~67 % small, ~63 % large) : les gens en transit sont hors zone dense.
+- `--adoption PART` : part des festivaliers qui ont l'app (defaut 1),
+  tiree par groupe d'amis entier (on installe l'app ensemble). Les autres
+  restent sur le site, marchent et attenuent le signal, sans radio, trafic
+  ni energie ; le rapport ne compte que les telephones qui ont l'app
 - `--beacons N` : nombre de bornes (0 = desactivees, defaut)
 - `--beacon-placement` : `grid` (defaut) ou `manual`
 - `--duration`, `--num-festivaliers`, `--seed`
@@ -155,10 +163,17 @@ Options disponibles :
     (defaut 0 4), le levier principal de la charge
   - `--message-ttl S` : duree de vie d'un message (defaut 1800 s)
   - `--max-links N` : connexions simultanees par telephone (defaut 6)
-  - `--phone-tx-power DBM` : puissance d'emission, donc portee des
-    telephones (defaut -10 dBm = 30 m ; -18 = 15 m, -15 = 20 m, -6 = 43 m,
-    0 = 71 m). 30 m est une borne haute mesuree pour une foule
-    (`docs/radio/mesures.md`) : comparer aussi a 15 et 20 m
+  - `--no-body-loss` : radio d'avant le 12 nov. 2026, 30 m quelle que soit
+    la foule (exposant 2,7). Par defaut la portee depend de la densite
+    autour du telephone : 50 m en plein air (exposant 1,8 mesure), 0,8 dB
+    par corps traverse, soit ~30 m a 3 m2 par personne et ~15 m en zone
+    dense (`docs/radio/mesures.md` §2)
+  - `--fading-coherence S` : memoire du fading d'un lien (defaut 20 s,
+    estime) ; 0 = tirage independant a chaque seconde, comme avant
+  - `--phone-tx-power DBM` : puissance d'emission, donc portee hors foule
+    (defaut -19,4 dBm = 50 m ; -25 = 24 m, -22 = 36 m, -16 = 77 m). Avec
+    `--no-body-loss` : defaut -10 dBm = 30 m ; -18 = 15 m, -15 = 20 m,
+    -6 = 43 m, 0 = 71 m
 - `--set CHEMIN=VALEUR` (repetable) : change n'importe quel reglage de
   `SimulationConfig` (voir ci-dessous), apres les raccourcis
 
@@ -386,6 +401,7 @@ colonnes du CSV :
 | Energie totale / moyenne par noeud | consommation des telephones seulement (les bornes, sur secteur, sont exclues), mesh **et** telephone lui-meme (`phone_current_ma`), comptee depuis la charge de depart |
 | Energie mesh (`total_mesh_energy_consumed_mah`, ligne « dont mesh ») | la meme sans `phone_current_ma` (rester joignable + emission/reception + couts propres aux algos), les 82 mA du telephone etant identiques pour tous |
 | Energie de l'algo (`total_algo_energy_consumed_mah`, ligne « dont algo, hors base ») | l'energie mesh sans `background_current_ma` (31 mA pour rester joignable) : ce que l'algorithme depense lui-meme (emission/reception, connexions, GPS, annonces) : **la colonne a comparer entre algorithmes**. La base ecrase souvent l'ecart entre deux algos dans l'energie mesh, pas ici |
+| dont connexions (`total_connection_energy_consumed_mah`, ligne « dont connexions ») | la part de l'energie de l'algo depensee a ouvrir des connexions et a en tenir plusieurs. Elle fait le plus souvent 85 a 99 % de l'energie de l'algo et repose sur des couts **estimes** (`connection_setup_mah`, `extra_connection_current_ma`) : comparer aussi les algorithmes sur l'energie de l'algo **moins** cette ligne, qui ne contient que des couts mesures (emission, reception) et ceux que l'algo facture lui-meme |
 | Noeuds a plat | telephones morts de batterie (`battery_depleted`), pas les departs du churn |
 | Copies evincees (buffer) | copies retirees d'un buffer plein pour faire de la place ; le message peut survivre ailleurs, ce n'est pas un message perdu |
 | Annonces perdues (`packet_loss_count`) | receptions de diffusions de controle perdues (sans connexion, donc sans renvoi) |
@@ -426,10 +442,21 @@ de la sensibilite du recepteur : 30 m pour un telephone, mesures sur le
 terrain avec 5 personnes devant le telephone (une borne haute pour une
 foule de festival), 60 m pour une borne (non mesure, et sans effet sur un
 lien avec un telephone : la portee est mutuelle, c'est celle du telephone).
-En plein air le banc
-a mesure ~50 m et un exposant de 1,8 (`--set
-ble.phone_radio.path_loss_exponent=1.8 --phone-tx-power -19.4`). Mesures,
-derivations et recettes : `docs/radio/mesures.md`.
+Ce sont les defauts de `SimulationConfig`, et ce que donne `--no-body-loss`.
+
+**En ligne de commande, la portee depend de la foule** (`main.py`,
+`compare_algorithms.py` et les balayages, via
+`overrides.CROWD_RADIO_OVERRIDES`) : la radio est celle du plein air
+mesuree au banc (exposant 1,8, 50 m), et chaque corps traverse coute
+`ble.body_loss_db` = 0,8 dB (les 5 personnes du banc : ~4 dB). Un lien de
+d metres dans une foule de rho personnes par m2 en traverse environ
+rho x 0,5 x d. La densite est comptee a chaque tick dans des cases de 10 m,
+sur tous les gens presents (avec ou sans l'app), et c'est le bout le plus
+dense du lien qui compte. Portee qui en resulte : 50 m sur un site vide,
+~30 m a 3 m2 par personne, ~15 m dans une zone dense des presets `--size`.
+Un script qui construit sa config a la main garde les 30 m fixes s'il
+n'applique pas ces reglages. Mesures, derivations et recettes :
+`docs/radio/mesures.md`.
 
 **Fading log-normal** (`RadioParams.shadowing_std_db`, 4 dB par defaut) :
 la puissance recue n'est pas qu'une fonction deterministe de la distance,
@@ -437,8 +464,11 @@ un echantillon gaussien (obstruction par les corps dans la foule) est
 ajoute a chaque tick, un par paire : le meme dans les deux sens et pour les
 donnees comme pour les resumes du lien. Un lien peut donc tomber en dessous de la
 sensibilite du recepteur (perte garantie, meme a l'interieur du rayon
-"moyen") ou au contraire tenir un peu au-dela — `shadowing_std_db=0.0`
-retrouve le modele deterministe (equivalent a un cercle fixe).
+"moyen") — `shadowing_std_db=0.0` retrouve le modele deterministe
+(equivalent a un cercle fixe). Avec `ble.shadowing_coherence_s` (0 dans
+`SimulationConfig`, 20 s en ligne de commande) le fading d'une paire a une
+memoire : un lien masque le reste quelques dizaines de secondes au lieu de
+retenter sa chance a chaque seconde.
 
 **Courant de fond** : chaque telephone actif paie a chaque seconde
 `EnergyConfig.background_current_ma` (31 mA, mesh joignable, mesure) +
@@ -466,7 +496,11 @@ la portee radio :
   s'etablir, garde sa place tant que la paire reste a portee et se ferme
   apres `connection_idle_timeout_s` (30 s, estime) sans echange ; un
   telephone tient au plus `max_concurrent_links` connexions (defaut 6),
-  comptees des deux cotes ;
+  comptees des deux cotes. Une paire fermee faute d'echange n'est pas
+  rappelee avant `reconnect_backoff_s` (300 s, estime), sauf par un
+  telephone qui a recu un nouveau message depuis : la place va a un voisin
+  a qui il n'a pas encore parle (avant le 12 nov. 2026, le meme voisin
+  etait rappele toutes les 42 s et gardait la place) ;
 - un **canal partage** : un voisin qui emet une part u de son temps
   d'antenne tombe sur le canal d'un paquet avec une probabilite ~u / canaux
   (79 canaux du Bluetooth classique pour les donnees, 3 canaux d'annonce BLE

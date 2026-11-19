@@ -30,8 +30,11 @@ def archive_stem(archive_dir: str, label: str) -> Path:
 
 def _git(*args: str) -> Optional[str]:
     try:
+        # git writes UTF-8; text=True alone decodes with the locale (cp1252
+        # on Windows) and loses a diff that has an accent in it.
         result = subprocess.run(
-            ["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True, check=True
+            ["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, check=True,
+            encoding="utf-8", errors="replace",
         )
     except (OSError, subprocess.CalledProcessError):
         return None

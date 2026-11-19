@@ -16,7 +16,7 @@ from .nodes import BaseNode, BeaconNode, MobileNode
 from .radio import max_range_m
 from .routing.base import RoutingAlgorithm
 from .routing.epidemic import EpidemicRouting
-from .social import add_outside_friends, assign_friend_groups
+from .social import add_outside_friends, assign_friend_groups, draw_adopters
 from .spatial import SpatialGrid
 from .traffic import lost_process, reply_process, traffic_process
 from .viz.history import SimulationHistory
@@ -50,10 +50,13 @@ def _mobile_process(env, node: MobileNode, config: SimulationConfig, grid: Spati
 
 
 def _churn_process(env, node: MobileNode, arrival_time_s: float, departure_time_s: float):
+    # is_active follows has_app: someone without the app arrives and leaves
+    # like anyone else, but never joins the network.
     if arrival_time_s > 0:
         node.is_active = node.on_site = False
         yield env.timeout(arrival_time_s)
-        node.is_active = node.on_site = True
+        node.on_site = True
+        node.is_active = node.has_app
     remaining_s = departure_time_s - max(arrival_time_s, 0.0)
     if remaining_s > 0:
         yield env.timeout(remaining_s)
@@ -106,7 +109,11 @@ def run_simulation(
     # for every phone-originated query (the vast majority) just so beacon
     # queries (few, and cheaply covered by a larger cell_radius instead) stay
     # single-cell-radius too.
-    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=phone_range_m)
+    # With body loss a phone's range shrinks with the crowd around it, down
+    # to a few metres: smaller cells keep a dense-zone query from sweeping
+    # the whole open-air range.
+    cell_size_m = phone_range_m / 3.0 if config.ble.body_loss_db > 0.0 else phone_range_m
+    grid = SpatialGrid(config.area.width_m, config.area.height_m, cell_size_m=cell_size_m)
 
     nodes: Dict[int, BaseNode] = {}
     id_counter = itertools.count(1)
@@ -138,6 +145,10 @@ def run_simulation(
     # Seeded apart too; with the default single (1.0, 1.0, 1.0) bin every
     # draw is exactly 1.0.
     charge_rng = random.Random(f"{config.random_seed}-charge")
+    # Who has the app is only known once friend groups are drawn: with
+    # partial adoption the traffic processes wait here until then.
+    partial_adoption = config.adoption_fraction < 1.0
+    waiting_traffic = []
     for _ in range(config.num_festivaliers):
         node_id = next(id_counter)
         node_rng = random.Random(rng.randrange(1 << 30))
@@ -165,12 +176,26 @@ def run_simulation(
                 env.process(_churn_process(env, mobile, arrival_time_s, departure_time_s))
 
         traffic_rng = random.Random(rng.randrange(1 << 30))
-        env.process(_after(env, config.warmup_s, traffic_process(
+        traffic = _after(env, config.warmup_s, traffic_process(
             env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, traffic_rng, followup_rng
-        )))
+        ))
+        if partial_adoption:
+            waiting_traffic.append((mobile, traffic))
+        else:
+            env.process(traffic)
 
     groups = assign_friend_groups(list(mobile_nodes), config.social, random.Random(rng.randrange(1 << 30)))
     friends = add_outside_friends(groups, config.social, random.Random(f"{config.random_seed}-outside-friends"))
+    if partial_adoption:
+        # Seeded apart and drawn only below 1, like the other options.
+        with_app = draw_adopters(
+            list(mobile_nodes), groups, config.adoption_fraction, random.Random(f"{config.random_seed}-adoption")
+        )
+        for mobile, traffic in waiting_traffic:
+            if mobile.id in with_app:
+                env.process(traffic)
+            else:
+                mobile.has_app = mobile.is_active = False
     gps_rng = random.Random(rng.randrange(1 << 30))
     for node_id, mobile in mobile_nodes.items():
         if node_id in groups:
@@ -184,12 +209,14 @@ def run_simulation(
     if config.traffic.lost_messages_per_hour > 0:
         lost_rng = random.Random(f"{config.random_seed}-lost")
         for node_id, mobile in mobile_nodes.items():
-            if node_id in groups and hasattr(mobile.mobility, "lost_peers"):
+            if node_id in groups and mobile.has_app and hasattr(mobile.mobility, "lost_peers"):
                 env.process(_after(env, config.warmup_s, lost_process(
                     env, mobile, mobile_nodes, config.traffic, metrics, msg_id_counter, lost_rng
                 )))
     for node_id, mobile in mobile_nodes.items():
-        mobile.friends = friends.get(node_id, set())
+        # The friend graph is the app's: nobody is friends with a non-user.
+        if mobile.has_app:
+            mobile.friends = {f for f in friends.get(node_id, ()) if mobile_nodes[f].has_app}
         mobile.gps_noise_std_m = config.gps.noise_std_m
         mobile.gps_rng = gps_rng
         mobile.gps_fix_failure_probability = config.gps.fix_failure_probability
@@ -233,11 +260,12 @@ def run_simulation(
     if progress_callback is not None:
         progress_callback(end_s)
 
-    phones = [n for n in nodes.values() if n.battery_capacity_mah != math.inf]
+    phones = [n for n in nodes.values() if n.battery_capacity_mah != math.inf and n.has_app]
     energy_samples = [n.energy_consumed_mah for n in phones]
     dead_count = sum(1 for n in nodes.values() if n.battery_depleted)
     buffer_evictions = sum(n.buffer_evictions for n in nodes.values())
     return metrics.build_report(
         energy_samples, dead_count, buffer_evictions, [n.mesh_energy_consumed_mah for n in phones],
         [n.mesh_energy_consumed_mah - n.background_energy_consumed_mah for n in phones],
+        [n.connection_energy_consumed_mah for n in phones],
     )
