@@ -1,0 +1,268 @@
+{
+  "cli": {
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "duration": 12600.0,
+    "num_festivaliers": 4000,
+    "beacon_count": 6,
+    "with_beacons": false,
+    "mobility": "group",
+    "size": "small",
+    "reply_probability": 0.5,
+    "cooldown": null,
+    "warmup": null,
+    "followup_probability": 0.3,
+    "gps_fix_failure": 0.1,
+    "random_charge": true,
+    "no_outside_friends": false,
+    "no_lost_messages": false,
+    "schedule": true,
+    "churn": true,
+    "no_gps_noise": false,
+    "no_shadowing": false,
+    "messages_per_hour": null,
+    "message_ttl": null,
+    "max_links": null,
+    "phone_tx_power": null,
+    "overrides": [],
+    "algorithms": null,
+    "workers": 8,
+    "csv": null,
+    "archive_dir": "archives"
+  },
+  "config": {
+    "duration_s": 12600.0,
+    "cooldown_s": 1800.0,
+    "warmup_s": 2700.0,
+    "num_festivaliers": 4000,
+    "node_buffer_capacity": 100,
+    "random_seed": 1,
+    "area": {
+      "width_m": 130.0,
+      "height_m": 93.0
+    },
+    "ble": {
+      "phone_radio": {
+        "tx_power_dbm": -10.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "beacon_radio": {
+        "tx_power_dbm": -2.0,
+        "path_loss_exponent": 2.7,
+        "reference_distance_m": 1.0,
+        "reference_loss_db": 40.0,
+        "receiver_sensitivity_dbm": -90.0,
+        "shadowing_std_db": 4.0
+      },
+      "transfer_rate_bytes_per_s": 31000.0,
+      "contact_check_interval_s": 1.0,
+      "max_concurrent_links": 6,
+      "connection_setup_s": 12.0,
+      "connection_idle_timeout_s": 30.0,
+      "packet_loss_base_probability": 0.01,
+      "signal_margin_cutoff_db": 10.0,
+      "weak_signal_max_probability": 0.6,
+      "data_channels": 79,
+      "advertising_channels": 3,
+      "summary_id_bytes": 4
+    },
+    "mobility": {
+      "speed_min_mps": 0.3,
+      "speed_max_mps": 1.2,
+      "pause_probability": 0.7,
+      "pause_duration_range_s": [
+        300.0,
+        2700.0
+      ],
+      "tick_interval_s": 1.0,
+      "points_of_interest": [
+        {
+          "x": 32.5,
+          "y": 69.75,
+          "radius_m": 13.466625412478065,
+          "weight": 4.0
+        },
+        {
+          "x": 104.0,
+          "y": 65.1,
+          "radius_m": 9.522342148862327,
+          "weight": 2.0
+        },
+        {
+          "x": 71.5,
+          "y": 32.55,
+          "radius_m": 11.662439710455098,
+          "weight": 3.0
+        },
+        {
+          "x": 65.0,
+          "y": 6.733312706239032,
+          "radius_m": 6.733312706239032,
+          "weight": 1.0
+        }
+      ],
+      "background_probability": 0.3529411764705883,
+      "group": {
+        "radius_m": 5.0,
+        "visual_range_m": 15.0,
+        "short_trips_per_hour": 0.5,
+        "short_trip_s": [
+          300.0,
+          1800.0
+        ],
+        "long_trips_per_hour": 0.2,
+        "long_trip_s": [
+          1800.0,
+          7200.0
+        ],
+        "rendezvous_max_wait_s": 900.0,
+        "split_probability": 0.3
+      },
+      "schedule": {
+        "stages": [
+          0,
+          1
+        ],
+        "set_s": 3600.0,
+        "boost": 3.0,
+        "rush_probability": 0.3
+      }
+    },
+    "traffic": {
+      "messages_per_hour_range": [
+        0.0,
+        4.0
+      ],
+      "payload_size_range_bytes": [
+        1000,
+        3800
+      ],
+      "message_ttl_s": 1800.0,
+      "message_ttl_hops": 8,
+      "friends_only": true,
+      "skip_friends_within_m": 15.0,
+      "lost_messages_per_hour": 6.0,
+      "reply_probability": 0.5,
+      "reply_delay_range_s": [
+        20.0,
+        180.0
+      ],
+      "followup_probability": 0.3,
+      "followup_delay_range_s": [
+        10.0,
+        120.0
+      ]
+    },
+    "energy": {
+      "battery_capacity_mah": 4500.0,
+      "initial_charge_bins": [
+        [
+          0.5,
+          0.8,
+          1.0
+        ],
+        [
+          0.3,
+          0.5,
+          0.8
+        ],
+        [
+          0.12,
+          0.3,
+          0.5
+        ],
+        [
+          0.08,
+          0.05,
+          0.3
+        ]
+      ],
+      "tx_cost_mah_per_event": 2.9e-05,
+      "tx_cost_mah_per_byte": 2.4e-07,
+      "rx_cost_mah_per_event": 1.7e-05,
+      "rx_cost_mah_per_byte": 6.3e-08,
+      "background_current_ma": 31.0,
+      "phone_current_ma": 82.0,
+      "connection_setup_mah": 0.04833333333333333,
+      "extra_connection_current_ma": 3.0
+    },
+    "beacons": {
+      "count": 0,
+      "placement": "grid",
+      "manual_positions": null,
+      "unlimited_power": true,
+      "backhaul_latency_s": 0.05,
+      "backhaul_loss_probability": 0.0
+    },
+    "churn": {
+      "enabled": true,
+      "arrival_window_s": [
+        0.0,
+        1800.0
+      ],
+      "session_duration_range_s": [
+        1800.0,
+        10800.0
+      ]
+    },
+    "social": {
+      "group_size_range": [
+        2,
+        8
+      ],
+      "no_friend_fraction": 0.2,
+      "outside_friends_range": [
+        0,
+        2
+      ]
+    },
+    "gps": {
+      "noise_std_m": 5.0,
+      "fix_failure_probability": 0.1
+    }
+  },
+  "git": {
+    "commit": "57bb86b581d3fe792ee08d8ef72ac3c7b6509535",
+    "dirty": true,
+    "status": [
+      "?? archives/2026-10-07_16-28-00_comparaison.csv",
+      "?? archives/2026-10-07_16-28-00_comparaison.json",
+      "?? archives/2026-10-08_10-34-33_comparaison.csv",
+      "?? archives/2026-10-08_10-34-33_comparaison.json",
+      "?? archives/2026-10-11_11-00-21_comparaison.csv",
+      "?? archives/2026-10-11_11-00-21_comparaison.json",
+      "?? archives/2026-10-11_22-06-00_comparaison.csv",
+      "?? archives/2026-10-11_22-06-00_comparaison.json",
+      "?? archives/2026-10-12_18-51-30_epidemic.json",
+      "?? archives/2026-10-12_18-51-30_epidemic.txt",
+      "?? archives/2026-10-13_12-45-11_epidemic.json",
+      "?? archives/2026-10-13_12-45-11_epidemic.txt",
+      "?? archives/2026-10-15_14-16-03_band_fanout.json",
+      "?? archives/2026-10-15_14-16-03_band_fanout.txt",
+      "?? archives/2026-10-17_04-26-41_band_fanout.json",
+      "?? archives/2026-10-17_04-26-41_band_fanout.txt",
+      "?? archives/2026-10-21_20-02-59_comparaison_small.csv",
+      "?? archives/2026-10-21_20-02-59_comparaison_small.json",
+      "?? archives/2026-10-22_19-27-31_comparaison_small.csv",
+      "?? archives/2026-10-22_19-27-31_comparaison_small.json",
+      "?? archives/2026-10-23_22-31-01_comparaison_small.csv",
+      "?? archives/2026-10-23_22-31-01_comparaison_small.json",
+      "?? archives/2026-10-24_12-20-39_comparaison_small.json",
+      "?? archives/replay/2026-10-15_14-16-03_band_fanout.data.js",
+      "?? archives/replay/2026-10-15_14-16-03_band_fanout.html",
+      "?? compare_2026-10-08_10-33.log",
+      "?? index.html",
+      "?? profile.prof"
+    ],
+    "diff": ""
+  }
+}
