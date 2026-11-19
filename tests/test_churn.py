@@ -13,6 +13,7 @@ from festival_ble_sim.viz.history import SimulationHistory
 class _FakeNode:
     def __init__(self):
         self.is_active = True
+        self.has_app = True
 
 
 def test_churn_process_starts_inactive_until_arrival():

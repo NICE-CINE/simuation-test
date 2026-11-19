@@ -46,3 +46,15 @@ def test_no_outside_friends_keeps_the_groups():
     config = SocialConfig(outside_friends_range=(0, 0))
     groups = assign_friend_groups(list(range(1, 101)), config, random.Random(1))
     assert add_outside_friends(groups, config, random.Random(2)) == groups
+
+
+def test_adopters_are_whole_friend_groups_up_to_the_share():
+    from festival_ble_sim.social import draw_adopters
+    people = list(range(1, 201))
+    groups = assign_friend_groups(people, SocialConfig(), random.Random(4))
+    adopters = draw_adopters(people, groups, 0.3, random.Random(9))
+    assert len(adopters) == 60
+    for person in adopters:
+        assert groups.get(person, set()) <= adopters
+    assert draw_adopters(people, groups, 0.3, random.Random(9)) == adopters
+    assert draw_adopters(people, groups, 0.3, random.Random(10)) != adopters

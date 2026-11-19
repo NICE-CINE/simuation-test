@@ -20,6 +20,29 @@ def assign_friend_groups(people: List[int], config: SocialConfig, rng: random.Ra
     return friends
 
 
+def draw_adopters(
+    people: List[int], groups: Dict[int, Set[int]], fraction: float, rng: random.Random
+) -> Set[int]:
+    # Friends install the app together: whole groups (and people on their
+    # own) are taken in a random order until the share is reached, skipping
+    # a group that would overshoot it. Drawn person by person, most users
+    # would have no friend to write to.
+    target = round(fraction * len(people))
+    units: List[List[int]] = []
+    seen: Set[int] = set()
+    for person in sorted(people):
+        if person not in seen:
+            unit = sorted(groups.get(person, set()) | {person})
+            seen.update(unit)
+            units.append(unit)
+    rng.shuffle(units)
+    adopters: Set[int] = set()
+    for unit in units:
+        if len(adopters) + len(unit) <= target:
+            adopters.update(unit)
+    return adopters
+
+
 def add_outside_friends(
     groups: Dict[int, Set[int]], config: SocialConfig, rng: random.Random
 ) -> Dict[int, Set[int]]:

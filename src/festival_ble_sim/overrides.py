@@ -4,6 +4,19 @@ from dataclasses import fields, is_dataclass, replace
 from typing import Any, List, Optional, Sequence
 from .config import SimulationConfig
 
+# What every command simulates unless told otherwise: the open-air radio the
+# field bench measured (exponent 1.8, 50 m) plus 0.8 dB per body crossed,
+# which gives back the bench's 30 m at 3 m2 per person and ~15 m in a packed
+# zone, and a fade that lasts. SimulationConfig's own defaults stay neutral
+# (30 m whatever the crowd, independent ticks): a script that builds its
+# config by hand gets those unless it applies these.
+CROWD_RADIO_OVERRIDES = (
+    "ble.phone_radio.path_loss_exponent=1.8",
+    "ble.phone_radio.tx_power_dbm=-19.4",
+    "ble.body_loss_db=0.8",
+)
+DEFAULT_FADING_COHERENCE_S = 20.0
+
 SET_HELP = (
     "Change n'importe quel reglage de SimulationConfig, repetable : --set traffic.message_ttl_s=900 "
     "--set mobility.group.split_probability=0.5 --set social.outside_friends_range=0,4 --set churn.enabled=True. "
@@ -20,6 +33,22 @@ def add_override_arguments(parser: Any) -> None:
         help="Radio deterministe, sans variation aleatoire du signal (par defaut 4 dB, telephones et bornes)",
     )
     parser.add_argument(
+        "--adoption", type=float, default=None, metavar="PART",
+        help="Part des festivaliers qui ont l'app (defaut 1 = tous). Les autres restent sur le site, marchent avec "
+        "leur groupe et attenuent le signal, sans radio ni trafic = --set adoption_fraction=PART",
+    )
+    parser.add_argument(
+        "--no-body-loss", action="store_true",
+        help="Radio d'avant : 30 m quelle que soit la foule (exposant 2,7). Par defaut la portee depend de la "
+        "densite autour du telephone : 50 m en plein air (exposant 1,8 mesure), 0,8 dB par corps traverse, "
+        "soit ~30 m a 3 m2/personne et ~15 m en zone dense",
+    )
+    parser.add_argument(
+        "--fading-coherence", type=float, default=None, metavar="S",
+        help=f"Duree de memoire du fading d'un lien en secondes (defaut {DEFAULT_FADING_COHERENCE_S:g}, estime) ; "
+        "0 = tirage independant a chaque seconde",
+    )
+    parser.add_argument(
         "--messages-per-hour", type=float, nargs=2, default=None, metavar=("LO", "HI"),
         help="Rythme d'envoi de chaque personne, tire entre LO et HI (defaut 0 4)",
     )
@@ -32,10 +61,9 @@ def add_override_arguments(parser: Any) -> None:
     )
     parser.add_argument(
         "--phone-tx-power", type=float, default=None, metavar="DBM",
-        help="Puissance d'emission des telephones, qui fixe leur portee (defaut -10 dBm = 30 m, "
-        "borne haute mesuree pour une foule ; -20 = 13 m, -18 = 15 m, -15 = 20 m, -12 = 26 m, -8 = 36 m, "
-        "-6 = 43 m, -4 = 51 m, 0 = 71 m ; plein air mesure : -19.4 avec "
-        "--set ble.phone_radio.path_loss_exponent=1.8 = 50 m)",
+        help="Puissance d'emission des telephones, qui fixe leur portee hors foule (defaut -19.4 dBm = 50 m en "
+        "plein air, moins selon la densite ; -25 = 24 m, -22 = 36 m, -16 = 77 m). Avec --no-body-loss : defaut "
+        "-10 dBm = 30 m, -20 = 13 m, -18 = 15 m, -15 = 20 m, -12 = 26 m, -8 = 36 m, -6 = 43 m, -4 = 51 m, 0 = 71 m",
     )
     parser.add_argument("--set", dest="overrides", action="append", default=[], metavar="CHEMIN=VALEUR", help=SET_HELP)
 
@@ -43,6 +71,12 @@ def add_override_arguments(parser: Any) -> None:
 def collect_overrides(args: Any) -> List[str]:
     # Named options first, so a --set can still refine them.
     named: List[str] = []
+    if not args.no_body_loss:
+        named += CROWD_RADIO_OVERRIDES
+    coherence = DEFAULT_FADING_COHERENCE_S if args.fading_coherence is None else args.fading_coherence
+    named.append(f"ble.shadowing_coherence_s={coherence}")
+    if args.adoption is not None:
+        named.append(f"adoption_fraction={args.adoption}")
     if args.no_gps_noise:
         named.append("gps.noise_std_m=0")
     if args.no_shadowing:

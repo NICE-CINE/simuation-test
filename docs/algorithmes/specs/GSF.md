@@ -153,8 +153,7 @@ Buffer plein : on évince d'abord les messages déjà livrés, puis expirés, pu
 |---|---|
 | `src/festival_ble_sim/routing/geo_spray_focus.py` | Nouveau : `GeoSprayFocusRouting` |
 | `tests/test_routing_geo_spray_focus.py` | Nouveau : 15 tests |
-| `main.py` | `"geo_spray_focus": lambda args: GeoSprayFocusRouting()` dans `ROUTING_FACTORIES` |
-| `scripts/compare_algorithms.py` | `"geo_spray_focus": GeoSprayFocusRouting` dans `ALGORITHMS` |
+| `src/festival_ble_sim/routing/registry.py` | `"geo_spray_focus": lambda seed, copies: GeoSprayFocusRouting()` dans `_FACTORIES` (`main.py` et les scripts en dérivent leurs choix ; à l'origine, une entrée dans `ROUTING_FACTORIES` de `main.py` et dans `ALGORITHMS` du script de comparaison) |
 | `CLAUDE.md` | Entrée `geo_spray_focus` dans la liste des algorithmes |
 | `README.md` | `--routing geo_spray_focus`, matrice de comparaison, entrée dans la liste des algorithmes |
 | `docs/algorithmes/specs/GSF.md` | Ce document |
@@ -304,7 +303,7 @@ Conditions : mobilité `poi`, 400 festivaliers sur le site par défaut (0,35 km�
 
 **Lecture.**
 
-1. **GSF livre beaucoup plus que TIDE-G** (+14 à +21 points), plus même qu'Epidemic, pour environ 1/8 de sa surcharge et 1/5 de son énergie. Epidemic souffre de la congestion qu'il crée lui-même (pertes, backoff).
+1. **GSF livre beaucoup plus que TIDE-G** (+14 à +21 points), plus même qu'Epidemic, pour environ 1/8 de sa surcharge et 1/5 de son énergie. Epidemic souffre de la congestion qu'il crée lui-même (pertes ; le backoff CSMA du moteur de ces mesures a été retiré depuis).
 2. **Tout le gain vient de l'inondation tardive.** Sans le niveau 2 de l'escalade, GSF retombe au niveau de TIDE-G (−3 à −1 point). 72 à 75 % des transmissions de GSF sont des transmissions d'inondation.
 3. **La géographie n'apporte rien.** Budget fixe au lieu de r², GPS des seuls porteurs, ou plus de GPS du tout : la livraison ne bouge pas (écarts inférieurs à 1 point). La variante sans géographie économise 5 à 6 mAh par nœud. Le focus géographique ne représente que 1 à 3 % des transmissions : le spray orienté et le focus géo ont rarement l'occasion de servir.
 4. **L'escalade est indispensable.** Sans escalade du tout, GSF perd 5 à 7 points par rapport à TIDE-G. Le niveau 1 (12 jetons à 60 s) en rattrape 4 à 5, ce qui ramène GSF au niveau de TIDE-G ; c'est l'inondation qui fait passer au-dessus.

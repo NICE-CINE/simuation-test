@@ -35,7 +35,9 @@ class RadioParams:
 # festival crowd, whose bodies spread along the whole path. Exponent 2.7 is
 # kept for that reason (estimated); open air measured 1.8 and ~50 m
 # (path_loss_exponent=1.8, tx_power_dbm=-19.4). Beacons: 2x the phone
-# range, not measured. shadowing_std_db=4.0 comes from the literature; the
+# range, not measured, and only between two beacons: a link's range is
+# mutual (network._active_nearby), so a phone-beacon link gets the phone's.
+# shadowing_std_db=4.0 comes from the literature; the
 # bench saw ~11 dB between passes, a slow effect per-tick draws don't model.
 def _default_phone_radio() -> RadioParams:
     return RadioParams(
@@ -82,6 +84,11 @@ class BleConfig:
     # An established connection with no data either way for this long is
     # closed, freeing both slots (estimated, not measured).
     connection_idle_timeout_s: float = 30.0
+    # A pair whose connection closed for idleness is not redialed for this
+    # long, unless the dialer has stored a new message since: it has nothing
+    # to say that the peer hasn't already been offered, and the slot goes to
+    # a neighbor it hasn't talked to (estimated). 0 = redial at once.
+    reconnect_backoff_s: float = 300.0
     # Residual per-packet error on any link.
     packet_loss_base_probability: float = 0.01
     # Extra per-packet error for links near the edge of radio range: fades
@@ -101,6 +108,22 @@ class BleConfig:
     # One message id in a summary vector (what a node holds, sent over each
     # connection so the peer doesn't resend it).
     summary_id_bytes: int = 4
+    # Bodies between two phones: a link of d metres through a crowd of rho
+    # people per m2 crosses about rho * body_width_m * d of them, each
+    # costing body_loss_db on top of the path loss. rho is counted every
+    # tick in cells of crowd_density_cell_m (everyone on site, with the app
+    # or not) and the denser end of the link counts; a phone's range shrinks
+    # accordingly. 0.8 dB per body is the field bench's 5 people (50 m ->
+    # 30 m of link range, ~4 dB), docs/radio/mesures.md; meant for an
+    # open-air phone_radio (overrides.CROWD_RADIO_OVERRIDES). 0 = off.
+    body_loss_db: float = 0.0
+    body_width_m: float = 0.5
+    crowd_density_cell_m: float = 10.0
+    # Shadowing memory: a pair's fade is a Gauss-Markov process with this
+    # time constant instead of a fresh draw every tick, so a link hidden by
+    # bodies stays hidden for a while (estimated; the bench only says the
+    # effect is slow). 0 = independent ticks.
+    shadowing_coherence_s: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -317,6 +340,12 @@ class SimulationConfig:
     # Encounter tables start empty when it ends.
     warmup_s: float = 0.0
     num_festivaliers: int = 4000
+    # Share of the festivaliers who run the app. The others are still on
+    # site: they walk with their group and their bodies weaken the signal
+    # (BleConfig.body_loss_db), but they have no radio, traffic or energy.
+    # Drawn by friend group (social.draw_adopters) from a "<seed>-adoption"
+    # RNG, only when < 1.
+    adoption_fraction: float = 1.0
     node_buffer_capacity: int = 100
     random_seed: Optional[int] = 42
     area: AreaConfig = field(default_factory=AreaConfig)
@@ -340,6 +369,8 @@ class SimulationConfig:
             raise ValueError("area dimensions must be positive")
         if self.num_festivaliers < 2:
             raise ValueError("num_festivaliers must be at least 2 (need src and dst)")
+        if not 0.0 < self.adoption_fraction <= 1.0 or round(self.adoption_fraction * self.num_festivaliers) < 2:
+            raise ValueError("adoption_fraction must be in (0, 1] and leave at least 2 people with the app")
         if self.node_buffer_capacity <= 0:
             raise ValueError("node_buffer_capacity must be positive")
         lo, hi = self.traffic.payload_size_range_bytes
@@ -384,6 +415,10 @@ class SimulationConfig:
             raise ValueError("weak_signal_max_probability must be within [0, 1]")
         if self.ble.data_channels < 1 or self.ble.advertising_channels < 1:
             raise ValueError("data_channels and advertising_channels must be >= 1")
+        if self.ble.reconnect_backoff_s < 0 or self.ble.shadowing_coherence_s < 0:
+            raise ValueError("reconnect_backoff_s and shadowing_coherence_s must be >= 0")
+        if self.ble.body_loss_db < 0 or self.ble.body_width_m <= 0 or self.ble.crowd_density_cell_m <= 0:
+            raise ValueError("body_loss_db must be >= 0, body_width_m and crowd_density_cell_m > 0")
         if self.beacons.backhaul_latency_s <= 0:
             raise ValueError("backhaul_latency_s must be positive")
         if not (0.0 <= self.beacons.backhaul_loss_probability <= 1.0):

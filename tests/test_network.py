@@ -289,3 +289,26 @@ def test_control_broadcast_is_lost_not_resent():
                             random.Random(0), None, {}, received)
     assert received == {} and b.battery_mah == 100.0
     assert metrics.build_report([], 0).packet_loss_count == 1
+
+
+def test_a_beacon_reaches_a_phone_only_as_far_as_the_phone_can_answer():
+    # Characterization: range is mutual, so beacon_radio's 60 m only ever
+    # counts between two beacons; a phone link is the phone's range and radio.
+    from festival_ble_sim.config import BleConfig
+    from festival_ble_sim.network import _active_nearby, _link_radio
+    from festival_ble_sim.nodes import BeaconNode
+    from festival_ble_sim.radio import max_range_m
+    ble = BleConfig()
+    phone_range, beacon_range = max_range_m(ble.phone_radio), max_range_m(ble.beacon_radio)
+    assert beacon_range > 1.9 * phone_range
+    beacon = BeaconNode(1, Position(50.0, 50.0), beacon_range, 10)
+    other_beacon = BeaconNode(4, Position(50.0 + 0.9 * beacon_range, 50.0), beacon_range, 10)
+    inside = BaseNode(2, Position(50.0 + 0.8 * phone_range, 50.0), phone_range, 10, 100.0)
+    outside = BaseNode(3, Position(50.0 + 1.2 * phone_range, 50.0), phone_range, 10, 100.0)
+    grid = SpatialGrid(300.0, 300.0, cell_size_m=phone_range)
+    for node in (beacon, other_beacon, inside, outside):
+        grid.insert(node)
+    assert set(_active_nearby(beacon, grid)) == {inside, other_beacon}
+    assert beacon not in _active_nearby(outside, grid)
+    assert _link_radio(ble, beacon, inside) is ble.phone_radio
+    assert _link_radio(ble, beacon, other_beacon) is ble.beacon_radio

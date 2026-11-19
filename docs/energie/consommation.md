@@ -90,9 +90,9 @@ Limites de cette mesure :
 
 - **Chaque tick, chaque téléphone actif** paie
   `background_current_ma + phone_current_ma`, soit 113 mA
-  (`simulation._mobile_process`). Ce poste représente plus de 95 % de la
-  consommation d'un run : les écarts d'énergie entre algorithmes viennent
-  des seuls coûts d'émission et de réception.
+  (`simulation._mobile_process`). Ce poste représente 80 à 95 % de la
+  consommation d'un run. Le reste est surtout le coût des connexions (voir
+  « dont connexions » ci-dessous), l'émission et la réception pesant peu.
 - **Chaque transmission** (`network.process_node_contacts`) : l'émetteur paie
   `cost_of_tx`, le récepteur `cost_of_rx`. Une transmission perdue ne coûte
   que l'émission.
@@ -103,7 +103,8 @@ Limites de cette mesure :
 
 ### Deux colonnes d'énergie
 
-Le rapport donne trois mesures, sur les téléphones seulement (bornes exclues) :
+Le rapport donne quatre mesures, sur les téléphones qui ont l'app seulement
+(bornes et non-utilisateurs exclus) :
 
 - **Énergie totale** (`total_energy_consumed_mah`, `avg_energy_consumed_mah`) :
   tout ce que la batterie a perdu, téléphone compris. C'est elle qui décide
@@ -119,7 +120,20 @@ Le rapport donne trois mesures, sur les téléphones seulement (bornes exclues) 
   dépense lui-même (émission, réception, connexions, GPS, annonces). Les
   31 mA de base pèsent souvent plus que tout le reste et sont identiques
   pour tous les algorithmes tant que les téléphones vivent. **C'est la
-  colonne à utiliser pour comparer les algorithmes.**
+  colonne à utiliser pour comparer les algorithmes**, avec la réserve
+  suivante.
+- **Dont connexions** (`total_connection_energy_consumed_mah`,
+  `avg_connection_energy_consumed_mah`, ligne « dont connexions ») : la part
+  de l'énergie de l'algorithme dépensée à ouvrir des connexions
+  (`connection_setup_mah`) et à en tenir plus d'une
+  (`extra_connection_current_ma`). Mesurée le 12 nov. 2026 sur 400
+  téléphones, elle fait 86 à 99,9 % de l'énergie de l'algorithme : un
+  téléphone qui porte un message ouvre 3 à 8 connexions par minute. Ses deux
+  coûts sont **estimés** (§2), et le courant de base a été mesuré « Nearby
+  actif », découverte comprise : facturer en plus 12 s d'annonce + scan par
+  ouverture est peut-être un double compte. Tant que le banc ne l'a pas
+  mesuré, comparer aussi les algorithmes sur **l'énergie de l'algorithme
+  moins cette ligne**, qui ne contient que des coûts mesurés.
 
 `BaseNode.consume_energy(mah, mesh=False)` est le seul appel qui ne compte
 pas dans la part mesh, `consume_energy(mah, background=True)` (la base, dans

@@ -98,8 +98,15 @@ def test_warmup_moves_people_but_measures_and_bills_nothing():
     cold = run_simulation(SimulationConfig(**base))
     warm = run_simulation(SimulationConfig(warmup_s=600.0, **base))
     assert SimulationConfig(warmup_s=600.0, **base).total_s == 660.0
-    # Same measured length: the warm-up adds no energy and no messages of its own.
-    assert warm.avg_energy_consumed_mah == pytest.approx(cold.avg_energy_consumed_mah, rel=0.05)
+    # Same measured length: the warm-up bills no energy of its own. Exact with
+    # no traffic; with traffic a cold start costs ~7 % more (everyone walks at
+    # once, the start-up transient the warm-up exists to skip), so only a gross
+    # leak (the 600 s billed, x11) can fail the loose bound.
+    idle = dict(base, traffic=TrafficConfig(messages_per_hour_range=(0.0, 0.0)))
+    cold_idle = run_simulation(SimulationConfig(**idle))
+    warm_idle = run_simulation(SimulationConfig(warmup_s=600.0, **idle))
+    assert warm_idle.avg_energy_consumed_mah == pytest.approx(cold_idle.avg_energy_consumed_mah)
+    assert warm.avg_energy_consumed_mah == pytest.approx(cold.avg_energy_consumed_mah, rel=0.25)
     assert 0 < warm.messages_created < 3 * cold.messages_created + 10
 
 

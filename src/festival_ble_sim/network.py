@@ -8,7 +8,7 @@ from .energy import EnergyModel
 from .metrics import MetricsCollector
 from .models import Message
 from .nodes import BaseNode, BeaconNode
-from .radio import link_margin_db
+from .radio import crowd_loss_db, crowd_range_m, link_margin_db
 from .routing.base import RoutingAlgorithm, RoutingDecision
 from .spatial import SpatialGrid
 
@@ -17,7 +17,7 @@ def _purge_expired_messages(node: BaseNode, now: float) -> None:
     expired_ids = [mid for mid, m in node.buffer.items() if m.is_expired(now)]
     for mid in expired_ids:
         del node.buffer[mid]
-    for table in (node.acked, node.outbox):
+    for table in (node.acked, node.outbox, node.delivered_ids):
         for mid in [mid for mid, expiry in table.items() if expiry < now]:
             del table[mid]
 
@@ -76,24 +76,29 @@ def _update_connections(
     ble_config: BleConfig,
     connections: Dict[Tuple[int, int], _Connection],
     energy_model: Optional[EnergyModel] = None,
+    idle_closed: Optional[Dict[Tuple[int, int], Tuple[float, int, int]]] = None,
 ) -> Dict[int, List[BaseNode]]:
     # connections: (low id, high id) -> _Connection, kept across
     # ticks. A pair must stay in range connection_setup_s before it can carry
     # anything (discovery + connection), keeps its slot on both ends while
     # in range, and is closed after connection_idle_timeout_s without data.
     # Only nodes with something to send open new ones, via select_links.
+    # idle_closed (kept across ticks too): pairs closed for idleness, with
+    # when and each end's buffer_additions then; such a pair is not redialed
+    # within reconnect_backoff_s by an end that has stored nothing since.
     # Returns each node's usable (ready) links.
     nodes_by_id = dict(order)
+    backoff = ble_config.reconnect_backoff_s if idle_closed is not None else 0.0
     for key in list(connections):
         a, b = nodes_by_id[key[0]], nodes_by_id[key[1]]
         conn = connections[key]
         reach = min(a.radio_range_m, b.radio_range_m)
-        if (
-            not a.is_active or not b.is_active
-            or a.position.distance_squared_to(b.position) > reach * reach
-            or (conn.ready_at <= now and now - conn.last_used >= ble_config.connection_idle_timeout_s)
-        ):
+        if not a.is_active or not b.is_active or a.position.distance_squared_to(b.position) > reach * reach:
             del connections[key]
+        elif conn.ready_at <= now and now - conn.last_used >= ble_config.connection_idle_timeout_s:
+            del connections[key]
+            if backoff > 0.0:
+                idle_closed[key] = (now, a.buffer_additions, b.buffer_additions)
     partners: Dict[int, List[int]] = {}
     for a_id, b_id in connections:
         partners.setdefault(a_id, []).append(b_id)
@@ -110,13 +115,15 @@ def _update_connections(
             n for n in neighbors_by_node[node_id]
             if n.id not in taken and (max_links is None or len(partners.get(n.id, ())) < max_links)
         ]
+        if backoff > 0.0 and idle_closed:
+            candidates = [n for n in candidates if not _nothing_new(node, n, now, backoff, idle_closed)]
         for contact in routing_algorithm.select_links(node, candidates, free)[:free]:
             connections[(min(node_id, contact.id), max(node_id, contact.id))] = _Connection(
                 now + ble_config.connection_setup_s
             )
             if energy_model is not None:
-                node.consume_energy(energy_model.connection_setup_cost())
-                contact.consume_energy(energy_model.connection_setup_cost())
+                node.consume_energy(energy_model.connection_setup_cost(), connection=True)
+                contact.consume_energy(energy_model.connection_setup_cost(), connection=True)
             taken.append(contact.id)
             partners.setdefault(contact.id, []).append(node_id)
     links: Dict[int, List[BaseNode]] = {}
@@ -125,6 +132,55 @@ def _update_connections(
             links.setdefault(a_id, []).append(nodes_by_id[b_id])
             links.setdefault(b_id, []).append(nodes_by_id[a_id])
     return links
+
+
+def _nothing_new(
+    node: BaseNode, peer: BaseNode, now: float, backoff: float,
+    idle_closed: Dict[Tuple[int, int], Tuple[float, int, int]],
+) -> bool:
+    key = (node.id, peer.id) if node.id < peer.id else (peer.id, node.id)
+    closed = idle_closed.get(key)
+    if closed is None:
+        return False
+    if now - closed[0] >= backoff:
+        del idle_closed[key]
+        return False
+    return node.buffer_additions == (closed[1] if node.id < peer.id else closed[2])
+
+
+_DENSITY_STEP = 0.02
+
+
+def _update_crowd(nodes: Dict[int, BaseNode], grid: SpatialGrid, ble_config: BleConfig, ranges: Dict[int, float]) -> None:
+    # People per m2 around each phone, counted in cells that tile the site,
+    # and the range that density leaves it (ranges: cache per density step).
+    # Beacons stand above the crowd: they keep their range and a density of
+    # 0, so a phone-beacon link sees the phone's crowd.
+    cols = max(1, round(grid.width_m / ble_config.crowd_density_cell_m))
+    rows = max(1, round(grid.height_m / ble_config.crowd_density_cell_m))
+    cell_w, cell_h = grid.width_m / cols, grid.height_m / rows
+    counts: Dict[Tuple[int, int], int] = {}
+    cells: Dict[int, Tuple[int, int]] = {}
+    for node_id, node in nodes.items():
+        if node.is_beacon or not node.on_site:
+            continue
+        cell = (
+            min(max(int(node.position.x // cell_w), 0), cols - 1),
+            min(max(int(node.position.y // cell_h), 0), rows - 1),
+        )
+        counts[cell] = counts.get(cell, 0) + 1
+        cells[node_id] = cell
+    cell_area = cell_w * cell_h
+    for node_id, cell in cells.items():
+        node = nodes[node_id]
+        step = round(counts[cell] / cell_area / _DENSITY_STEP)
+        reach = ranges.get(step)
+        if reach is None:
+            reach = ranges[step] = crowd_range_m(
+                ble_config.phone_radio, step * _DENSITY_STEP, ble_config.body_loss_db, ble_config.body_width_m
+            )
+        node.crowd_density = step * _DENSITY_STEP
+        node.radio_range_m = reach
 
 
 @dataclass
@@ -173,6 +229,37 @@ def _weak_signal_loss_probability(margin_db: float, ble_config: BleConfig) -> fl
     return ble_config.weak_signal_max_probability * (1.0 - margin_db / cutoff)
 
 
+class _Fades(dict):
+    # The tick's fades (pair -> dB), plus what network_engine keeps across
+    # ticks when BleConfig.shadowing_coherence_s > 0: memory maps a pair to
+    # its last fade and when it was drawn.
+    def __init__(self, now: float = 0.0, coherence_s: float = 0.0, memory: Optional[Dict] = None) -> None:
+        super().__init__()
+        self.now = now
+        self.coherence_s = coherence_s
+        self.memory = memory
+
+
+def _pair_fade_db(a: BaseNode, b: BaseNode, radio, rng: Optional[random.Random], fades: Dict[Tuple[int, int], float]) -> float:
+    # One fade per unordered pair per tick: the channel is reciprocal, and
+    # the data and the summaries of a link can't see different fades. With
+    # a memory (_Fades) the draw is the innovation of a Gauss-Markov
+    # process: same variance, same number of rng draws, correlated in time.
+    key = (min(a.id, b.id), max(a.id, b.id))
+    fade = fades.get(key)
+    if fade is None:
+        fade = rng.gauss(0.0, radio.shadowing_std_db) if rng is not None and radio.shadowing_std_db > 0.0 else 0.0
+        memory = getattr(fades, "memory", None)
+        if memory is not None:
+            previous = memory.get(key)
+            if previous is not None:
+                rho = math.exp(-(fades.now - previous[1]) / fades.coherence_s)
+                fade = rho * previous[0] + math.sqrt(1.0 - rho * rho) * fade
+            memory[key] = (fade, fades.now)
+        fades[key] = fade
+    return fade
+
+
 def _link_failure_probability(
     sender: BaseNode,
     contact: BaseNode,
@@ -181,12 +268,26 @@ def _link_failure_probability(
     heard: Optional[Dict[int, float]],
     duty: Optional[Dict[int, float]],
     channels: int,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> float:
     # Shadowing (see radio.RadioParams.shadowing_std_db) makes the margin a
     # stochastic per-tick sample: an unlucky fade can push the received
     # power below the sensitivity floor even inside the range used to
-    # shortlist neighbors, a true outage nothing gets through.
-    margin_db = link_margin_db(sender.position.distance_to(contact.position), _link_radio(ble_config, sender, contact), rng)
+    # shortlist neighbors, a true outage nothing gets through. With `fades`
+    # (network_engine passes a fresh dict each tick) the sample is shared
+    # by the pair; without, every call draws its own.
+    radio = _link_radio(ble_config, sender, contact)
+    distance_m = sender.position.distance_to(contact.position)
+    if fades is None:
+        margin_db = link_margin_db(distance_m, radio, rng)
+    else:
+        margin_db = link_margin_db(distance_m, radio) + _pair_fade_db(sender, contact, radio, rng, fades)
+    if ble_config.body_loss_db > 0.0:
+        # The denser end decides, as it does for the range (_update_crowd).
+        margin_db -= crowd_loss_db(
+            distance_m, max(sender.crowd_density, contact.crowd_density),
+            ble_config.body_loss_db, ble_config.body_width_m,
+        )
     if margin_db < 0.0:
         return 1.0
     # Frequency hopping: a neighbor transmitting a share u of the time lands
@@ -217,6 +318,7 @@ def _send_control_broadcast(
     airtime_left: Dict[int, float],
     received: Dict[int, List[int]],
     now: float = 0.0,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> bool:
     # One connectionless broadcast to every active node in range: no link
     # slot, no acknowledgment and so no retransmission, each reception is
@@ -246,7 +348,7 @@ def _send_control_broadcast(
             sender, contact, ble_config, rng,
             channel.heard_control if channel is not None else None,
             channel.duty_control if channel is not None else None,
-            ble_config.advertising_channels,
+            ble_config.advertising_channels, fades,
         )
         if failure >= 1.0 or (rng is not None and failure > 0.0 and rng.random() < failure):
             metrics.record_packet_loss()
@@ -268,6 +370,7 @@ def _exchange_metadata(
     airtime_left: Dict[int, float],
     metrics: Optional[MetricsCollector] = None,
     now: float = 0.0,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> None:
     # What decide() and has_message() read about the peer has to cross the
     # link first, every tick, before any data: each side's summary vector
@@ -304,7 +407,7 @@ def _exchange_metadata(
         a, b, ble_config, rng,
         channel.heard_data if channel is not None else None,
         channel.duty_data if channel is not None else None,
-        ble_config.data_channels,
+        ble_config.data_channels, fades,
     )
     if failure >= 1.0:
         return
@@ -347,6 +450,7 @@ def process_node_contacts(
     neighbors: Optional[List[BaseNode]] = None,
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]] = None,
     airtime_left: Optional[Dict[int, float]] = None,
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> List[int]:
     # Returns the contacts the sender put anything on the air towards:
     # network_engine reads it as connection activity.
@@ -384,7 +488,7 @@ def process_node_contacts(
     if ble_config is not None and routing_algorithm.advertising_bearer:
         return _broadcast_messages(
             now, sender, neighbors, messages, routing_algorithm, energy_model, metrics, ble_config, rng, channel,
-            event_log, on_delivery, airtime_left,
+            event_log, on_delivery, airtime_left, fades,
         )
 
     sent_to: List[int] = []
@@ -401,7 +505,7 @@ def process_node_contacts(
                 sender, contact, ble_config, rng,
                 channel.heard_data if channel is not None else None,
                 channel.duty_data if channel is not None else None,
-                ble_config.data_channels,
+                ble_config.data_channels, fades,
             )
             if failure >= 1.0:
                 continue
@@ -440,7 +544,7 @@ def process_node_contacts(
             contact.consume_energy(energy_model.cost_of_rx(message.size_bytes) * attempts)
             metrics.record_transmission(message, airtime)
             _hand_over(now, sender, contact, message, is_delivery, routing_algorithm, energy_model, metrics,
-                       event_log, on_delivery)
+                       event_log, on_delivery, attempts, airtime_left, radio_budget_bytes, channel)
     return sent_to
 
 
@@ -458,6 +562,7 @@ def _broadcast_messages(
     event_log: Optional[List[Dict[str, Any]]],
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
     airtime_left: Dict[int, float],
+    fades: Optional[Dict[Tuple[int, int], float]] = None,
 ) -> List[int]:
     # Connectionless bearer (Bluetooth Mesh advertising bearer): no
     # connection to wait for, each message goes out once to every neighbor
@@ -492,7 +597,7 @@ def _broadcast_messages(
                 sender, contact, ble_config, rng,
                 channel.heard_control if channel is not None else None,
                 channel.duty_control if channel is not None else None,
-                ble_config.advertising_channels,
+                ble_config.advertising_channels, fades,
             )
             if failure >= 1.0 or (rng is not None and failure > 0.0 and rng.random() < failure):
                 metrics.record_packet_loss(message)
@@ -532,18 +637,31 @@ def _hand_over(
     metrics: MetricsCollector,
     event_log: Optional[List[Dict[str, Any]]],
     on_delivery: Optional[Callable[[Message, BaseNode, float], None]],
+    attempts: float = 1.0,
+    airtime_left: Optional[Dict[int, float]] = None,
+    radio_budget_bytes: Optional[float] = None,
+    channel: Optional[ChannelState] = None,
 ) -> None:
     copy = replace(message, hops=message.hops + 1, routing_state=dict(message.routing_state))
     if is_delivery:
-        contact.mark_delivered(copy.msg_id)
+        contact.mark_delivered(copy.msg_id, copy.creation_time + copy.ttl_s)
         if routing_algorithm.uses_delivery_acks:
-            # The destination acks straight back on this connection.
+            # The destination acks straight back on this connection: same
+            # resends, airtime and channel load as the data it answers. The
+            # airtime may overshoot the tick's budget by an ack at most (it
+            # can't be deferred), the next sends just find less left.
             expiry = copy.creation_time + copy.ttl_s
             contact.acked[copy.msg_id] = expiry
             sender.learn_ack(copy.msg_id, expiry)
-            contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes))
-            sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes))
-            metrics.record_overhead_bytes("ack", routing_algorithm.ack_size_bytes, now)
+            ack_airtime = routing_algorithm.ack_size_bytes * attempts
+            contact.consume_energy(energy_model.cost_of_tx(routing_algorithm.ack_size_bytes) * attempts)
+            sender.consume_energy(energy_model.cost_of_rx(routing_algorithm.ack_size_bytes) * attempts)
+            metrics.record_overhead_bytes("ack", ack_airtime, now)
+            if airtime_left is not None and radio_budget_bytes is not None:
+                for node in (sender, contact):
+                    airtime_left[node.id] = max(0.0, airtime_left.get(node.id, radio_budget_bytes) - ack_airtime)
+            if channel is not None:
+                channel.sent_data[contact.id] = channel.sent_data.get(contact.id, 0.0) + ack_airtime
         if copy.src_position is not None:
             contact.record_known_position(copy.src_id, copy.src_position, copy.creation_time)
         metrics.record_delivery(copy, now)
@@ -652,9 +770,26 @@ def network_engine(
     beacon_ids = [node_id for node_id, node in nodes.items() if isinstance(node, BeaconNode)]
     channel: Optional[ChannelState] = ChannelState() if ble_config is not None else None
     connections: Dict[Tuple[int, int], _Connection] = {}
+    idle_closed: Dict[Tuple[int, int], Tuple[float, int, int]] = {}
+    crowd_ranges: Dict[int, float] = {}
+    coherence_s = ble_config.shadowing_coherence_s if ble_config is not None else 0.0
+    fade_memory: Optional[Dict[Tuple[int, int], Tuple[float, float]]] = {} if coherence_s > 0.0 else None
+    next_sweep = 0.0
     while True:
         yield env.timeout(contact_check_interval_s)
         now = env.now
+        if now >= next_sweep:
+            # Pairs that parted long ago: both tables would otherwise grow
+            # with every pair that ever met.
+            next_sweep = now + 60.0
+            if ble_config is not None:
+                for key in [k for k, v in idle_closed.items() if now - v[0] >= ble_config.reconnect_backoff_s]:
+                    del idle_closed[key]
+            if fade_memory:
+                for key in [k for k, v in fade_memory.items() if now - v[1] > 5.0 * coherence_s]:
+                    del fade_memory[key]
+        if ble_config is not None and ble_config.body_loss_db > 0.0:
+            _update_crowd(nodes, grid, ble_config, crowd_ranges)
         if routing_algorithm.uses_delivery_acks and len(beacon_ids) > 1:
             _share_beacon_acks([nodes[b] for b in beacon_ids if nodes[b].is_active])
         snapshot = {node_id: list(node.buffer.values()) for node_id, node in nodes.items()}
@@ -672,6 +807,7 @@ def network_engine(
             broadcasts = routing_algorithm.control_broadcasts(now)
             channel = channel.next_tick(neighbors_by_node, _radio_budget_bytes(ble_config))
         airtime_left: Dict[int, float] = {}
+        fades: Dict[Tuple[int, int], float] = _Fades(now, coherence_s, fade_memory)
         received: Dict[int, List[int]] = {}
         sent: List[int] = []
         # Senders compete for receivers' airtime, so a fixed order would let
@@ -682,6 +818,7 @@ def network_engine(
         links = (
             _update_connections(
                 now, order, neighbors_by_node, snapshot, routing_algorithm, ble_config, connections, energy_model,
+                idle_closed,
             )
             if neighbors_by_node is not None and not routing_algorithm.advertising_bearer else None
         )
@@ -689,21 +826,22 @@ def network_engine(
             for node_id, node_links in links.items():
                 if len(node_links) > 1:
                     nodes[node_id].consume_energy(
-                        energy_model.connection_holding_cost(len(node_links), contact_check_interval_s)
+                        energy_model.connection_holding_cost(len(node_links), contact_check_interval_s),
+                        connection=True,
                     )
         if links is not None:
             for (a_id, b_id), conn in connections.items():
                 if conn.ready_at <= now:
                     _exchange_metadata(
                         nodes[a_id], nodes[b_id], conn, routing_algorithm, energy_model, ble_config, rng, channel,
-                        airtime_left, metrics, now,
+                        airtime_left, metrics, now, fades,
                     )
         for node_id, sender in order:
             # A node's control broadcast goes out at its turn, just before its
             # data: no global priority of control over data or the reverse.
             if node_id in broadcasts and sender.is_active and _send_control_broadcast(
                 sender, broadcasts[node_id], neighbors_by_node.get(node_id, []), energy_model, metrics,
-                ble_config, rng, channel, airtime_left, received, now,
+                ble_config, rng, channel, airtime_left, received, now, fades,
             ):
                 sent.append(node_id)
             sent_to = process_node_contacts(
@@ -719,6 +857,7 @@ def network_engine(
                 ),
                 on_delivery=on_delivery,
                 airtime_left=airtime_left,
+                fades=fades,
             )
             for contact_id in sent_to:
                 key = (min(node_id, contact_id), max(node_id, contact_id))

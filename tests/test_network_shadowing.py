@@ -3,7 +3,7 @@ from festival_ble_sim.config import BleConfig, EnergyConfig, RadioParams
 from festival_ble_sim.energy import EnergyModel
 from festival_ble_sim.metrics import MetricsCollector
 from festival_ble_sim.models import Message, Position
-from festival_ble_sim.network import process_node_contacts
+from festival_ble_sim.network import _link_failure_probability, process_node_contacts
 from festival_ble_sim.nodes import BaseNode
 from festival_ble_sim.radio import max_range_m
 from festival_ble_sim.routing.epidemic import EpidemicRouting
@@ -104,3 +104,69 @@ def test_outage_carries_nothing_beyond_the_deterministic_range():
         if not contact.has_message(1):
             losses += 1
     assert losses / trials > 0.5
+
+
+def _shadowed_ble(std_db=8.0):
+    radio = _shadowed_radio(std_db)
+    return BleConfig(
+        phone_radio=radio, beacon_radio=radio, connection_setup_s=0.0,
+        packet_loss_base_probability=0.0, weak_signal_max_probability=0.0,
+    )
+
+
+def test_both_directions_of_a_pair_share_one_fade_per_tick():
+    ble_config = _shadowed_ble()
+    a, b = _node(1, 0.0, 0.0), _node(2, 100.0, 0.0)
+    rng = random.Random(3)
+    fades = {}
+    forward = _link_failure_probability(a, b, ble_config, rng, None, None, 79, fades=fades)
+    backward = _link_failure_probability(b, a, ble_config, rng, None, None, 79, fades=fades)
+    assert forward == backward
+    assert list(fades) == [(1, 2)]
+
+
+def test_a_cached_fade_decides_the_link_in_process_node_contacts():
+    ble_config = _shadowed_ble()
+    range_m = max_range_m(ble_config.phone_radio)
+
+    def delivered(distance_m, fade_db):
+        sender, contact = _node(1, 0.0, 0.0), _node(2, distance_m, 0.0)
+        grid = SpatialGrid(2000.0, 2000.0, cell_size_m=1000.0)
+        grid.insert(sender)
+        grid.insert(contact)
+        sender.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+        process_node_contacts(
+            now=1.0, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),
+            energy_model=_energy_model(), metrics=MetricsCollector(), ble_config=ble_config,
+            rng=random.Random(0), neighbors=[contact], fades={(1, 2): fade_db},
+        )
+        return contact.has_message(1)
+
+    assert delivered(range_m * 0.5, -200.0) is False
+    assert delivered(range_m * 1.5, 200.0) is True
+
+
+class _GaussCounter(random.Random):
+    gauss_calls = 0
+
+    def gauss(self, mu=0.0, sigma=1.0):
+        self.gauss_calls += 1
+        return super().gauss(mu, sigma)
+
+
+def test_engine_draws_one_fade_per_pair_per_tick():
+    import simpy
+    from festival_ble_sim.network import network_engine
+    a, b = _node(1, 0.0, 0.0), _node(2, 5.0, 0.0)
+    grid = SpatialGrid(2000.0, 2000.0, cell_size_m=1000.0)
+    grid.insert(a)
+    grid.insert(b)
+    a.store_message(Message(msg_id=1, src_id=1, dst_id=99, size_bytes=10, creation_time=0.0, ttl_s=100.0))
+    rng = _GaussCounter(0)
+    env = simpy.Environment()
+    env.process(network_engine(
+        env, {1: a, 2: b}, grid, EpidemicRouting(), _energy_model(), MetricsCollector(), 1.0,
+        ble_config=_shadowed_ble(), rng=rng,
+    ))
+    env.run(until=2.5)
+    assert rng.gauss_calls == 2

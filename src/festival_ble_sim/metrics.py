@@ -37,6 +37,11 @@ class SimulationReport:
     # otherwise drowns (it is identical for every algorithm while phones live).
     total_algo_energy_consumed_mah: float = 0.0
     avg_algo_energy_consumed_mah: float = 0.0
+    # Part of the algo energy spent opening and holding connections: it
+    # rests on estimated costs (EnergyConfig.connection_setup_mah,
+    # extra_connection_current_ma), unlike tx/rx, and usually dominates.
+    total_connection_energy_consumed_mah: float = 0.0
+    avg_connection_energy_consumed_mah: float = 0.0
     # Bytes put on the air: data (resends included) of measured messages;
     # summaries, acks, algorithm tables and control broadcasts sent before
     # the end of the measured window. overhead_bytes = all of it per
@@ -129,6 +134,7 @@ class MetricsCollector:
         buffer_eviction_count: int = 0,
         node_mesh_energy_consumed_mah: Optional[List[float]] = None,
         node_algo_energy_consumed_mah: Optional[List[float]] = None,
+        node_connection_energy_consumed_mah: Optional[List[float]] = None,
     ) -> SimulationReport:
         # Delivery, latency and hops: spontaneous messages only, the same set
         # for every algorithm at a given seed. Overhead covers all traffic.
@@ -152,6 +158,8 @@ class MetricsCollector:
         total_mesh = sum(mesh)
         algo = node_algo_energy_consumed_mah or []
         total_algo = sum(algo)
+        connection = node_connection_energy_consumed_mah or []
+        total_connection = sum(connection)
         return SimulationReport(
             messages_created=self._messages_created,
             messages_delivered=delivered,
@@ -176,6 +184,8 @@ class MetricsCollector:
             avg_mesh_energy_consumed_mah=total_mesh / len(mesh) if mesh else 0.0,
             total_algo_energy_consumed_mah=total_algo,
             avg_algo_energy_consumed_mah=total_algo / len(algo) if algo else 0.0,
+            total_connection_energy_consumed_mah=total_connection,
+            avg_connection_energy_consumed_mah=total_connection / len(connection) if connection else 0.0,
             data_bytes=self._data_bytes,
             summary_bytes=self._overhead_bytes["summary"],
             ack_bytes=self._overhead_bytes["ack"],
@@ -207,6 +217,7 @@ def format_report(report: SimulationReport) -> str:
         f"Energie moyenne / noeud   : {report.avg_energy_consumed_mah:.2f} mAh\n"
         f"  dont mesh (totale / moy): {report.total_mesh_energy_consumed_mah:.2f} / {report.avg_mesh_energy_consumed_mah:.2f} mAh\n"
         f"  dont algo, hors base    : {report.total_algo_energy_consumed_mah:.2f} / {report.avg_algo_energy_consumed_mah:.2f} mAh\n"
+        f"    dont connexions       : {report.total_connection_energy_consumed_mah:.2f} / {report.avg_connection_energy_consumed_mah:.2f} mAh\n"
         f"Noeuds a plat (batterie)  : {report.dead_node_count}\n"
         f"Copies evincees (buffer)  : {report.buffer_eviction_count}\n"
         f"Annonces perdues (radio)  : {report.packet_loss_count}\n"

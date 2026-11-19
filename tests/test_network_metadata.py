@@ -95,3 +95,56 @@ def test_destination_acks_the_delivering_holder_which_drops_its_copy():
     )
     assert 7 in dst.delivered_ids and 7 in dst.acked
     assert 7 not in holder.buffer and 7 in holder.acked
+
+
+def _delivery(ble, **kwargs):
+    holder, dst = _node(1), _node(2, 5.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(holder)
+    grid.insert(dst)
+    holder.store_message(_msg(7, dst_id=2))
+    metrics = MetricsCollector()
+    process_node_contacts(
+        now=1.0, sender=holder, grid=grid, routing_algorithm=_Acking(),
+        energy_model=_per_byte(), metrics=metrics, ble_config=ble, **kwargs,
+    )
+    return holder, dst, metrics
+
+
+def test_delivery_ack_takes_airtime_and_channel_load_like_data():
+    from festival_ble_sim.network import ChannelState
+    airtime_left, channel = {}, ChannelState()
+    _delivery(_ble(), airtime_left=airtime_left, channel=channel)
+    budget = 31_000.0
+    assert airtime_left[1] == pytest.approx(budget - 10 - 210)
+    assert airtime_left[2] == pytest.approx(budget - 10 - 210)
+    assert channel.sent_data == {1: pytest.approx(10.0), 2: pytest.approx(210.0)}
+
+
+def test_delivery_ack_is_resent_on_a_lossy_link_like_data():
+    holder, dst, metrics = _delivery(replace(_ble(), packet_loss_base_probability=0.5))
+    assert metrics.build_report([], 0).ack_bytes == pytest.approx(420.0)
+    # The 10-byte message and the 210-byte ack, each sent twice on average, both ways round.
+    assert dst.energy_consumed_mah == pytest.approx(2 * 10 + 2 * 210)
+    assert holder.energy_consumed_mah == pytest.approx(2 * 10 + 2 * 210)
+
+
+def test_delivery_record_is_dropped_once_the_message_expires():
+    holder, dst = _node(1), _node(2, 5.0)
+    grid = SpatialGrid(100.0, 100.0, cell_size_m=20.0)
+    grid.insert(holder)
+    grid.insert(dst)
+    holder.store_message(_msg(7, dst_id=2))
+
+    def tick(now, sender):
+        process_node_contacts(
+            now=now, sender=sender, grid=grid, routing_algorithm=EpidemicRouting(),
+            energy_model=_per_byte(), metrics=MetricsCollector(), ble_config=_ble(),
+        )
+
+    tick(1.0, holder)
+    assert 7 in dst.delivered_ids
+    tick(50.0, dst)
+    assert 7 in dst.delivered_ids
+    tick(101.0, dst)
+    assert 7 not in dst.delivered_ids and not dst.has_message(7)

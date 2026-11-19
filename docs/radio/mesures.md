@@ -2,7 +2,10 @@
 
 > **Statut** : valeurs recalées le 16 oct. 2026 sur le banc radio de terrain
 > de l'app Nice (Google Nearby Connections, `P2P_CLUSTER`). Chaque paramètre
-> indique s'il est **mesuré**, **calculé** ou **estimé**.
+> indique s'il est **mesuré**, **calculé** ou **estimé**. Depuis le 12 nov.
+> 2026, les commandes simulent par défaut une portée qui dépend de la foule
+> (§2, « Portée selon la densité ») ; les valeurs fixes de ce document
+> restent celles de `SimulationConfig` et de `--no-body-loss`.
 > Code : `BleConfig` et `RadioParams` (`src/festival_ble_sim/config.py`),
 > modèle de propagation dans `radio.py`, pertes et débit dans `network.py`.
 > L'énergie a sa propre page : `docs/energie/consommation.md`.
@@ -96,17 +99,80 @@ festival ; la vraie portée en foule est inconnue.
 | --- | --- | --- | --- |
 | portée téléphone (`radio.max_range_m`) | **30 m** | `tx_power_dbm=-10`, `reference_loss_db=40`, `receiver_sensitivity_dbm=-90`, exposant 2,7 | **mesurée** avec 5 personnes devant l'ancre, borne haute pour une foule |
 | `path_loss_exponent` | **2,7** | corps répartis sur le trajet en foule | **estimé** (plein air mesuré : 1,8) |
-| portée borne (`beacon_radio`) | **60 m** | 2 × la portée téléphone, `tx_power_dbm=-2` | **choisi**, non mesuré |
-| `shadowing_std_db` | **4 dB** | littérature BLE en intérieur et en foule | **estimé** ; le banc voit ~11 dB entre passes, mais c'est un effet lent (orientation, terrain), qu'un tirage indépendant à chaque tick ne reproduit pas |
+| portée borne (`beacon_radio`) | **60 m** | 2 × la portée téléphone, `tx_power_dbm=-2` | **choisi**, non mesuré ; **ne joue qu'entre deux bornes** (voir ci-dessous) |
+| `shadowing_std_db` | **4 dB** | littérature BLE en intérieur et en foule | **estimé** ; le banc voit ~11 dB entre passes, mais c'est un effet lent (orientation, terrain) |
+| `ble.shadowing_coherence_s` | 0 dans `SimulationConfig`, **20 s** en ligne de commande | durée de mémoire du fading d'une paire (processus de Gauss-Markov, même écart-type) | **estimé** : le banc dit seulement que l'effet est lent. À 0, chaque seconde est un tirage indépendant, et un lien à 30 m, en panne un tick sur deux, finit toujours par passer |
+
+**La portée des bornes ne compte pas face à un téléphone.** La portée d'un
+lien est mutuelle (`network._active_nearby`) : un paquet est acquitté par
+l'autre côté, donc une borne ne joint un téléphone que si celui-ci peut lui
+répondre. Un lien téléphone-borne a donc la portée du téléphone (30 m) et la
+radio du téléphone (`_link_radio` prend le côté le plus faible) ; les 60 m de
+`beacon_radio` ne servent qu'entre deux bornes, que le backhaul contourne.
+Les bornes aident par leur position fixe, leur alimentation et leur backhaul,
+pas par leur portée. Un avantage radio (antenne, sensibilité) demanderait une
+liaison asymétrique ; un test (`tests/test_network.py`) fixe ce comportement.
+
+### Portée selon la densité (défaut des commandes)
+
+Le réglage fixe ci-dessus donne 30 m partout, sur une pelouse vide comme au
+pied de la scène. Les deux passes du banc permettent mieux :
+
+- **plein air** : exposant 1,8, portée 50 m (`tx_power_dbm=-19.4`) ;
+- **5 personnes devant l'ancre** : la portée du lien tombe à 30 m, soit
+  18·log₁₀(50/30) ≈ **4 dB** pour 5 corps, donc **0,8 dB par corps**.
+
+Le modèle (`radio.crowd_loss_db`, `network._update_crowd`) ajoute à
+l'affaiblissement de plein air `body_loss_db` par corps traversé. Un lien de
+d mètres dans une foule de ρ personnes par m² en traverse environ
+ρ × `body_width_m` × d (une personne barre le trajet sur la largeur de ses
+épaules). La densité est comptée à chaque tick dans des cases de
+`crowd_density_cell_m`, sur toutes les personnes présentes, avec ou sans
+l'app ; le lien prend la densité de son bout le plus dense, et la portée de
+chaque téléphone est le point où la marge moyenne s'annule.
+
+| Densité | Exemple | Portée |
+| --- | --- | --- |
+| 0 | pelouse vide | 50 m |
+| 0,1 pers./m² | site peu rempli | 41 m |
+| 0,33 pers./m² | 3 m² par personne, moyenne des presets `--size` | **30 m** |
+| 0,75 pers./m² | | 22 m |
+| 1,5 pers./m² | zone dense des presets (70 % du public sur 15 % du site) | **15 m** |
+| 2,5 pers./m² | devant de scène | 11,5 m |
+| 4 pers./m² | foule compacte | 8,6 m |
+
+Les 30 m gardés jusqu'ici comme « borne haute » sont donc retrouvés à la
+densité moyenne d'un site, et la zone dense tombe à 15 m, la valeur que ce
+document conseillait d'essayer à la main.
+
+| Paramètre | Valeur | Dérivation | Statut |
+| --- | --- | --- | --- |
+| `ble.body_loss_db` | 0 dans `SimulationConfig`, **0,8 dB** en ligne de commande | 4 dB pour les 5 personnes de la passe foule | **extrapolé** d'une passe ; la perte est supposée linéaire avec le nombre de corps, sans saturation |
+| `ble.body_width_m` | **0,5 m** | largeur d'épaules | **estimé** |
+| `ble.crowd_density_cell_m` | **10 m** | assez grand pour compter des dizaines de personnes, assez petit pour distinguer une zone dense | **choisi** |
+| `phone_radio` en ligne de commande | exposant **1,8**, **−19,4 dBm** | passe libre n°1 | **mesuré** |
+
+**Limites** : la densité est celle d'une case de 10 m autour de chaque bout,
+pas celle du trajet ; un lien qui sort d'une zone dense est compté comme s'il
+la traversait de bout en bout. Les corps ne changent ni le débit de près
+(`transfer_rate_bytes_per_s`, déjà mesuré avec 5 personnes) ni la portée
+des bornes. La portée reste tronquée : aucun lien au-delà du point où la
+marge moyenne s'annule.
+
+**Portée nominale et portée fiable.** À 30 m la marge moyenne est de 0 dB :
+avec le shadowing de 4 dB, environ la moitié des ticks y sont en panne
+totale et le débit utile tombe à ~30 % de celui de près. Le débit utile reste
+au-dessus de 90 % jusqu'à ~12 m, 65 % à 20 m (voir §3).
 
 ### Recettes
 
-- **Plein air** (passe n°1, ~50 m) :
-  `--set ble.phone_radio.path_loss_exponent=1.8 --phone-tx-power -19.4`.
-  Les bornes ne sont pas ajustées.
-- **Foule plus dense que la mesure** : la vraie portée en festival étant
-  inconnue, comparer aussi les algorithmes à 20 m (`--phone-tx-power -15`)
-  et 15 m (`--phone-tx-power -18`).
+- **Défaut des commandes** : portée selon la densité, rien à ajouter.
+- **Plein air partout** (passe n°1, 50 m, sans effet des corps) :
+  `--set ble.body_loss_db=0`. Les bornes ne sont pas ajustées.
+- **Corps plus ou moins opaques** : `--set ble.body_loss_db=1.6` (23 m à
+  3 m² par personne, 10 m en zone dense) ou `0.4` (37 m et 21 m).
+- **Portée fixe, comme avant** : `--no-body-loss` (30 m), avec
+  `--phone-tx-power -15` pour 20 m ou `-18` pour 15 m.
 
 ## 3. Débit
 
@@ -160,7 +226,14 @@ débit de près, contre le mesuré :
 | `connection_setup_s` | 7 s (banc, < 1 m) | **12 s** | reconnexion au retour à portée, sur le terrain | **mesuré** (quelques coupures, 2 passes) ; les 26–80 s plus loin ne sont pas modélisés |
 | `connection_setup_mah` (`EnergyConfig`) | 0,028 mAh | **0,048 mAh** | 12 s à +14,5 mA, voir `docs/energie/consommation.md` | durée mesurée, courant mesuré au banc |
 | `connection_idle_timeout_s` | 30 s | 30 s | — | **estimé**, inchangé |
+| `reconnect_backoff_s` | — (rappel immédiat) | **300 s** | délai avant de rappeler un voisin dont la connexion s'est fermée faute d'échange ; levé dès que le téléphone reçoit un nouveau message | **estimé** (12 nov. 2026) |
 | `max_concurrent_links` | 6 | 6 | — | **estimé**, inchangé (il faut 3 téléphones ou plus pour le mesurer) |
+
+**Tick en panne et connexion.** Un tick où le fading fait tomber la marge
+sous zéro ne transporte rien, mais ne ferme pas la connexion : seuls la sortie
+de la portée déterministe, un téléphone inactif ou les 30 s sans données la
+ferment. C'est cohérent avec le banc, où Nearby n'a jamais déclaré la
+coupure, et le lien garde sa place pendant ces ticks.
 
 **Non modélisé** : le lien fantôme. Le simulateur ferme toujours une
 connexion dès que la paire sort de portée, et le message reste chez
@@ -262,6 +335,22 @@ Par ordre d'importance pour le simulateur :
    « Bien-être numérique », sondage).
 
 ## 8. Comparabilité avec les archives
+
+Les runs archivés avant le 12 nov. 2026 rappelaient le même voisin dès la
+fermeture d'une connexion inactive (toutes les 42 s), avaient une portée de
+30 m quelle que soit la foule et un fading indépendant à chaque seconde.
+Leurs colonnes ne sont pas comparables aux nouvelles, l'énergie « algo »
+moins que toute autre. Pour rejouer l'ancien moteur :
+`--no-body-loss --fading-coherence 0 --set ble.reconnect_backoff_s=0`.
+
+Les runs archivés avant le 24 oct. 2026 tiraient un fading indépendant à
+chaque appel (un pour les résumés d'un lien, un autre pour ses données, un
+par sens) et ne facturaient à l'accusé de réception de livraison ni temps
+d'antenne, ni renvois, ni charge de canal. Un accusé pèse 210 o pour 31 ko/s
+par tick, donc l'effet sur une moyenne de graines est petit (écarts mesurés
+dans `docs/revue/2026-10-24-realisme.md`), mais les mêmes graines ne rejouent
+plus les mêmes trajectoires : comparer des runs d'avant et d'après sur une
+graine seule n'a pas de sens.
 
 Les runs archivés avant le 16 oct. 2026 utilisaient 37 ko/s,
 `signal_margin_cutoff_db=6` et `weak_signal_max_probability=0.30`, 7 s de

@@ -28,6 +28,7 @@ class BaseNode:
         self.initial_charge_mah = self.battery_mah
         self.mesh_energy_consumed_mah = 0.0
         self.background_energy_consumed_mah = 0.0
+        self.connection_energy_consumed_mah = 0.0
         self.is_active = True
         # Distinct from is_active=False, which also covers a churned-out/
         # not-yet-arrived node (see simulation._churn_process): only this
@@ -38,9 +39,20 @@ class BaseNode:
         # owner still walks (and leads their group), unseen by the radio.
         self.on_site = True
         self.buffer: Dict[int, Message] = {}
-        self.delivered_ids: Set[int] = set()
+        # msg_id -> expiry, like acked and outbox: once the message is dead
+        # no copy can reach this node again, so the record can go.
+        self.delivered_ids: Dict[int, float] = {}
         self.buffer_evictions = 0
+        # Messages ever stored: whether this node has anything new to offer
+        # a peer since their connection closed (network._nothing_new).
+        self.buffer_additions = 0
         self.is_beacon = False
+        # False: on site without the app (SimulationConfig.adoption_fraction),
+        # never is_active.
+        self.has_app = True
+        # People per m2 around this node, kept by the engine when
+        # BleConfig.body_loss_db is on.
+        self.crowd_density = 0.0
         self.friends: Set[int] = set()
         self.gps_noise_std_m = 0.0
         self.gps_rng: Optional[random.Random] = None
@@ -94,12 +106,15 @@ class BaseNode:
             del self.buffer[victim_id]
             self.buffer_evictions += 1
         self.buffer[message.msg_id] = message
+        self.buffer_additions += 1
 
-    def mark_delivered(self, msg_id: int) -> None:
-        self.delivered_ids.add(msg_id)
+    def mark_delivered(self, msg_id: int, expiry: float = math.inf) -> None:
+        self.delivered_ids[msg_id] = expiry
         self.buffer.pop(msg_id, None)
 
-    def consume_energy(self, mah: float, mesh: bool = True, background: bool = False) -> None:
+    def consume_energy(
+        self, mah: float, mesh: bool = True, background: bool = False, connection: bool = False
+    ) -> None:
         if self.battery_mah == math.inf:
             return
         spent = min(mah, self.battery_mah)
@@ -108,6 +123,8 @@ class BaseNode:
             self.mesh_energy_consumed_mah += spent
         if background:
             self.background_energy_consumed_mah += spent
+        if connection:
+            self.connection_energy_consumed_mah += spent
         if self.battery_mah <= 0.0:
             self.is_active = False
             self.battery_depleted = True
